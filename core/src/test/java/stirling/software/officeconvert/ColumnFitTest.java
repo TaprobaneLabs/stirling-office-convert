@@ -28,6 +28,7 @@ class ColumnFitTest {
     private static final String LINE = "limit employer and employee share the wage ";
     private static final String[] ENDS = {"base", "fund", "rate", "cost"};
     private static final String NEXT = "limit";
+    private static final String TITLE = "Employer's Tax Guide to Wage Limits and Shared Contributions";
 
     @TempDir Path dir;
 
@@ -64,6 +65,16 @@ class ColumnFitTest {
     }
 
     @Test
+    void columnsUnderAFullWidthTitleBreakToo() throws Exception {
+        String xml = convert(makePdf(false, true));
+        int from = xml.indexOf("w:name=\"_Pg1\"");
+        int to = xml.indexOf("w:name=\"_Pg2\"");
+        assertTrue(xml.substring(from, to).contains(TITLE), "the title is on page 1");
+        int breaks = xml.substring(from, to).split("<w:br w:type=\"column\"/>", -1).length - 1;
+        assertTrue(breaks == 1, "the columns below the title are fitted, and their first ends with a column break: " + breaks);
+    }
+
+    @Test
     void aColumnThatCanGrowStillFlows() throws Exception {
         String xml = convert(makePdf(true));
         int from = xml.indexOf("w:name=\"_Pg1\"");
@@ -84,8 +95,15 @@ class ColumnFitTest {
         return makePdf(false);
     }
 
-    /** Four pages of two full justified columns; {@code mixed} sets one word of page 1's first column larger. */
     private Path makePdf(boolean mixed) throws IOException {
+        return makePdf(mixed, false);
+    }
+
+    /**
+     * Four pages of two full justified columns; {@code mixed} sets one word of page 1's first column larger, and
+     * {@code titled} puts a full-width title above page 1's columns, which start lower.
+     */
+    private Path makePdf(boolean mixed, boolean titled) throws IOException {
         Path pdf = dir.resolve("cols.pdf");
         try (PDDocument doc = new PDDocument()) {
             for (int p = 1; p <= 4; p++) {
@@ -96,8 +114,12 @@ class ColumnFitTest {
                 PDPage page = new PDPage(PDRectangle.LETTER);
                 doc.addPage(page);
                 try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                    boolean title = titled && p == 1;
+                    if (title) {
+                        text(cs, 42, 712, TITLE, 18, 0);
+                    }
                     for (float left : new float[] {42, 42 + width + 18}) {
-                        for (int i = 0; i < 55; i++) {
+                        for (int i = title ? 4 : 0; i < 55; i++) {
                             boolean last = i % 7 == 6;
                             float y = 682 - i * PITCH;
                             if (mixed && p == 1 && left == 42 && i == 8) {
