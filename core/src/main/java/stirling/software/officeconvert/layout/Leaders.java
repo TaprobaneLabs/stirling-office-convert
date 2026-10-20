@@ -13,6 +13,9 @@ final class Leaders {
 
     private static final int LONG_RUN = 10;
 
+    // Dots a run ending its line needs to count as a leader, more than an ellipsis has
+    private static final int TRAILING_RUN = 5;
+
     private static final Pattern REFERENCE = Pattern.compile(
             "(?:[A-Z][-.\u2013]?)?\\d{1,5}(?:[-.\u2013]\\d{1,5})*|(?i:[ivxlcdm]{1,8})");
 
@@ -123,6 +126,8 @@ final class Leaders {
         List<Character> leaderChars = new ArrayList<>();
         byte pending = Line.SPACE;
         char leaderChar = 0;
+        Word lastLeader = null;
+        int leaderRun = 0;
         for (int i = 0; i < words.size(); i++) {
             Word w = words.get(i);
             byte gap = i == 0 ? Line.SPACE : line.gaps[i];
@@ -136,8 +141,11 @@ final class Leaders {
             if (any && (isLeader(w.text) && (w.text.length() >= 4 || isDotRun(words, i)))) {
                 pending = Line.LEADER;
                 leaderChar = w.text.charAt(0);
+                lastLeader = w;
+                leaderRun += w.text.length();
                 continue;
             }
+            leaderRun = 0;
             char lc = 0;
             if (pending == Line.LEADER) {
                 gap = Line.LEADER;
@@ -150,6 +158,14 @@ final class Leaders {
             out.add(w);
             gaps.add(gap);
             leaderChars.add(lc);
+        }
+        // A run that ends the line, as in a table's row labels, leads to its own last dot: kept as typed, its spaced
+        // dots come out wider in Word than in the PDF and wrap the cell
+        if (pending == Line.LEADER && !out.isEmpty() && leaderRun >= TRAILING_RUN) {
+            out.add(lastLeader);
+            gaps.add(Line.LEADER);
+            leaderChars.add(leaderChar);
+            pending = Line.SPACE;
         }
         if (out.isEmpty() || pending == Line.LEADER) {
             return line;

@@ -19,6 +19,11 @@ final class TableBuilder {
 
     private static final int MIN_BODY_ROWS = 3;
 
+    // Room a one-line cell may run past its edge, as a share of its text's width (at least OVERRUN_MIN points)
+    private static final float OVERRUN = 0.5f;
+
+    private static final float OVERRUN_MIN = 6f;
+
     private final ParagraphFactory paragraphs;
 
     TableBuilder(ParagraphFactory paragraphs) {
@@ -118,6 +123,7 @@ final class TableBuilder {
         }
         widenForText(t, f, ti);
         fitCells(t);
+        allowOverrun(t);
         keepColumnHeaders(t);
         if (rightToLeft(t)) {
             t.mirror();
@@ -210,6 +216,32 @@ final class TableBuilder {
 
     private static int lineCount(Paragraph p) {
         return p.sourceLines;
+    }
+
+    /**
+     * Lets a cell that is one line in the PDF run past its edge rather than wrap. Word's font or its spaces can come out a
+     * little wider than the PDF's, and a wrapped label or figure doubles its row's height, which pushes the rest of the
+     * table down and often onto another page. The indent opens on the side the text grows towards.
+     */
+    private static void allowOverrun(Table t) {
+        for (Table.Row row : t.rows) {
+            for (Table.Cell cell : row.cells) {
+                for (Paragraph p : cell.paragraphs) {
+                    if (p.sourceLines != 1 || p.bidi || p.list != null || p.textWidth <= 0) {
+                        continue;
+                    }
+                    float room = Math.max(OVERRUN_MIN, OVERRUN * p.textWidth);
+                    switch (p.align) {
+                        case RIGHT -> p.indentLeft -= room;
+                        case CENTER -> {
+                            p.indentLeft -= room / 2f;
+                            p.indentRight -= room / 2f;
+                        }
+                        default -> p.indentRight -= room;
+                    }
+                }
+            }
+        }
     }
 
     private static void widenForText(Table t, TableDetection.Found f, PageLayout.TableItem ti) {
