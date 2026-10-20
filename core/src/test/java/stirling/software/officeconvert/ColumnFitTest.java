@@ -22,6 +22,7 @@ class ColumnFitTest {
 
     private static final PDType1Font FONT = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
     private static final float SIZE = 10;
+    private static final float LARGE = 15;
     private static final float PITCH = 11.5f;
     private static final float FOOTER_BASELINE = 755;
     private static final String LINE = "limit employer and employee share the wage ";
@@ -62,6 +63,15 @@ class ColumnFitTest {
         }
     }
 
+    @Test
+    void aColumnThatCanGrowStillFlows() throws Exception {
+        String xml = convert(makePdf(true));
+        int from = xml.indexOf("w:name=\"_Pg1\"");
+        int to = xml.indexOf("w:name=\"_Pg2\"");
+        int breaks = xml.substring(from, to).split("<w:br w:type=\"column\"/>", -1).length - 1;
+        assertTrue(breaks == 0, "a larger word gives its paragraph at-least lines, which may grow in Word: " + breaks);
+    }
+
     private String convert(Path pdf) throws IOException {
         Path docx = dir.resolve("cols.docx");
         PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
@@ -71,6 +81,11 @@ class ColumnFitTest {
     }
 
     private Path makePdf() throws IOException {
+        return makePdf(false);
+    }
+
+    /** Four pages of two full justified columns; {@code mixed} sets one word of page 1's first column larger. */
+    private Path makePdf(boolean mixed) throws IOException {
         Path pdf = dir.resolve("cols.pdf");
         try (PDDocument doc = new PDDocument()) {
             for (int p = 1; p <= 4; p++) {
@@ -84,7 +99,14 @@ class ColumnFitTest {
                     for (float left : new float[] {42, 42 + width + 18}) {
                         for (int i = 0; i < 55; i++) {
                             boolean last = i % 7 == 6;
-                            text(cs, left, 682 - i * PITCH, last ? NEXT + " ends " + ENDS[p - 1] + "." : line, last ? 0 : spacing);
+                            float y = 682 - i * PITCH;
+                            if (mixed && p == 1 && left == 42 && i == 8) {
+                                text(cs, left, y, "LIMIT", LARGE, 0);
+                                float after = left + FONT.getStringWidth("LIMIT ") / 1000f * LARGE;
+                                text(cs, after, y, line.substring(line.indexOf(' ') + 1), SIZE, 0);
+                                continue;
+                            }
+                            text(cs, left, y, last ? NEXT + " ends " + ENDS[p - 1] + "." : line, last ? 0 : spacing);
                         }
                     }
                     float y = 792 - FOOTER_BASELINE;
@@ -104,8 +126,13 @@ class ColumnFitTest {
     }
 
     private static void text(PDPageContentStream cs, float x, float y, String s, float wordSpacing) throws IOException {
+        text(cs, x, y, s, SIZE, wordSpacing);
+    }
+
+    private static void text(PDPageContentStream cs, float x, float y, String s, float size, float wordSpacing)
+            throws IOException {
         cs.beginText();
-        cs.setFont(FONT, SIZE);
+        cs.setFont(FONT, size);
         cs.setWordSpacing(wordSpacing);
         cs.newLineAtOffset(x, y);
         cs.showText(s);
