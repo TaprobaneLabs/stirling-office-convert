@@ -120,7 +120,6 @@ final class ParagraphFactory {
             hangFromMarker(p, d, colLeft);
         }
         RunBuilder.Fit fit = fitTarget(d, p, flow, skip, markerTab, colRight);
-        runs.tracked(p.align != Align.JUSTIFY);
         runs.fill(p, d.lines, skip, colLeft, colRight, hostSize, d.hardBreaks, d.pageBreaks, markerTab, fit);
         boolean fitted = !Float.isNaN(runs.fitted());
         if (fitted) {
@@ -150,7 +149,6 @@ final class ParagraphFactory {
             p.inlines.clear();
             runs.fill(p, d.lines, 0, colLeft, colRight, hostSize, d.hardBreaks, d.pageBreaks, false, fit);
         }
-        runs.tracked(true);
         p.markStyle = lastStyle(p);
         p.sourceLines = d.lines.size();
         float widest = 0;

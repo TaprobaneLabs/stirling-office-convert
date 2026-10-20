@@ -159,8 +159,6 @@ final class RunBuilder {
 
     private boolean exactFit;
 
-    private boolean tracked = true;
-
     /** How a font's runs are fitted: spacing and scale make Word's widths match the PDF's glyphs; tracking is the PDF's own
      *  character spacing, which Word applies the same way. */
     private record WidthFix(float spacing, int scale, float tracking) {
@@ -338,7 +336,12 @@ final class RunBuilder {
 
     private final Map<String, float[]> modelPool = new HashMap<>();
 
-    private Map<String, WidthFix> widthFixes(List<Line> lines) {
+    /**
+     * Each font's fix for the given lines. {@code tracked} keeps the PDF's character spacing; not in justified text, where
+     * it is often part of the justification (set line by line to fill the measure), which Word and PowerPoint do with word
+     * spaces alone.
+     */
+    private Map<String, WidthFix> widthFixes(List<Line> lines, boolean tracked) {
         Map<String, float[]> sums = new HashMap<>();
         float positioned = naturalGap(lines);
         for (Line l : lines) {
@@ -567,7 +570,7 @@ final class RunBuilder {
     void fill(Paragraph p, List<Line> lines, int skipWords, float colLeft, float colRight, float hostSize,
             BitSet hardBreaks, BitSet pageBreaks, boolean markerTab, Fit target) {
         Sink sink = new Sink(p.inlines);
-        spacing = widthFixes(lines);
+        spacing = widthFixes(lines, p.align != Paragraph.Align.JUSTIFY);
         float[] squeezes = new float[lines.size()];
         exactFit = false;
         fitted = target == null ? Float.NaN : fit(lines, target, hardBreaks, squeezes);
@@ -930,14 +933,6 @@ final class RunBuilder {
 
     float fitted() {
         return fitted;
-    }
-
-    /**
-     * Whether the next fills keep the PDF's character spacing. Not in justified text, where it is often part of the
-     * justification (set line by line to fill the measure), which Word does with word spaces alone.
-     */
-    void tracked(boolean on) {
-        tracked = on;
     }
 
     boolean exactFit() {
