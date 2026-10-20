@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import stirling.software.officeconvert.extract.PageGraphics.Rule;
+import stirling.software.officeconvert.layout.Line;
 import stirling.software.officeconvert.layout.PageLayout;
 import stirling.software.officeconvert.layout.ParaDraft;
 import stirling.software.officeconvert.model.Inline;
@@ -88,6 +89,9 @@ final class TableBuilder {
                         float sb = cell.vAlign == Table.VAlign.TOP ? Math.max(0, paragraphs.wordTop(d) - prev) : 0;
                         if (prev != cellTop) {
                             sb = Math.max(0, paragraphs.wordTop(d) - prev);
+                        }
+                        if (stacked(d)) {
+                            stack(d);
                         }
                         Paragraph p = paragraphs.detached(d, innerLeft, innerRight, sb);
                         cell.paragraphs.add(p);
@@ -219,6 +223,39 @@ final class TableBuilder {
     }
 
     /**
+     * A cell paragraph with one word to a line, such as a column of line numbers set as one paragraph that relies on
+     * wrapping a number to a line in a cell too narrow for two. Word wraps it by its own measure and splits a number wider
+     * than the cell digit by digit, so its lines are kept with line breaks and may run past the edge like one-line cells.
+     */
+    private static boolean stacked(ParaDraft d) {
+        if (d.lines.size() < 2) {
+            return false;
+        }
+        for (Line l : d.lines) {
+            if (l.words.size() != 1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Breaks every line. Words flush right, measured as justified with one word a line, are aligned right. */
+    private static void stack(ParaDraft d) {
+        d.hardBreaks.set(1, d.lines.size());
+        if (d.align == Align.JUSTIFY && !d.rtl) {
+            d.align = Align.RIGHT;
+            d.left = 0;
+            d.first = 0;
+            d.justifySlack = Float.NaN;
+        }
+    }
+
+    private static boolean everyLineBroken(Paragraph p) {
+        long breaks = p.inlines.stream().filter(in -> in instanceof Inline.Break).count();
+        return p.sourceLines > 1 && breaks == p.sourceLines - 1;
+    }
+
+    /**
      * Lets a cell that is one line in the PDF run past its edge rather than wrap. Word's font or its spaces can come out a
      * little wider than the PDF's, and a wrapped label or figure doubles its row's height, which pushes the rest of the
      * table down and often onto another page. The indent opens on the side the text grows towards.
@@ -227,7 +264,7 @@ final class TableBuilder {
         for (Table.Row row : t.rows) {
             for (Table.Cell cell : row.cells) {
                 for (Paragraph p : cell.paragraphs) {
-                    if (p.sourceLines != 1 || p.bidi || p.list != null || p.textWidth <= 0) {
+                    if (p.sourceLines != 1 && !everyLineBroken(p) || p.bidi || p.list != null || p.textWidth <= 0) {
                         continue;
                     }
                     float room = Math.max(OVERRUN_MIN, OVERRUN * p.textWidth);
