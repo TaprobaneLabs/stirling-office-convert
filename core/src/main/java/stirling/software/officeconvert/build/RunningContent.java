@@ -117,7 +117,7 @@ final class RunningContent {
             }
             if (same < 0) {
                 out.add(r);
-            } else if (order(r.samplePage()) < order(out.get(same).samplePage())) {
+            } else if (Collections.min(r.pages()) < Collections.min(out.get(same).pages())) {
                 out.set(same, r);
             }
         }
@@ -146,11 +146,6 @@ final class RunningContent {
             }
         }
         return true;
-    }
-
-    // Page 0 sorts last, as in RunningLine.samplePage()
-    private static int order(int page) {
-        return page == 0 ? Integer.MAX_VALUE - 1 : page;
     }
 
     private static final Pattern DIGIT_RUN = Pattern.compile("[0-9]+");
