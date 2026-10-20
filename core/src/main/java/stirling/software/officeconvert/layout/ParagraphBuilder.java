@@ -72,7 +72,7 @@ public final class ParagraphBuilder {
             return true;
         }
         if (changesLook(prev, cur, size) || startsListItem(cur) || isFillLine(cur) || isFillLine(prev)
-                || continuesNumbering(para.lines.getFirst(), cur)) {
+                || continuesNumbering(para.lines.getFirst(), cur) || endsWithLeader(prev)) {
             return true;
         }
 
@@ -118,6 +118,15 @@ public final class ParagraphBuilder {
             return true;
         }
         return prev.hasTabs() != cur.hasTabs() && prev.hasTabs();
+    }
+
+    /**
+     * A line whose last word follows a dot leader, as a contents entry and its page number: the entry ends there. Lines
+     * of entries in one style fill the line to the same edge, so without this they ran on as one justified paragraph.
+     */
+    private static boolean endsWithLeader(Line l) {
+        int n = l.words.size();
+        return n >= 2 && l.gaps[n - 1] == Line.LEADER;
     }
 
     private static boolean changesLook(Line prev, Line cur, float size) {
