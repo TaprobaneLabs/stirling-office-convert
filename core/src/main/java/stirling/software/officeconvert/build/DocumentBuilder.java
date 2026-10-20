@@ -230,10 +230,12 @@ public final class DocumentBuilder {
         return bottom;
     }
 
+    /**
+     * Whether the page's last band has columns that flow on, so its paragraphs are fitted to their PDF lines (and, once
+     * fitted, its columns end with breaks). Bands above it, such as a full-width title, don't stop it: their columns end
+     * with breaks anyway, and without fitting Word rebalanced the columns below them.
+     */
     private boolean flowsOn(PageLayout layout, float bodyBottom) {
-        if (layout.bands().stream().filter(b -> flows(b) && !footBand(layout, b)).count() != 1) {
-            return false;
-        }
         for (PageLayout.Band band : layout.bands()) {
             for (int ci = 1; ci < band.columns().size(); ci++) {
                 if (flows(band) && !footBand(layout, band) && flow.flowsOn(layout, band, ci, bodyBottom)) {
