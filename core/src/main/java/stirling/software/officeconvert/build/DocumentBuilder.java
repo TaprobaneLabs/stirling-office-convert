@@ -342,6 +342,14 @@ public final class DocumentBuilder {
             if (item instanceof PageLayout.TableItem) {
                 pinnedOver(item, col, ii, layout, toDisplay);
             }
+            if (footPictures(item, layout, band, ci, ii)) {
+                prevBottom = placeAtFoot(item, layout, toDisplay, at.pageTop ? base.marginTop : prevBottom,
+                        at.pageTop && at.breakOwed);
+                at.breakOwed &= !at.pageTop;
+                at.pageTop = false;
+                columnTop = false;
+                continue;
+            }
             Slot slot = new Slot(at.pageTop ? base.marginTop : prevBottom, at.pageTop || columnTop, at.pageTop && at.breakOwed);
             if (flowOn && ii == 0) {
                 flowingSpacer(item, at.pageTop ? base.marginTop : at.refBottom);
@@ -556,6 +564,56 @@ public final class DocumentBuilder {
         } else {
             floats.add(pic);
         }
+    }
+
+    /**
+     * Pictures that end a page in its lower half, such as a row of logos under the last paragraph. In the text flow they
+     * go to the next page when Word's text or its footer leaves them no room above the bottom margin, so they are anchored
+     * to a hairline where the flow ends and may reach into the margin.
+     * <ul>
+     * <li>Pictures right under the text keep their distance from it, wherever Word ends it. They don't wrap: nothing
+     * follows them on the page, and Word moves a wrapped picture's anchor to the next page when the picture reaches past
+     * the bottom margin.
+     * <li>Pictures apart from the text, such as a banner at the foot of the page, stay where the PDF has them, and text
+     * that runs on to them goes below.
+     * </ul>
+     */
+    private static boolean footPictures(PageLayout.Item item, PageLayout layout, PageLayout.Band band, int ci, int ii) {
+        boolean pictures = item instanceof PageLayout.PictureRow || item instanceof PageLayout.ImageItem
+                || item instanceof PageLayout.FigureItem;
+        return pictures && isLast(layout, band, ci, ii) && item.top() >= FOOT_PICTURES * layout.page().height();
+    }
+
+    private static final float FOOT_PICTURES = 0.5f;
+
+    // Lines of body text between the flow's end and pictures that count as right under it
+    private static final float FOLLOWS = 1.5f;
+
+    private float placeAtFoot(PageLayout.Item item, PageLayout layout, AffineTransform toDisplay, float from,
+            boolean pageBreak) throws IOException {
+        flushCarry();
+        Paragraph anchor = hairline(1);
+        anchor.pageBreakBefore = pageBreak;
+        anchor.sourceTop = from;
+        anchor.sourceBottom = from + anchor.lineHeight;
+        boolean follows = item.top() - from <= FOLLOWS * stats.pitchFor(stats.bodySize);
+        List<PageLayout.Item> pictures = item instanceof PageLayout.PictureRow row ? row.pictures() : List.of(item);
+        for (PageLayout.Item it : pictures) {
+            Picture pic = placer.picture(it, layout, toDisplay);
+            if (pic == null) {
+                continue;
+            }
+            floats.stack(pic);
+            pic.wrap = follows ? Picture.Wrap.NONE : Picture.Wrap.TOP_BOTTOM;
+            pic.fromParagraph = follows;
+            pic.x = it.x();
+            pic.y = follows ? it.top() - from : it.top();
+            anchor.inlines.add(new Inline.Image(pic));
+        }
+        emit(anchor);
+        // Pictures that follow the text take their room in the flow; ones placed on the page don't, so they don't make
+        // fit() squeeze the text's spacing
+        return follows ? Math.max(from, item.bottom()) : from;
     }
 
     private void placeBackgrounds(PageLayout layout, AffineTransform toDisplay) throws IOException {
