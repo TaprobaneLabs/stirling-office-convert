@@ -843,6 +843,7 @@ public final class DocumentBuilder {
         floats.unhost(next);
         float spaceBefore = Float.isNaN(c.ref()) ? c.spaceBefore() : Math.max(0, paragraphs.wordTop(merged) - c.ref());
         joined = flowParagraph(merged, c.colLeft(), c.colRight(), spaceBefore, c.pageBreak());
+        columnGrowth += growth(joined);
         emitFromLastPage(joined);
     }
 
