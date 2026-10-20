@@ -120,6 +120,7 @@ record PageFit(float scale, float dx, float dy) {
             s.footnote = g.footnote;
             s.vertAlign = g.vertAlign;
             s.hscale = g.hscale;
+            s.tracking = g.tracking * scale;
             s.invisible = g.invisible;
             if (g.icon != null) {
                 GeneralPath outline = new GeneralPath(g.icon.outline());

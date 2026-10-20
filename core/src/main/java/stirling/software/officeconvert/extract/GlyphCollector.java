@@ -408,6 +408,7 @@ final class GlyphCollector extends PDFStreamEngine {
         Glyph merged = new Glyph(text, lo, hi - lo, baseline, m.size, m.ascent, m.descent, m.font, m.rgb, m.seq,
                 m.spaceWidth, m.bold, m.italic);
         merged.hscale = m.hscale;
+        merged.tracking = m.tracking;
         span.clear();
         current.add(new RawGlyph(merged, main.direction(), main.invisible(), main.originX(), main.originY()));
         return true;
