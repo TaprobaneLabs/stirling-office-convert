@@ -1,6 +1,7 @@
 package stirling.software.officeconvert.build;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -80,7 +81,7 @@ final class RunningContent {
     }
 
     private List<Paragraph> running(List<RunningLine> lines, float colLeft, float colRight) {
-        List<RunningLine> sorted = new ArrayList<>(lines);
+        List<RunningLine> sorted = distinct(lines);
         sorted.sort((a, b) -> Float.compare(a.baseline, b.baseline));
         List<Paragraph> out = new ArrayList<>();
         int i = 0;
@@ -95,6 +96,35 @@ final class RunningContent {
             i = j;
         }
         return out;
+    }
+
+    /**
+     * One running line per piece of text. On pages of another size or orientation, such as landscape table pages, the same
+     * header piece sits elsewhere and is found as a second running line; both in one header printed it twice on every page
+     * and wrapped the header onto more lines. Of two with the same text that never share a page, the one on more pages
+     * stays.
+     */
+    private static List<RunningLine> distinct(List<RunningLine> lines) {
+        List<RunningLine> out = new ArrayList<>();
+        for (RunningLine r : lines) {
+            int same = -1;
+            for (int i = 0; i < out.size() && same < 0; i++) {
+                RunningLine o = out.get(i);
+                if (o.top == r.top && text(o).equals(text(r)) && Collections.disjoint(o.pages(), r.pages())) {
+                    same = i;
+                }
+            }
+            if (same < 0) {
+                out.add(r);
+            } else if (r.pages().size() > out.get(same).pages().size()) {
+                out.set(same, r);
+            }
+        }
+        return out;
+    }
+
+    private static String text(RunningLine r) {
+        return r.signature.split("\\|", 4)[3];
     }
 
     private Paragraph runningParagraph(List<RunningLine> row, float colLeft, float colRight) {
