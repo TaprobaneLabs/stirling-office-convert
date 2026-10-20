@@ -227,12 +227,14 @@ final class TableBuilder {
      * wrapping a number to a line in a cell too narrow for two. Word wraps it by its own measure and splits a number wider
      * than the cell digit by digit, so its lines are kept with line breaks and may run past the edge like one-line cells.
      */
-    private static boolean stacked(ParaDraft d) {
+    static boolean stacked(ParaDraft d) {
         if (d.lines.size() < 2) {
             return false;
         }
-        for (Line l : d.lines) {
-            if (l.words.size() != 1) {
+        for (int i = 0; i < d.lines.size(); i++) {
+            Line l = d.lines.get(i);
+            // A word hyphenated across two lines is one word: a line break would keep its hyphen
+            if (l.words.size() != 1 || i + 1 < d.lines.size() && l.words.getFirst().text.endsWith("-")) {
                 return false;
             }
         }
