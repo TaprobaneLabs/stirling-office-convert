@@ -52,8 +52,14 @@ class ColumnFitTest {
     @Test
     void fittedColumnsBreakWhereThePdfDoes() throws Exception {
         String xml = convert(makePdf());
-        int breaks = xml.split("<w:br w:type=\"column\"/>", -1).length - 1;
-        assertTrue(breaks >= 4, "each page's first column ends with a column break, not a flow Word can rebalance: " + breaks);
+        for (int p = 1; p <= 4; p++) {
+            int from = xml.indexOf("w:name=\"_Pg" + p + "\"");
+            int to = p < 4 ? xml.indexOf("w:name=\"_Pg" + (p + 1) + "\"") : xml.length();
+            assertTrue(from >= 0 && to > from, "page " + p + " is bookmarked");
+            int breaks = xml.substring(from, to).split("<w:br w:type=\"column\"/>", -1).length - 1;
+            assertTrue(breaks == 1, "page " + p + "'s first column ends with a column break, not a flow Word can rebalance: "
+                    + breaks);
+        }
     }
 
     private String convert(Path pdf) throws IOException {

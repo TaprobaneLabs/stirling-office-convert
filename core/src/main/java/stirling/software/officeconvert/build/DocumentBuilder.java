@@ -179,9 +179,11 @@ public final class DocumentBuilder {
             bandColumns.add(band.columns().size());
             int columnMisses = paragraphs.misses();
             for (int ci = 0; ci < band.columns().size(); ci++) {
-                // A full column whose paragraphs all keep their PDF lines ends in Word where it ends in the PDF; a break
-                // there pins the next column's top, where flowing on would let Word pull its first lines back
-                boolean pinned = flowing && paragraphs.misses() == columnMisses;
+                // A full column of paragraphs that all keep their PDF lines ends in Word where it ends in the PDF; a break
+                // there pins the next column's top, where flowing on would let Word pull its first lines back. A table's
+                // cells aren't fitted (its rows can grow), so a column holding one still flows on.
+                boolean pinned = flowing && ci > 0 && paragraphs.misses() == columnMisses
+                        && onlyParagraphs(band.columns().get(ci - 1));
                 boolean flowOn = ci > 0 && !pinned && flow.flowsOn(layout, band, ci, bodyBottom);
                 if (ci > 0 && !flowOn) {
                     columnBreak();
@@ -246,6 +248,15 @@ public final class DocumentBuilder {
                         return false;
                     }
                 }
+            }
+        }
+        return true;
+    }
+
+    private static boolean onlyParagraphs(PageLayout.Column column) {
+        for (PageLayout.Item item : column.items()) {
+            if (ColumnFlow.inFlow(item) && !(item instanceof PageLayout.ParaItem)) {
+                return false;
             }
         }
         return true;
