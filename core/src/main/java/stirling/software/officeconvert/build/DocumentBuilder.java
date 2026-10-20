@@ -64,6 +64,9 @@ public final class DocumentBuilder {
     private final List<Integer> bandColumns = new ArrayList<>();
     private int bandAt = -1;
     private int columnAt;
+
+    // Height the paragraphs placed in the current column may gain in Word (at-least lines with a larger size)
+    private float columnGrowth;
     private float pageShift;
     private float footerHeight;
     private float firstFooterHeight;
@@ -177,11 +180,19 @@ public final class DocumentBuilder {
             openSection(band, base, sizeChanged, at);
             float bandBottom = at.refBottom;
             bandColumns.add(band.columns().size());
+            int columnMisses = paragraphs.misses();
             for (int ci = 0; ci < band.columns().size(); ci++) {
-                boolean flowOn = ci > 0 && flow.flowsOn(layout, band, ci, bodyBottom);
+                // A full column of paragraphs that all keep their PDF lines and heights ends in Word where it ends in the
+                // PDF; a break there pins the next column's top, where flowing on would let Word pull its first lines back.
+                // A table's cells aren't fitted and its rows can grow, so a column holding one still flows on.
+                boolean pinned = flowing && ci > 0 && paragraphs.misses() == columnMisses && columnGrowth == 0
+                        && onlyParagraphs(band.columns().get(ci - 1));
+                boolean flowOn = ci > 0 && !pinned && flow.flowsOn(layout, band, ci, bodyBottom);
                 if (ci > 0 && !flowOn) {
                     columnBreak();
                 }
+                columnMisses = paragraphs.misses();
+                columnGrowth = 0;
                 bandAt = bandColumns.size() - 1;
                 columnAt = ci;
                 paragraphs.innerColumn(ci + 1 < band.columns().size());
@@ -241,6 +252,15 @@ public final class DocumentBuilder {
                         return false;
                     }
                 }
+            }
+        }
+        return true;
+    }
+
+    private static boolean onlyParagraphs(PageLayout.Column column) {
+        for (PageLayout.Item item : column.items()) {
+            if (ColumnFlow.inFlow(item) && !(item instanceof PageLayout.ParaItem)) {
+                return false;
             }
         }
         return true;
@@ -503,7 +523,9 @@ public final class DocumentBuilder {
                 List<Inline.Shape> under = shapesUnder(d, bottom, nextInFlow(col, item));
                 Paragraph p = flowParagraph(d, col.left(), col.right(), spaceBefore, pageBreak);
                 emit(p);
-                bottom += growth(p);
+                float grown = growth(p);
+                columnGrowth += grown;
+                bottom += grown;
                 if (!under.isEmpty()) {
                     bottom = underRow(under, bottom);
                 }
@@ -821,6 +843,7 @@ public final class DocumentBuilder {
         floats.unhost(next);
         float spaceBefore = Float.isNaN(c.ref()) ? c.spaceBefore() : Math.max(0, paragraphs.wordTop(merged) - c.ref());
         joined = flowParagraph(merged, c.colLeft(), c.colRight(), spaceBefore, c.pageBreak());
+        columnGrowth += growth(joined);
         emitFromLastPage(joined);
     }
 
