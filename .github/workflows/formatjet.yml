@@ -55,6 +55,27 @@ jobs:
           name: cli-${{ steps.v.outputs.version }}
           path: dist/
 
+  # FormatJet's regression check: its private harness builds this pull request's jar and runs
+  # it on a 40-PDF subset of FormatJet's corpus, then reports back as the commit status
+  # `formatjet/regression`. Needs FORMATJET_DISPATCH_TOKEN, a token that may run workflows
+  # in TaprobaneLabs/formatjet; without it this job only says so.
+  formatjet-regression:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask FormatJet to test this pull request
+        env:
+          GH_TOKEN: ${{ secrets.FORMATJET_DISPATCH_TOKEN }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::FORMATJET_DISPATCH_TOKEN isn't set, so FormatJet's regression check won't run"
+            exit 0
+          fi
+          gh workflow run pdf-office-regression.yml --repo TaprobaneLabs/formatjet --ref main \
+            -f fork_ref="$SHA" -f fork_pr="$PR"
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
