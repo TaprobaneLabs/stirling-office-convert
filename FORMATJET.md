@@ -23,3 +23,14 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | Release | Change | Upstream |
 |---|---|---|
 | `0.2.2-fj.1` | None: upstream v0.2.2, built by this fork's workflow | – |
+| `0.2.2-fj.2` | Keep the family of TrueType fonts the PDF doesn't embed (Times New Roman was coming out as Arial) (#5) | Not offered yet |
+| `0.2.2-fj.2` | Give numbered items a tab stop where their text starts, when their runover lines start under the number (#2) | Not offered yet |
+| `0.2.2-fj.2` | Keep one-line table cells from wrapping in Word: trailing dot leaders become tabs, and one-line cells may run past their edge (#3) | Not offered yet |
+| `0.2.2-fj.2` | End a full, fitted column with a column break where the PDF's column ends (#4) | Not offered yet |
+| `0.2.2-fj.2` | Anchor pictures that end a page instead of setting them in the text flow (#6) | Not offered yet |
+| `0.2.2-fj.2` | Keep the PDF's condensed character spacing on runs (#7) | Not offered yet |
+| `0.2.2-fj.2` | End a paragraph at a line that ends in a dot leader (#8) | Not offered yet |
+| `0.2.2-fj.2` | Keep a cell's lines when each holds one number (stacked line numbers) (#9) | Not offered yet |
+| `0.2.2-fj.2` | Count Office fonts the PDF names without embedding as exact (#10) | Not offered yet |
+| `0.2.2-fj.2` | Print each running header piece once (#11) | Not offered yet |
+| `0.2.2-fj.2` | Fit pages whose flowing columns sit under other bands (#12) | Not offered yet |
