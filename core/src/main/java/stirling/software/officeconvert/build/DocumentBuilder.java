@@ -177,11 +177,16 @@ public final class DocumentBuilder {
             openSection(band, base, sizeChanged, at);
             float bandBottom = at.refBottom;
             bandColumns.add(band.columns().size());
+            int columnMisses = paragraphs.misses();
             for (int ci = 0; ci < band.columns().size(); ci++) {
-                boolean flowOn = ci > 0 && flow.flowsOn(layout, band, ci, bodyBottom);
+                // A full column whose paragraphs all keep their PDF lines ends in Word where it ends in the PDF; a break
+                // there pins the next column's top, where flowing on would let Word pull its first lines back
+                boolean pinned = flowing && paragraphs.misses() == columnMisses;
+                boolean flowOn = ci > 0 && !pinned && flow.flowsOn(layout, band, ci, bodyBottom);
                 if (ci > 0 && !flowOn) {
                     columnBreak();
                 }
+                columnMisses = paragraphs.misses();
                 bandAt = bandColumns.size() - 1;
                 columnAt = ci;
                 paragraphs.innerColumn(ci + 1 < band.columns().size());

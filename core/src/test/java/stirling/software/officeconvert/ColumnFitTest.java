@@ -49,6 +49,13 @@ class ColumnFitTest {
         assertTrue(right >= 2.5f, "edge pulled in so space shrinking cannot pull the next word up, right indent " + right);
     }
 
+    @Test
+    void fittedColumnsBreakWhereThePdfDoes() throws Exception {
+        String xml = convert(makePdf());
+        int breaks = xml.split("<w:br w:type=\"column\"/>", -1).length - 1;
+        assertTrue(breaks >= 4, "each page's first column ends with a column break, not a flow Word can rebalance: " + breaks);
+    }
+
     private String convert(Path pdf) throws IOException {
         Path docx = dir.resolve("cols.docx");
         PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
