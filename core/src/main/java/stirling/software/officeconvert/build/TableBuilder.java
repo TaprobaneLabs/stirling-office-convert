@@ -3,6 +3,7 @@ package stirling.software.officeconvert.build;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import stirling.software.officeconvert.extract.PageGraphics.Rule;
 import stirling.software.officeconvert.layout.Line;
@@ -223,31 +224,25 @@ final class TableBuilder {
     }
 
     /**
-     * A cell paragraph with one word to a line, such as a column of line numbers set as one paragraph that relies on
-     * wrapping a number to a line in a cell too narrow for two. Word wraps it by its own measure and splits a number wider
+     * A cell paragraph with one number to a line, such as a column of line numbers set as one paragraph that relies on
+     * wrapping a number to a line in a cell too narrow for two. Words of prose, hyphenated words and text without spaces
+     * that happen to wrap one to a line stay a wrapping paragraph, which keeps reflowing when edited. Word wraps it by its own measure and splits a number wider
      * than the cell digit by digit, so its lines are kept with line breaks and may run past the edge like one-line cells.
      */
     static boolean stacked(ParaDraft d) {
         if (d.lines.size() < 2) {
             return false;
         }
-        for (int i = 0; i < d.lines.size(); i++) {
-            Line l = d.lines.get(i);
-            String word = l.words.size() == 1 ? l.words.getFirst().text : "";
-            // A word hyphenated across two lines is one word, and a line in a script written without spaces is one
-            // "word" of wrapped text: breaking either line would keep a hyphen or stop the text reflowing
-            if (word.isEmpty() || i + 1 < d.lines.size() && hyphenEnds(word) || word.codePoints().anyMatch(RunBuilder::unspaced)) {
+        for (Line l : d.lines) {
+            if (l.words.size() != 1 || !NUMBER_LIKE.matcher(l.words.getFirst().text).matches()) {
                 return false;
             }
         }
         return true;
     }
 
-    // The line-end hyphens RunBuilder joins wrapped words at
-    private static boolean hyphenEnds(String word) {
-        char c = word.charAt(word.length() - 1);
-        return c == '-' || c == '\u00AD' || c == '\u2010';
-    }
+    // A line number or item number: 9, 10, 4.1, 12a
+    private static final Pattern NUMBER_LIKE = Pattern.compile("\\p{Nd}[\\p{Nd}.,:/]*\\p{L}?");
 
     /** Breaks every line. Words flush right, measured as justified with one word a line, are aligned right. */
     private static void stack(ParaDraft d) {

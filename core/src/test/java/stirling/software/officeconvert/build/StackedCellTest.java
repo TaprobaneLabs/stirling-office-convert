@@ -17,8 +17,14 @@ import stirling.software.officeconvert.layout.Word;
 class StackedCellTest {
 
     @Test
-    void oneWordLinesAreStacked() {
+    void numberLinesAreStacked() {
         assertTrue(TableBuilder.stacked(draft("9", "10", "11")));
+        assertTrue(TableBuilder.stacked(draft("4.1", "4.2", "12a")));
+    }
+
+    @Test
+    void proseWrappedAWordToALineIsNot() {
+        assertFalse(TableBuilder.stacked(draft("Personal", "income")));
     }
 
     @Test
