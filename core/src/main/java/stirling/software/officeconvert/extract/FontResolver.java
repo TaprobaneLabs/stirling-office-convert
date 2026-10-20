@@ -80,7 +80,8 @@ public final class FontResolver {
             family = mono ? "Courier New" : serif ? "Times New Roman" : "Arial";
             substituted = true;
         }
-        boolean exact = !substituted && !symbolic && font.isEmbedded() && FontNames.isOfficeFont(family);
+        // An Office font the PDF names without embedding it is one Word has: its widths in the PDF are that font's
+        boolean exact = !substituted && !symbolic && FontNames.isOfficeFont(family);
         return new FontInfo(family, bold, italic, serif, mono, symbolic, ps, substituted, FontNames.isSmallCaps(ps),
                 FontNames.isIconFont(ps), exact);
     }
