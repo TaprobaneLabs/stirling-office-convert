@@ -25,7 +25,15 @@ class StackedCellTest {
     void aWordHyphenatedAcrossLinesIsNot() {
         // Kept as one wrapped paragraph, so the line-end hyphen is dropped and the word joined again
         assertFalse(TableBuilder.stacked(draft("trans-", "duction")));
+        assertFalse(TableBuilder.stacked(draft("trans\u00AD", "duction")), "a soft hyphen");
+        assertFalse(TableBuilder.stacked(draft("trans\u2010", "duction")), "a Unicode hyphen");
         assertFalse(TableBuilder.stacked(draft("one", "two words")));
+    }
+
+    @Test
+    void wrappedTextWithoutSpacesIsNot() {
+        // Chinese wraps without spaces, so each line comes out as one word
+        assertFalse(TableBuilder.stacked(draft("\u7d93\u6fdf\u767c\u5c55\u8a08\u756b", "\u7684\u7b2c\u4e00\u968e\u6bb5")));
     }
 
     private static ParaDraft draft(String... lines) {

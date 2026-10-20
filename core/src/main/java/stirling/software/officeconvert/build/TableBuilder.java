@@ -233,12 +233,20 @@ final class TableBuilder {
         }
         for (int i = 0; i < d.lines.size(); i++) {
             Line l = d.lines.get(i);
-            // A word hyphenated across two lines is one word: a line break would keep its hyphen
-            if (l.words.size() != 1 || i + 1 < d.lines.size() && l.words.getFirst().text.endsWith("-")) {
+            String word = l.words.size() == 1 ? l.words.getFirst().text : "";
+            // A word hyphenated across two lines is one word, and a line in a script written without spaces is one
+            // "word" of wrapped text: breaking either line would keep a hyphen or stop the text reflowing
+            if (word.isEmpty() || i + 1 < d.lines.size() && hyphenEnds(word) || word.codePoints().anyMatch(RunBuilder::unspaced)) {
                 return false;
             }
         }
         return true;
+    }
+
+    // The line-end hyphens RunBuilder joins wrapped words at
+    private static boolean hyphenEnds(String word) {
+        char c = word.charAt(word.length() - 1);
+        return c == '-' || c == '\u00AD' || c == '\u2010';
     }
 
     /** Breaks every line. Words flush right, measured as justified with one word a line, are aligned right. */
