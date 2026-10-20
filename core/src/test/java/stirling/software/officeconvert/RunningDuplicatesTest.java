@@ -31,13 +31,20 @@ class RunningDuplicatesTest {
 
     @Test
     void headerPiecesAppearOnce() throws Exception {
-        String header = headers(convert());
+        String header = headers(convert(LEFT));
         assertTrue(header.contains(LEFT), "the running header is kept: " + header);
         assertEquals(1, Pattern.compile(Pattern.quote(LEFT)).matcher(header).results().count(), header);
         assertEquals(1, Pattern.compile(Pattern.quote(RIGHT)).matcher(header).results().count(), header);
     }
 
-    private Path convert() throws Exception {
+    @Test
+    void headersThatDifferInAFixedNumberAreBothKept() throws Exception {
+        String header = headers(convert("NIST SP 800-219A"));
+        assertTrue(header.contains(LEFT) && header.contains("NIST SP 800-219A"), "neither header is dropped: " + header);
+    }
+
+    /** Six pages, the last three landscape, whose left header piece reads {@code landscapeLeft}. */
+    private Path convert(String landscapeLeft) throws Exception {
         Path pdf = dir.resolve("report.pdf");
         try (PDDocument doc = new PDDocument()) {
             for (int p = 0; p < 6; p++) {
@@ -49,7 +56,7 @@ class RunningDuplicatesTest {
                 float h = size.getHeight();
                 float margin = landscape ? 36 : 72;
                 try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
-                    text(cs, margin, h - 32, 9, LEFT);
+                    text(cs, margin, h - 32, 9, landscape ? landscapeLeft : LEFT);
                     text(cs, w - margin - FONT.getStringWidth(RIGHT) / 1000f * 9, h - 32, 9, RIGHT);
                     float y = h - 90;
                     for (int i = 0; i < 20; i++) {

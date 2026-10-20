@@ -3,6 +3,7 @@ package stirling.software.officeconvert.build;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -101,8 +102,8 @@ final class RunningContent {
     /**
      * One running line per piece of text. On pages of another size or orientation, such as landscape table pages, the same
      * header piece sits elsewhere and is found as a second running line; both in one header printed it twice on every page
-     * and wrapped the header onto more lines. Of two with the same text that never share a page, the one on more pages
-     * stays.
+     * and wrapped the header onto more lines. Of two with the same text that never share a page, the one that comes first
+     * stays, as the header is laid out on the first page's frame.
      */
     private static List<RunningLine> distinct(List<RunningLine> lines) {
         List<RunningLine> out = new ArrayList<>();
@@ -110,13 +111,13 @@ final class RunningContent {
             int same = -1;
             for (int i = 0; i < out.size() && same < 0; i++) {
                 RunningLine o = out.get(i);
-                if (o.top == r.top && text(o).equals(text(r)) && Collections.disjoint(o.pages(), r.pages())) {
+                if (o.top == r.top && sameText(o, r) && Collections.disjoint(o.pages(), r.pages())) {
                     same = i;
                 }
             }
             if (same < 0) {
                 out.add(r);
-            } else if (r.pages().size() > out.get(same).pages().size()) {
+            } else if (order(r.samplePage()) < order(out.get(same).samplePage())) {
                 out.set(same, r);
             }
         }
@@ -126,6 +127,33 @@ final class RunningContent {
     private static String text(RunningLine r) {
         return r.signature.split("\\|", 4)[3];
     }
+
+    /** The same text digit for digit, except digit runs that count pages in either line ("Report 2025" isn't "Report 2026"). */
+    private static boolean sameText(RunningLine a, RunningLine b) {
+        if (!text(a).equals(text(b))) {
+            return false;
+        }
+        List<String> x = DIGIT_RUN.matcher(a.sample().text()).results().map(MatchResult::group).toList();
+        List<String> y = DIGIT_RUN.matcher(b.sample().text()).results().map(MatchResult::group).toList();
+        if (x.size() != y.size()) {
+            return false;
+        }
+        for (int k = 0; k < x.size(); k++) {
+            boolean page = k < a.pageOffsets.length && a.pageOffsets[k] != Integer.MIN_VALUE
+                    || k < b.pageOffsets.length && b.pageOffsets[k] != Integer.MIN_VALUE;
+            if (!page && !x.get(k).equals(y.get(k))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Page 0 sorts last, as in RunningLine.samplePage()
+    private static int order(int page) {
+        return page == 0 ? Integer.MAX_VALUE - 1 : page;
+    }
+
+    private static final Pattern DIGIT_RUN = Pattern.compile("[0-9]+");
 
     private Paragraph runningParagraph(List<RunningLine> row, float colLeft, float colRight) {
         Paragraph p = new Paragraph();
