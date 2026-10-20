@@ -227,6 +227,12 @@ public final class FontNames {
         return family != null && OFFICE.contains(family);
     }
 
+    /** Whether a PostScript name is the family's own (TimesNewRomanPSMT for Times New Roman), not an alias's. */
+    public static boolean namesFamily(String postScriptName, String family) {
+        return postScriptName != null && family != null
+                && key(trimPsSuffix(basePart(postScriptName))).equals(key(family));
+    }
+
     private static final java.util.regex.Pattern ICON_FONT = java.util.regex.Pattern.compile(
             "(?i).*(fontawesome|font-awesome|fa-(solid|regular|brands|light|thin|duotone)|materialicons|material-?symbols"
                     + "|materialdesignicons|glyphicons|icomoon|fontello|octicons|ionicons|feather|remixicon|bootstrap-?icons"

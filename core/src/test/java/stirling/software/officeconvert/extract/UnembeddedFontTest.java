@@ -36,6 +36,18 @@ class UnembeddedFontTest {
     }
 
     @Test
+    void unembeddedOfficeFontsAreExact() throws IOException {
+        // Word draws them with the font the PDF's widths came from, so text set in them keeps its page breaks
+        assertTrue(new FontResolver().resolve(unembedded("TimesNewRomanPSMT", 34)).exact());
+        assertTrue(new FontResolver().resolve(unembedded("CourierNewPSMT", 33)).exact());
+        assertFalse(new FontResolver().resolve(unembedded("MinionPro-Regular", 34)).exact(), "a stand-in isn't exact");
+        FontInfo neue = new FontResolver().resolve(unembedded("HelveticaNeue-Roman", 32));
+        assertEquals("Arial", neue.family());
+        assertFalse(neue.exact(), "an alias of an Office family may not share its widths");
+        assertTrue(new FontResolver().resolve(unembedded("Arial-BoldMT", 32)).exact());
+    }
+
+    @Test
     void unembeddedCourierStaysCourier() throws IOException {
         assertEquals("Courier New", new FontResolver().resolve(unembedded("CourierNewPSMT", 33)).family());
     }
