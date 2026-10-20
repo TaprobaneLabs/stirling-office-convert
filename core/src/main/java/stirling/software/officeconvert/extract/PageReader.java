@@ -143,6 +143,7 @@ public final class PageReader {
                         g.seq, g.spaceWidth, g.bold, g.italic);
         moved.vertAlign = r.direction();
         moved.hscale = g.hscale;
+        moved.tracking = g.tracking;
         moved.invisible = g.invisible;
         return moved;
     }

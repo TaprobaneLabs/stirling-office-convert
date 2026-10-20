@@ -26,6 +26,9 @@ public final class Glyph {
 
     public float hscale = 1f;
 
+    /** Character spacing (the PDF's Tc) added after this glyph, in page units. */
+    public float tracking;
+
     public boolean upright;
 
     public boolean invisible;
@@ -72,6 +75,7 @@ public final class Glyph {
         g.footnote = footnote;
         g.vertAlign = vertAlign;
         g.hscale = hscale;
+        g.tracking = tracking * k;
         g.invisible = invisible;
         g.icon = icon == null ? null : new IconShape(icon.scaled(k), icon.rgb(), icon.key() + "|" + k);
         return g;

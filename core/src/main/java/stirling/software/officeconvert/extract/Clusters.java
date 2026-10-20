@@ -381,6 +381,7 @@ final class Clusters {
         c.footnote = g.footnote;
         c.vertAlign = g.vertAlign;
         c.hscale = g.hscale;
+        c.tracking = g.tracking;
         c.icon = g.icon;
         return c;
     }

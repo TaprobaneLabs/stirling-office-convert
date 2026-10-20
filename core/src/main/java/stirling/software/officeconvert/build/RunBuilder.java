@@ -159,7 +159,20 @@ final class RunBuilder {
 
     private boolean exactFit;
 
-    private record WidthFix(float spacing, int scale) {}
+    private boolean tracked = true;
+
+    /** How a font's runs are fitted: spacing and scale make Word's widths match the PDF's glyphs; tracking is the PDF's own
+     *  character spacing, which Word applies the same way. */
+    private record WidthFix(float spacing, int scale, float tracking) {
+
+        WidthFix(float spacing, int scale) {
+            this(spacing, scale, 0f);
+        }
+
+        float added() {
+            return spacing + tracking;
+        }
+    }
 
     private static final float SCALE_BELOW = 0.88f;
 
@@ -373,6 +386,10 @@ final class RunBuilder {
                         continue;
                     }
                     float[] acc = look(sums, g);
+                    acc[10] += g.tracking * g.text.length();
+                    acc[11] += g.text.length();
+                    acc[12] += g.tracking * g.tracking * g.text.length();
+                    acc[13] += g.tracking / g.size * g.text.length();
                     acc[8] += exact;
                     acc[7] = Math.max(acc[7], Math.abs(wordSize(g) - g.size) / g.size);
                     acc[0] += g.width;
@@ -406,26 +423,56 @@ final class RunBuilder {
             }
             boolean placedApart = a[5] == 0 && a[4] > 0 && a[3] / a[4] < 1 - (a[6] * 2 > a[2] ? CJK_SQUEEZED : SQUEEZED);
             boolean otherFace = a[5] == 0 && !placedApart && a[0] < OTHER_FACE * a[8];
+            // Glyph positions, when measured, already hold the character spacing
+            float tracking = placedApart || a[2] < 3 || !tracked ? 0f : tracking(a);
             if (a[2] < 3 || a[5] == 0 && !placedApart && !otherFace && a[7] < ROUNDED_SIZE) {
+                if (tracking != 0f) {
+                    out.put(e.getKey(), new WidthFix(0f, 100, tracking));
+                }
                 continue;
             }
             float pdf = placedApart ? a[0] * a[3] / a[4] : a[5] == 0 && !otherFace ? a[8] : a[0];
             if (pdf < SCALE_BELOW * a[1]) {
-                out.put(e.getKey(), new WidthFix(0f, Math.max(50, Math.round(100 * pdf / (otherFace ? a[1] : a[8])))));
+                out.put(e.getKey(), new WidthFix(0f, Math.max(50, Math.round(100 * pdf / (otherFace ? a[1] : a[8]))), tracking));
             } else if (pdf > SCALE_ABOVE * a[1]) {
-                out.put(e.getKey(), new WidthFix(0f, Math.min(150, (int) Math.floor(100 * pdf / a[8]))));
+                out.put(e.getKey(), new WidthFix(0f, Math.min(150, (int) Math.floor(100 * pdf / a[8])), tracking));
             } else {
                 float perChar = (pdf - a[1]) / a[2];
                 float steps = Math.clamp(perChar, -2f, 4f) * 20f;
                 boolean rtl = e.getKey().endsWith("|ar") || e.getKey().endsWith("|he");
-                out.put(e.getKey(), new WidthFix((rtl ? Math.round(steps) : (float) Math.floor(steps)) / 20f, 100));
+                out.put(e.getKey(), new WidthFix((rtl ? Math.round(steps) : (float) Math.floor(steps)) / 20f, 100, tracking));
             }
         }
         return out;
     }
 
+    /**
+     * The condensed character spacing a font's runs share in the PDF, in Word's steps of a twentieth of a point, or 0 when
+     * it is too small to matter, varies (justification done with character spacing, say) or is more than a spacing (a
+     * producer's way of moving to a column). Expanded spacing is left out: without it a line only comes out narrower, never
+     * wraps, and Word's PDFs of letterspaced capitals read as separate letters.
+     */
+    private static float tracking(float[] a) {
+        if (a[11] <= 0) {
+            return 0f;
+        }
+        float mean = a[10] / a[11];
+        float em = a[13] / a[11];
+        float spread = (float) Math.sqrt(Math.max(0, a[12] / a[11] - mean * mean));
+        if (mean > -MIN_TRACKING || em < -MAX_CONDENSED || spread > TRACKING_SPREAD) {
+            return 0f;
+        }
+        return (float) Math.floor(mean * 20f) / 20f;
+    }
+
+    private static final float MIN_TRACKING = 0.1f;
+
+    private static final float MAX_CONDENSED = 0.12f;
+
+    private static final float TRACKING_SPREAD = 0.05f;
+
     private static float[] look(Map<String, float[]> sums, Glyph g) {
-        float[] acc = sums.computeIfAbsent(lookKey(g), k -> new float[10]);
+        float[] acc = sums.computeIfAbsent(lookKey(g), k -> new float[14]);
         acc[5] = g.font.substituted() ? 1 : acc[5];
         return acc;
     }
@@ -494,11 +541,11 @@ final class RunBuilder {
         if (fix == null && squeeze != 0) {
             fix = new WidthFix(0f, 100);
         }
-        if (fix != null && (fix.spacing() != 0f || fix.scale() != 100 || squeeze != 0) && g.vertAlign == 0
+        if (fix != null && (fix.added() != 0f || fix.scale() != 100 || squeeze != 0) && g.vertAlign == 0
                 && !unmeasured(g)) {
             int scale = Math.round(s.scale() * fix.scale() / 100f);
             return new RunStyle(s.font(), s.size(), s.bold(), s.italic(), s.underline(), s.strike(), s.rgb(),
-                    s.highlight(), s.vertAlign(), s.symbol(), fix.spacing() - squeeze, scale, s.smallCaps(), s.border());
+                    s.highlight(), s.vertAlign(), s.symbol(), fix.added() - squeeze, scale, s.smallCaps(), s.border());
         }
         return s;
     }
@@ -732,7 +779,7 @@ final class RunBuilder {
         if (Float.isNaN(exact)) {
             return g.width;
         }
-        return fix != null ? exact * fix.scale() / 100f + fix.spacing() * g.text.length() : exact;
+        return fix != null ? exact * fix.scale() / 100f + fix.added() * g.text.length() : exact;
     }
 
     record Fit(float edge, float preferred, boolean justified) {}
@@ -878,11 +925,19 @@ final class RunBuilder {
     private float fitSpace(Glyph before, float t) {
         WidthFix fix = spacing.get(lookKey(before));
         float space = spaceAfter(before);
-        return (fix == null ? space : space * fix.scale() / 100f + fix.spacing()) - t;
+        return (fix == null ? space : space * fix.scale() / 100f + fix.added()) - t;
     }
 
     float fitted() {
         return fitted;
+    }
+
+    /**
+     * Whether the next fills keep the PDF's character spacing. Not in justified text, where it is often part of the
+     * justification (set line by line to fill the measure), which Word does with word spaces alone.
+     */
+    void tracked(boolean on) {
+        tracked = on;
     }
 
     boolean exactFit() {
