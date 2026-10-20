@@ -12,6 +12,10 @@ public final class FontNames {
     private static final Set<String> SYMBOL_FAMILIES =
             Set.of("Symbol", "Wingdings", "Wingdings 2", "Wingdings 3", "Webdings", "MT Extra");
 
+    // Stand-ins named for an Office family that don't share its widths: Caladea's letters are about 4% narrower
+    // than Cambria's and its figures 15%. Carlito, Liberation, Arimo, Tinos and Cousine match theirs.
+    private static final Set<String> INEXACT_STAND_INS = Set.of("caladea");
+
     static {
         alias("Arial", "arial", "arialmt", "helvetica", "helv", "helveticaneue", "arimo",
                 "liberationsans", "nimbussans", "nimbussansl", "texgyreheros", "freesans");
@@ -94,6 +98,11 @@ public final class FontNames {
             return name.substring(7);
         }
         return name;
+    }
+
+    /** Whether a font is a stand-in for the Office family it resolves to whose widths differ from that family's. */
+    public static boolean inexactStandIn(String postScriptName) {
+        return postScriptName != null && INEXACT_STAND_INS.contains(key(basePart(postScriptName)));
     }
 
     static String basePart(String ps) {

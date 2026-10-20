@@ -21,9 +21,17 @@ final class SubstituteMetrics {
     private SubstituteMetrics() {}
 
     static float width(String text, String family, boolean bold, boolean italic, float size) {
+        return width(text, family, bold, italic, size, false);
+    }
+
+    /**
+     * The width Word gives {@code text} in {@code family}. Text in a stand-in font (Caladea for Cambria) is also measured
+     * in the other Windows and Office families; the PDF's own Calibri or Cambria is left alone, as its widths are Word's.
+     */
+    static float width(String text, String family, boolean bold, boolean italic, float size, boolean standIn) {
         Standard14Fonts.FontName name = fontFor(family, bold, italic);
         if (name == null) {
-            return Float.NaN;
+            return standIn ? OfficeWidths.width(text, family, bold, italic, size) : Float.NaN;
         }
         Metrics metrics = FONTS.computeIfAbsent(name, Metrics::new);
         String key = family + "|" + ((bold ? 1 : 0) | (italic ? 2 : 0)) + "|";

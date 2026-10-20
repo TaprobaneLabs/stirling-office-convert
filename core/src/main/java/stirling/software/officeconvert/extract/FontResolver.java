@@ -70,7 +70,7 @@ public final class FontResolver {
         boolean symbolic = FontNames.isSymbolFamily(family);
         mono |= !ocrFont && !symbolic && (unnamed || placeholder(lowerPs)) && GlyphShapes.fixedPitch(font);
         boolean serif = !mono && (FontNames.looksSerif(family) || fd != null && fd.isSerif());
-        boolean substituted = FontNames.isTexFont(ps) && !"Cambria Math".equals(family);
+        boolean substituted = FontNames.isTexFont(ps) && !"Cambria Math".equals(family) || FontNames.inexactStandIn(ps);
         if (!symbolic && (unnamed || !FontNames.isOfficeFont(family))) {
             Boolean shapes = mono || italic || ocrFont || FontNames.isTexFont(ps) ? null : GlyphShapes.serifs(font);
             if (unnamed) {

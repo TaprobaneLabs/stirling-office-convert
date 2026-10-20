@@ -47,7 +47,8 @@ final class OfficeFonts {
 
     private static final int[] DIRECT = direct();
 
-    private static final String RESOURCE = "office-fonts.tsv";
+    // In core, whose PDF to Word side measures text in the same fonts
+    private static final String RESOURCE = "/stirling/software/officeconvert/build/office-fonts.tsv";
 
     private static final int MISSING = 36 * 36 - 1;
 

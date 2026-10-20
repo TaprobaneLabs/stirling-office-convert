@@ -352,8 +352,8 @@ final class RunBuilder {
                 } else if (spaced && last.vertAlign == 0 && !unmeasured(last)) {
                     float natural = !Float.isNaN(l.drawnSpace) ? l.drawnSpace : !Float.isNaN(positioned) ? positioned : last.spaceWidth;
                     float exact = (arabicStandIn(last) ? ArabicWidths.space(last.bold, last.size)
-                            : SubstituteMetrics.width(" ", last.font.family(), last.bold, last.italic, last.size)) * scaleOf(last)
-                            / 100f;
+                            : SubstituteMetrics.width(" ", last.font.family(), last.bold, last.italic, last.size,
+                                    last.font.substituted())) * scaleOf(last) / 100f;
                     if (!Float.isNaN(exact)) {
                         float[] acc = look(sums, last);
                         acc[0] += natural;
@@ -439,9 +439,9 @@ final class RunBuilder {
         }
         if (g.font.smallCaps() && !text.equals(text.toUpperCase(java.util.Locale.ROOT))) {
             return SubstituteMetrics.width(text.toUpperCase(java.util.Locale.ROOT), g.font.family(), g.bold, g.italic,
-                    g.size * SMALL_CAP_SIZE);
+                    g.size * SMALL_CAP_SIZE, g.font.substituted());
         }
-        return SubstituteMetrics.width(text, g.font.family(), g.bold, g.italic, g.size);
+        return SubstituteMetrics.width(text, g.font.family(), g.bold, g.italic, g.size, g.font.substituted());
     }
 
     static boolean unmeasured(Glyph g) {
@@ -720,8 +720,8 @@ final class RunBuilder {
     }
 
     private float spaceAfter(Glyph before) {
-        float space = SubstituteMetrics.width(" ", before.font.family(), before.bold, before.italic, wordSize(before))
-                * scaleOf(before) / 100f;
+        float space = SubstituteMetrics.width(" ", before.font.family(), before.bold, before.italic, wordSize(before),
+                before.font.substituted()) * scaleOf(before) / 100f;
         return Float.isNaN(space) ? before.spaceWidth : space;
     }
 
