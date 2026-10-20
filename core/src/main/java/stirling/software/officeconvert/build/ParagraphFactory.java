@@ -361,6 +361,13 @@ final class ParagraphFactory {
             p.indentLeft = start;
         }
         p.indentFirst = markerX - start;
+        // The tab after the number stops at the hanging indent; when the runover lines don't start where the
+        // first line's text does (under the number, say), Word would go on to the next default stop (half an inch)
+        if (!rtl && textX > markerX && Math.abs(start - textX) > 2f) {
+            p.tabs.removeIf(t -> Math.abs(t.pos() - textX) < 3f);
+            p.tabs.add(new Paragraph.TabStop(textX, Paragraph.TabStop.Kind.LEFT, (char) 0));
+            p.tabs.sort((a, b) -> Float.compare(a.pos(), b.pos()));
+        }
     }
 
     Paragraph notePara(ParaDraft d) {
