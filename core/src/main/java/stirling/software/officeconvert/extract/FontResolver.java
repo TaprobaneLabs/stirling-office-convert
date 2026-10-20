@@ -80,8 +80,10 @@ public final class FontResolver {
             family = mono ? "Courier New" : serif ? "Times New Roman" : "Arial";
             substituted = true;
         }
-        // An Office font the PDF names without embedding it is one Word has: its widths in the PDF are that font's
-        boolean exact = !substituted && !symbolic && FontNames.isOfficeFont(family);
+        // An Office font the PDF names without embedding it is one Word has: its widths in the PDF are that font's. An
+        // alias that only resolves to one (Helvetica Neue to Arial, Caladea to Cambria) may not share its widths.
+        boolean exact = !substituted && !symbolic && FontNames.isOfficeFont(family)
+                && (font.isEmbedded() || FontNames.namesFamily(ps, family));
         return new FontInfo(family, bold, italic, serif, mono, symbolic, ps, substituted, FontNames.isSmallCaps(ps),
                 FontNames.isIconFont(ps), exact);
     }
