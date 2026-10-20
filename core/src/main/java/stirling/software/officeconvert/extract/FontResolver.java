@@ -44,7 +44,9 @@ public final class FontResolver {
         if (fd != null && fd.getFontFamily() != null && isSane(fd.getFontFamily())) {
             candidate = fd.getFontFamily();
         }
-        if (candidate == null) {
+        // A font that isn't embedded has no naming table of its own: PDFBox hands back the system font it
+        // draws instead (often Liberation Sans), whose family would turn Times New Roman into Arial
+        if (candidate == null && font.isEmbedded()) {
             candidate = embeddedFamily(font);
         }
         String family = FontNames.family(candidate, ps);
