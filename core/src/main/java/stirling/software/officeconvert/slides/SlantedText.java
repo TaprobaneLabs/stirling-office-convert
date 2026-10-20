@@ -152,6 +152,7 @@ final class SlantedText {
         u.highlightRgb = g.highlightRgb;
         u.link = g.link;
         u.hscale = g.hscale;
+        u.tracking = g.tracking;
         return u;
     }
 

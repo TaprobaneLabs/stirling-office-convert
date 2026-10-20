@@ -408,6 +408,7 @@ final class GlyphCollector extends PDFStreamEngine {
         Glyph merged = new Glyph(text, lo, hi - lo, baseline, m.size, m.ascent, m.descent, m.font, m.rgb, m.seq,
                 m.spaceWidth, m.bold, m.italic);
         merged.hscale = m.hscale;
+        merged.tracking = m.tracking;
         span.clear();
         current.add(new RawGlyph(merged, main.direction(), main.invisible(), main.originX(), main.originY()));
         return true;
@@ -484,6 +485,7 @@ final class GlyphCollector extends PDFStreamEngine {
                         bold,
                         italic);
         g.hscale = horizontalScale(tp);
+        g.tracking = tracking(gs);
         int[] codes = tp.getCharacterCodes();
         if (font.icons() && codes != null && codes.length == 1) {
             g.icon = IconShape.of(pdFont, codes[0], size, rgb);
@@ -603,6 +605,17 @@ final class GlyphCollector extends PDFStreamEngine {
         float space = !Float.isNaN(spaceEm) ? spaceEm * size * horizontalScale(tp)
                 : font instanceof PDType3Font ? tp.getWidthOfSpace() : size * DEFAULT_SPACE_EM;
         return space > 0 ? Math.clamp(space, size * MIN_SPACE_EM, size * MAX_SPACE_EM) : size * DEFAULT_SPACE_EM;
+    }
+
+    /** The character spacing (Tc) shown after the glyph, in page units: scaled like a glyph's advance, but not by the font size. */
+    private float tracking(PDGraphicsState gs) {
+        float tc = gs.getTextState().getCharacterSpacing();
+        if (tc == 0) {
+            return 0f;
+        }
+        float th = gs.getTextState().getHorizontalScaling() / 100f;
+        float t = tc * th * getTextMatrix().multiply(gs.getCurrentTransformationMatrix()).getScalingFactorX();
+        return Float.isFinite(t) ? t : 0f;
     }
 
     static float horizontalScale(TextPosition tp) {

@@ -93,6 +93,7 @@ final class VerticalText {
         r.highlightRgb = g.highlightRgb;
         r.link = g.link;
         r.hscale = g.hscale;
+        r.tracking = g.tracking;
         return r;
     }
 }
