@@ -137,6 +137,19 @@ class LineBuilderTest {
     }
 
     @Test
+    void keepsEvenlySpacedAxisLabelsApart() {
+        List<Glyph> glyphs = new ArrayList<>();
+        String[] labels = {"0", "5", "10", "15", "20", "25"};
+        for (int i = 0; i < labels.length; i++) {
+            place(glyphs, labels[i], 320 + 68 * i, 300, 12);
+        }
+
+        Line line = LineBuilder.join(LineBuilder.build(glyphs));
+
+        assertEquals(List.of(labels), line.words.stream().map(w -> w.text).toList());
+    }
+
+    @Test
     void marksRaisedSmallGlyphsAsSuperscript() {
         List<Glyph> glyphs = new ArrayList<>();
         place(glyphs, "E=mc", 72, 100, 10);

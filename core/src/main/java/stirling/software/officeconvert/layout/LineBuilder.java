@@ -150,7 +150,16 @@ public final class LineBuilder {
         }
         float[] gaps = Arrays.copyOf(all, n);
         float median = select(gaps, gaps.length / 2);
-        return median > 0.05f * glyphs.getFirst().size ? median : 0f;
+        if (median <= 0.05f * glyphs.getFirst().size) {
+            return 0f;
+        }
+        // Letter-spaced text leaves the gap between nearly every pair of glyphs. Labels spread along an axis
+        // ("0 5 10 15 20 25") make the gap between labels the median while the glyphs of each label touch.
+        int close = 0;
+        for (float g : gaps) {
+            close += g < 0.5f * median ? 1 : 0;
+        }
+        return close * 4 > n ? 0f : median;
     }
 
     static float select(float[] a, int k) {
