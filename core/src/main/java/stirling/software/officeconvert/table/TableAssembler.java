@@ -261,10 +261,33 @@ final class TableAssembler {
         }
         boolean boldHeader = bold == filled && (bodyFilled == 0 || bodyBold * 10 < bodyFilled * 6);
         int bodyFill = mode(bodyFills, NO_FILL);
-        // A fill that shades a good share of the body too is banding: the first shaded row isn't a header
-        boolean banded = rowFill != null && bodyFills.getOrDefault(rowFill, 0) * 10 >= body.size() * 3;
         boolean fillHeader =
-                uniformFill && rowFill != null && !banded && (bodyFill == NO_FILL || rowFill != bodyFill);
+                uniformFill && rowFill != null && !banded(rowFill, body) && (bodyFill == NO_FILL || rowFill != bodyFill);
         return boldHeader || fillHeader;
+    }
+
+    /**
+     * Rows shaded in bands: the row's fill skips the next row and shades the one after, so the first shaded row isn't
+     * a header. A header whose colour returns only on a total row further down keeps its place.
+     */
+    private static boolean banded(int fill, List<ExtractedCell> body) {
+        int first = Integer.MAX_VALUE;
+        for (ExtractedCell c : body) {
+            first = Math.min(first, c.row());
+        }
+        return !shades(body, first, fill) && shades(body, first + 1, fill);
+    }
+
+    private static boolean shades(List<ExtractedCell> cells, int row, int fill) {
+        boolean any = false;
+        for (ExtractedCell c : cells) {
+            if (c.row() == row) {
+                if (!Objects.equals(c.style().fillRgb(), fill)) {
+                    return false;
+                }
+                any = true;
+            }
+        }
+        return any;
     }
 }

@@ -124,6 +124,17 @@ class PdfToXlsxTest {
     }
 
     @Test
+    void aHeaderShadedLikeTheTotalRowStaysTheHeader() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.shadedTotal(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        assertTrue(SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml").contains(">2025<"), "the year a header label");
+        assertTrue(number(SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml"), "1570"), "the total typed");
+    }
+
+    @Test
     void odsCarriesTheSameValues() throws IOException {
         Map<String, byte[]> parts = convert(PdfToXlsx.Options.defaults().withFormat(PdfToXlsx.Format.ODS));
         String content = SpreadsheetPdfs.part(parts, "content.xml");

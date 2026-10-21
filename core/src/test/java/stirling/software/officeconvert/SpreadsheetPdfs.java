@@ -71,6 +71,44 @@ final class SpreadsheetPdfs {
         return pdf;
     }
 
+    /** A short table whose plain header and total row share one shade. */
+    static Path shadedTotal(Path dir) throws IOException {
+        Path pdf = dir.resolve("total.pdf");
+        String[][] rows = {{"Item", "2025", "2026"}, {"Rent", "1,200.00", "1,250.00"}, {"Power", "300.00", "320.00"},
+            {"Total", "1,500.00", "1,570.00"}};
+        float[] cols = {60, 220, 320, 420};
+        float top = 700;
+        float rowH = 18;
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.setNonStrokingColor(0.85f, 0.85f, 0.85f);
+                for (int r : new int[] {0, rows.length - 1}) {
+                    cs.addRect(cols[0], top - (r + 1) * rowH, cols[cols.length - 1] - cols[0], rowH);
+                }
+                cs.fill();
+                cs.setNonStrokingColor(0f, 0f, 0f);
+                for (int r = 0; r <= rows.length; r++) {
+                    cs.moveTo(cols[0], top - r * rowH);
+                    cs.lineTo(cols[cols.length - 1], top - r * rowH);
+                }
+                for (float x : cols) {
+                    cs.moveTo(x, top);
+                    cs.lineTo(x, top - rows.length * rowH);
+                }
+                cs.stroke();
+                for (int r = 0; r < rows.length; r++) {
+                    for (int c = 0; c < rows[r].length; c++) {
+                        text(cs, REGULAR, 10, cols[c] + 4, top - r * rowH - 13, rows[r][c]);
+                    }
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        return pdf;
+    }
+
     /** An invoice with a bold header row over banded rows, the first item row shaded. */
     static Path banded(Path dir) throws IOException {
         Path pdf = dir.resolve("banded.pdf");
