@@ -71,6 +71,58 @@ final class SpreadsheetPdfs {
         return pdf;
     }
 
+    /** A ledger whose ruled table runs from the first page onto the second, its header row repeated there. */
+    static Path ledger(Path dir) throws IOException {
+        return ledger(dir, 30);
+    }
+
+    /** The same ledger with {@code firstRows} rows at the foot of its first page. */
+    static Path ledger(Path dir, int firstRows) throws IOException {
+        Path pdf = dir.resolve("ledger" + firstRows + ".pdf");
+        String[] header = {"Date", "Account", "Description", "Amount"};
+        try (PDDocument doc = new PDDocument()) {
+            int row = 0;
+            for (int p = 0; p < 2; p++) {
+                PDPage page = new PDPage(PDRectangle.A4);
+                doc.addPage(page);
+                try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                    int rows = p == 0 ? firstRows : 12;
+                    float[] cols = {60, 150, 240, 420, 520};
+                    float rowH = 20;
+                    float top = 780;
+                    if (p == 0) {
+                        text(cs, BOLD, 16, 60, 790, "General ledger");
+                        top = 60 + (rows + 1) * rowH;
+                    }
+                    for (int r = 0; r <= rows + 1; r++) {
+                        cs.moveTo(cols[0], top - r * rowH);
+                        cs.lineTo(cols[cols.length - 1], top - r * rowH);
+                    }
+                    for (float x : cols) {
+                        cs.moveTo(x, top);
+                        cs.lineTo(x, top - (rows + 1) * rowH);
+                    }
+                    cs.stroke();
+                    for (int c = 0; c < header.length; c++) {
+                        text(cs, BOLD, 10, cols[c] + 4, top - 14, header[c]);
+                    }
+                    for (int r = 1; r <= rows; r++, row++) {
+                        String[] cells = {String.format("2024-%02d-%02d", 1 + row / 28, 1 + row % 28), "4" + (100 + row % 7),
+                            "Entry " + (row + 1), String.format("%,.2f", 100 + row * 37.5)};
+                        for (int c = 0; c < cells.length; c++) {
+                            text(cs, REGULAR, 10, cols[c] + 4, top - r * rowH - 14, cells[c]);
+                        }
+                    }
+                    if (p == 1) {
+                        text(cs, REGULAR, 10, 60, top - (rows + 2) * rowH - 14, "Closing balance carried to the next year.");
+                    }
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        return pdf;
+    }
+
     static void text(PDPageContentStream cs, PDType1Font font, float size, float x, float y, String s) throws IOException {
         cs.beginText();
         cs.setFont(font, size);
