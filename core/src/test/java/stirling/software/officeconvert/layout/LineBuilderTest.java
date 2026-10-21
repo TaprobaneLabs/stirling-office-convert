@@ -147,6 +147,25 @@ class LineBuilderTest {
         Line line = LineBuilder.join(LineBuilder.build(glyphs));
 
         assertEquals(List.of(labels), line.words.stream().map(w -> w.text).toList());
+
+        List<Glyph> tight = new ArrayList<>();
+        String[] hours = {"1", "5", "9", "13", "17", "21"};
+        for (int i = 0; i < hours.length; i++) {
+            place(tight, hours[i], 260 + 32.7f * i, 300, 12);
+        }
+        Line hourLine = LineBuilder.join(LineBuilder.build(tight));
+        assertEquals(List.of(hours), hourLine.words.stream().map(w -> w.text).toList(), "labels 1.7 em apart");
+    }
+
+    @Test
+    void keepsALetterSpacedWordWholeAfterAPlainOne() {
+        List<Glyph> glyphs = new ArrayList<>();
+        place(glyphs, "Tech", 72, 100, 10);
+        placeTracked(glyphs, "SPACING", 100, 100, 3f);
+
+        Line line = LineBuilder.join(LineBuilder.build(glyphs));
+
+        assertEquals(List.of("Tech", "SPACING"), line.words.stream().map(w -> w.text).toList());
     }
 
     @Test
