@@ -28,6 +28,7 @@ final class ParagraphFactory {
     private final ListTracker lists = new ListTracker();
     private int misses;
     private boolean fitting;
+    private boolean wholeJustified;
     private boolean innerColumn;
 
     ParagraphFactory(DocStats stats, RunBuilder runs, StyleSheet styles, Numbering numbering) {
@@ -164,7 +165,13 @@ final class ParagraphFactory {
     }
 
     void fitting(boolean on) {
+        fitting(on, false);
+    }
+
+    /** {@code wholeJustified}: a justified paragraph keeps its fit only when the fit keeps every line. */
+    void fitting(boolean on, boolean wholeJustified) {
         fitting = on;
+        this.wholeJustified = wholeJustified;
     }
 
     int misses() {
@@ -179,12 +186,12 @@ final class ParagraphFactory {
         float edge = p.bidi || markerTab || !fitting ? Float.NaN
                 : colRight - d.right - (innerColumn ? SectionPlanner.RIGHT_SLACK : 0);
         if (d.align == Align.JUSTIFY && !Float.isNaN(d.justifySlack)) {
-            return new RunBuilder.Fit(edge, d.justifySlack, true);
+            return new RunBuilder.Fit(edge, d.justifySlack, true, wholeJustified);
         }
         if (Float.isNaN(edge) || d.align != Align.LEFT || skip > 0) {
             return null;
         }
-        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false);
+        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false);
     }
 
     private static float standInSlack(ParaDraft d) {

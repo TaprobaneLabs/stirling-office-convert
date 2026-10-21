@@ -785,7 +785,8 @@ final class RunBuilder {
         return fix != null ? exact * fix.scale() / 100f + fix.added() * g.text.length() : exact;
     }
 
-    record Fit(float edge, float preferred, boolean justified) {}
+    /** {@code whole}: only a fit that keeps every line counts (otherwise justified lines are squeezed one by one). */
+    record Fit(float edge, float preferred, boolean justified, boolean whole) {}
 
     private float fit(List<Line> lines, Fit target, BitSet hardBreaks, float[] squeezes) {
         if (Float.isNaN(target.edge())) {
@@ -818,6 +819,9 @@ final class RunBuilder {
                     bestScore = score;
                 }
             }
+        }
+        if (target.whole() && bestScore < lines.size() * (lines.size() + 1) / 2) {
+            return Float.NaN;
         }
         Arrays.fill(squeezes, bestSqueeze);
         return best;
