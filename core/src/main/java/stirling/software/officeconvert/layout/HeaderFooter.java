@@ -142,15 +142,22 @@ public final class HeaderFooter {
      * the same running line, not body text: it's set apart there too, so it doesn't stretch the page frame or flow.
      */
     private void setApartCopies() {
-        Set<String> running = new HashSet<>();
-        for (RunningLine r : accepted) {
-            running.add(placeless(r.signature));
-        }
-        for (String sig : demoted) {
-            running.add(placeless(sig));
+        // Each running line's texts, digits included: where they never change, they aren't page numbers and must match
+        Map<String, Set<String>> running = new HashMap<>();
+        for (RunningLine r : candidates.values()) {
+            if (accepted.contains(r) || demoted.contains(r.signature)) {
+                Set<String> texts = running.computeIfAbsent(placeless(r.signature), k -> new HashSet<>());
+                for (Line l : r.occurrences.values()) {
+                    texts.add(l.text().strip());
+                }
+            }
         }
         for (RunningLine r : candidates.values()) {
-            if (!accepted.contains(r) && worded(r.signature) && running.contains(placeless(r.signature))) {
+            Set<String> texts = running.get(placeless(r.signature));
+            if (accepted.contains(r) || texts == null || !worded(r.signature)) {
+                continue;
+            }
+            if (texts.size() > 1 || r.occurrences.values().stream().allMatch(l -> texts.contains(l.text().strip()))) {
                 furniture.add(r.signature);
                 demoted.add(r.signature);
             }

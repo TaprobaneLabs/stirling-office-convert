@@ -29,7 +29,8 @@ class RunningCopiesTest {
     private static final PDType1Font FONT = new PDType1Font(Standard14Fonts.FontName.TIMES_ROMAN);
     private static final float HEIGHT = PDRectangle.LETTER.getHeight();
     private static final float WIDTH = PDRectangle.LETTER.getWidth();
-    private static final String HEADER = "Indian Health Service Budget Request and Funding History: In Brief";
+    private static final String HEADER = "Indian Health Service FY2022 Budget Request and Funding History: In Brief";
+    private static final String OTHER_YEAR = "Indian Health Service FY2021 Budget Request and Funding History: In Brief";
     private static final String FOOTER = "Congressional Research Service";
     private static final String LINE = "The agency has three major sources of funding, described here in order of size";
     private static final float BODY_TOP = 100;
@@ -39,11 +40,20 @@ class RunningCopiesTest {
 
     @Test
     void theBodyStartsBelowTheRunningHeader() throws Exception {
-        String xml = convert(makePdf());
+        String xml = convert(makePdf(HEADER));
         float top = margin(xml, "top");
         float bottom = margin(xml, "bottom");
         assertTrue(top > 50 && top < BODY_TOP, "the body starts below the header, near its PDF top: top margin " + top);
         assertTrue(bottom > 12, "the cover's band doesn't set the bottom margin either: " + bottom);
+    }
+
+    @Test
+    void aLineDifferingInItsFixedDigitsStaysBodyText() throws Exception {
+        String xml = convert(makePdf(OTHER_YEAR));
+        int at = xml.indexOf("FY2021");
+        assertTrue(at >= 0, "the contents page's line is converted");
+        assertTrue(xml.lastIndexOf("<w:txbxContent", at) <= xml.lastIndexOf("</w:txbxContent>", at),
+                "a line that differs from the running header in its year isn't a copy of it, so it isn't set apart");
     }
 
     private static float margin(String xml, String side) {
@@ -60,8 +70,11 @@ class RunningCopiesTest {
         }
     }
 
-    /** A cover with bands at the top and bottom edges, a contents page, then six pages of running text. */
-    private Path makePdf() throws IOException {
+    /**
+     * A cover with bands at the top and bottom edges, a contents page whose header line is {@code contentsHeader}, then
+     * six pages of running text.
+     */
+    private Path makePdf(String contentsHeader) throws IOException {
         Path pdf = dir.resolve("report.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage cover = new PDPage(PDRectangle.LETTER);
@@ -78,7 +91,7 @@ class RunningCopiesTest {
             PDPage contents = new PDPage(PDRectangle.LETTER);
             doc.addPage(contents);
             try (PDPageContentStream cs = new PDPageContentStream(doc, contents)) {
-                text(cs, 190, 30, HEADER, 9);
+                text(cs, 190, 30, contentsHeader, 9);
                 text(cs, 90, BODY_TOP, "Contents", 16);
                 for (int i = 1; i <= 6; i++) {
                     text(cs, 90, BODY_TOP + 10 + i * 16, "Section " + i + " of the report", 12);
