@@ -71,6 +71,54 @@ final class SpreadsheetPdfs {
         return pdf;
     }
 
+    /** A statement whose ruled table lacks the rule between paid out and paid in on every other row. */
+    static Path statement(Path dir) throws IOException {
+        Path pdf = dir.resolve("statement.pdf");
+        String[][] rows = {
+            {"Date", "Description", "Paid out", "Paid in", "Balance"},
+            {"01 Jul", "Rent", "950.00", "", "4,050.00"},
+            {"02 Jul", "Salary", "", "2,400.00", "6,450.00"},
+            {"03 Jul", "Groceries", "84.10", "", "6,365.90"},
+            {"04 Jul", "Refund", "", "1,081.64", "7,447.54"},
+            {"05 Jul", "Utilities", "120.35", "", "7,327.19"},
+            {"06 Jul", "Interest", "", "12.80", "7,339.99"},
+        };
+        float[] cols = {60, 130, 290, 380, 470, 560};
+        float top = 760;
+        float rowH = 20;
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                text(cs, BOLD, 16, 60, 790, "Account statement");
+                for (int r = 0; r <= rows.length; r++) {
+                    cs.moveTo(cols[0], top - r * rowH);
+                    cs.lineTo(cols[cols.length - 1], top - r * rowH);
+                }
+                for (int r = 0; r < rows.length; r++) {
+                    for (int c = 0; c < cols.length; c++) {
+                        if (c == 3 && r % 2 == 0 && r > 0) {
+                            continue;
+                        }
+                        cs.moveTo(cols[c], top - r * rowH);
+                        cs.lineTo(cols[c], top - (r + 1) * rowH);
+                    }
+                }
+                cs.stroke();
+                for (int r = 0; r < rows.length; r++) {
+                    for (int c = 0; c < rows[r].length; c++) {
+                        String s = rows[r][c];
+                        PDType1Font font = r == 0 ? BOLD : REGULAR;
+                        float x = c >= 2 ? cols[c + 1] - 4 - font.getStringWidth(s) / 1000f * 10 : cols[c] + 4;
+                        text(cs, font, 10, x, top - r * rowH - 14, s);
+                    }
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        return pdf;
+    }
+
     static void text(PDPageContentStream cs, PDType1Font font, float size, float x, float y, String s) throws IOException {
         cs.beginText();
         cs.setFont(font, size);
