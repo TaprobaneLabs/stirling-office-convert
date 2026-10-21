@@ -38,3 +38,5 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.3` | Put numbers back in their columns: cells merged by a missing rule, and figures a space apart across a sub-column cut (#14) | Not offered yet |
 | `0.2.2-fj.3` | Don't take the first banded row for a second header row (#15) | Not offered yet |
 | `0.2.2-fj.3` | Take a header band over a ruled grid into the table as its header row (#16) | Not offered yet |
+| `0.2.2-fj.4` | Keep chart axis labels spread along a row apart instead of reading them as letter-spaced text (#20) | Not offered yet |
+| `0.2.2-fj.4` | Keep a slide chart's labels as text up to 80 lines instead of baking them into its picture (#21) | Not offered yet |
