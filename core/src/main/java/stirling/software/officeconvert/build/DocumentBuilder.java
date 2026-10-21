@@ -77,7 +77,7 @@ public final class DocumentBuilder {
     private float flowLow;
     private float footHigh;
     private float noteLow;
-    // Sections on the current page, the one carried over from the last page included, and each section's lowest body text
+    // Sections on the current page (one carried over from the last page once a band reuses it), each section's lowest text
     private final List<Section> pageSections = new ArrayList<>();
     private final Map<Section, Float> sectionLows = new IdentityHashMap<>();
 
@@ -132,9 +132,6 @@ public final class DocumentBuilder {
         }
         release();
         pageSections.clear();
-        if (section != null) {
-            pageSections.add(section);
-        }
         if (carry != null && !carriedOn(layout)) {
             Carry c = carry;
             carry = null;
@@ -363,6 +360,9 @@ public final class DocumentBuilder {
     private void openSection(PageLayout.Band band, Section base, boolean sizeChanged, Cursor at) throws IOException {
         List<float[]> cols = SectionPlanner.columnsOf(band, base);
         if (section != null && !(sizeChanged && at.pageTop) && SectionPlanner.sameColumns(section, cols)) {
+            if (!pageSections.contains(section)) {
+                pageSections.add(section);
+            }
             return;
         }
         if (section != null) {

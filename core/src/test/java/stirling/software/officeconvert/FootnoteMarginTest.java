@@ -65,6 +65,59 @@ class FootnoteMarginTest {
         assertEverySectionEndsAtTheNote(convert(makeColumnsPdf(680, true)));
     }
 
+    @Test
+    void aLandscapePagesNotesLeaveThePortraitSectionAlone() throws Exception {
+        float with = bottomMargin(convert(makeTurnedPdf(true)));
+        float without = bottomMargin(convert(makeTurnedPdf(false)));
+        assertTrue(Math.abs(with - without) < 0.1f,
+                "the portrait section's margin is " + with + " with the landscape page's note, " + without + " without");
+    }
+
+    /** A short portrait page, then a landscape page of text with a note at its foot when {@code note}. */
+    private Path makeTurnedPdf(boolean note) throws IOException {
+        Path pdf = dir.resolve("turned.pdf");
+        PDRectangle landscape = new PDRectangle(HEIGHT, PDRectangle.LETTER.getWidth());
+        try (PDDocument doc = new PDDocument()) {
+            PDPage portrait = new PDPage(PDRectangle.LETTER);
+            doc.addPage(portrait);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, portrait)) {
+                for (int i = 0; i < 20; i++) {
+                    text(cs, 72, 90 + i * PITCH, LINE, SIZE, 0);
+                }
+            }
+            PDPage turned = new PDPage(landscape);
+            doc.addPage(turned);
+            float h = landscape.getHeight();
+            try (PDPageContentStream cs = new PDPageContentStream(doc, turned)) {
+                for (int i = 0; i < 20; i++) {
+                    turnedText(cs, h, 72, 90 + i * PITCH, LINE, SIZE, 0);
+                }
+                if (note) {
+                    turnedText(cs, h, 72 + FONT.getStringWidth(LINE) / 1000f * SIZE, 90 + 2 * PITCH, "1", 7, 4);
+                    cs.setLineWidth(0.5f);
+                    cs.moveTo(72, h - 525);
+                    cs.lineTo(216, h - 525);
+                    cs.stroke();
+                    turnedText(cs, h, 72, 540, "1", 6.5f, 3.5f);
+                    turnedText(cs, h, 76, 540, NOTE, NOTE_SIZE, 0);
+                    turnedText(cs, h, 72, 551.5f, "It runs to a second line.", NOTE_SIZE, 0);
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        return pdf;
+    }
+
+    private static void turnedText(PDPageContentStream cs, float pageHeight, float x, float baseline, String s, float size,
+            float rise) throws IOException {
+        cs.beginText();
+        cs.setFont(FONT, size);
+        cs.setTextRise(rise);
+        cs.newLineAtOffset(x, pageHeight - baseline);
+        cs.showText(s);
+        cs.endText();
+    }
+
     private static void assertEverySectionEndsAtTheNote(String xml) {
         assertTrue(xml.contains("w:footnoteReference"), "the note is a Word footnote");
         Matcher m = Pattern.compile("<w:pgMar [^>]*w:bottom=\"(\\d+)\"").matcher(xml);
@@ -113,10 +166,14 @@ class FootnoteMarginTest {
                 }
                 for (float left : lefts) {
                     for (int i = 0; i < (carried ? 12 : 30); i++) {
-                        text(cs, left, top + i * PITCH, half, SIZE, 0);
                         if (carried && left == 72 && i == 2) {
-                            text(cs, left + width, top + i * PITCH, "1", 7, 4);
+                            // A shorter line ending in the reference, so the columns keep their width
+                            String part = "The agencies expect institutions";
+                            text(cs, left, top + i * PITCH, part, SIZE, 0);
+                            text(cs, left + FONT.getStringWidth(part) / 1000f * SIZE, top + i * PITCH, "1", 7, 4);
+                            continue;
                         }
+                        text(cs, left, top + i * PITCH, half, SIZE, 0);
                     }
                 }
                 if (carried) {
