@@ -71,6 +71,51 @@ final class SpreadsheetPdfs {
         return pdf;
     }
 
+    /** A ruled grid under a header row drawn only as a dark band with white text, as a spreadsheet prints one. */
+    static Path bandHeader(Path dir) throws IOException {
+        Path pdf = dir.resolve("band.pdf");
+        String[] header = {"Date", "Account", "Description", "Amount"};
+        float[] cols = {60, 150, 250, 420, 520};
+        float top = 700;
+        float rowH = 18;
+        int rows = 8;
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.setNonStrokingColor(32 / 255f, 80 / 255f, 120 / 255f);
+                for (int c = 0; c < header.length; c++) {
+                    cs.addRect(cols[c], top - rowH, cols[c + 1] - cols[c], rowH);
+                }
+                cs.fill();
+                cs.setNonStrokingColor(1f, 1f, 1f);
+                for (int c = 0; c < header.length; c++) {
+                    text(cs, BOLD, 10, cols[c] + 4, top - 13, header[c]);
+                }
+                cs.setNonStrokingColor(0f, 0f, 0f);
+                float grid = top - rowH;
+                for (int r = 0; r <= rows; r++) {
+                    cs.moveTo(cols[0], grid - r * rowH);
+                    cs.lineTo(cols[cols.length - 1], grid - r * rowH);
+                }
+                for (float x : cols) {
+                    cs.moveTo(x, grid);
+                    cs.lineTo(x, grid - rows * rowH);
+                }
+                cs.stroke();
+                for (int r = 0; r < rows; r++) {
+                    String[] cells = {String.format("2026-01-%02d", r + 5), "0041" + r, "Steel frame " + r,
+                        String.format("%,.2f", 1200.5 + r * 310)};
+                    for (int c = 0; c < cells.length; c++) {
+                        text(cs, REGULAR, 10, cols[c] + 4, grid - r * rowH - 13, cells[c]);
+                    }
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        return pdf;
+    }
+
     static void text(PDPageContentStream cs, PDType1Font font, float size, float x, float y, String s) throws IOException {
         cs.beginText();
         cs.setFont(font, size);

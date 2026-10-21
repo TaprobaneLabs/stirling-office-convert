@@ -112,6 +112,25 @@ class PdfToXlsxTest {
     }
 
     @Test
+    void aHeaderBandOverAGridIsTheTablesHeaderRow() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.bandHeader(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String strings = SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml");
+        for (String label : new String[] {"Date", "Account", "Description", "Amount"}) {
+            assertTrue(strings.contains(">" + label + "<"), label + " in a cell of its own: " + strings);
+        }
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        Matcher amount = Pattern.compile("<c r=\"D([0-9]+)\" s=\"[0-9]+\" t=\"s\"><v>" + index(strings, "Amount") + "</v>")
+                .matcher(sheet);
+        assertTrue(amount.find(), "Amount over the amounts' column: " + sheet);
+        assertTrue(SpreadsheetPdfs.part(parts, "xl/workbook.xml").contains("Page1_Table1"));
+        assertTrue(SpreadsheetPdfs.part(parts, "xl/styles.xml").contains("205078"), "the band's fill kept");
+    }
+
+    @Test
     void odsCarriesTheSameValues() throws IOException {
         Map<String, byte[]> parts = convert(PdfToXlsx.Options.defaults().withFormat(PdfToXlsx.Format.ODS));
         String content = SpreadsheetPdfs.part(parts, "content.xml");

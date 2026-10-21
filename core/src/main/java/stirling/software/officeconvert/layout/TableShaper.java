@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import stirling.software.officeconvert.extract.Glyph;
+import stirling.software.officeconvert.extract.PageGraphics.Fill;
 import stirling.software.officeconvert.table.PageContent.PdfWord;
 import stirling.software.officeconvert.table.TableDetection.FoundCell;
 import stirling.software.officeconvert.table.TableDetection;
@@ -207,6 +208,68 @@ final class TableShaper {
         int header = Math.max(0, Math.min(t.headerRows() - firstRow, lastRow - firstRow));
         return new TableDetection.Found(lastRow - firstRow + 1, t.cols(), t.colEdges(), false, header, t.padding(),
                 cells, t.left(), top - 0.5f, t.right(), bottom + 0.5f);
+    }
+
+    private static final float BAND_COVER = 0.8f;
+
+    /**
+     * A header row drawn as a filled band on top of a ruled grid, with no rules of its own (white text on a dark
+     * fill), joins the table as its header, each column's cell keeping the band's fill. Before, its words were one
+     * line of text above the table.
+     */
+    static TableDetection.Found addBandHeader(TableDetection.Found t, List<Line> segments,
+            List<Fill> fills) {
+        float width = t.right() - t.left();
+        float covered = 0;
+        float bandTop = Float.MAX_VALUE;
+        List<Fill> band = new ArrayList<>();
+        for (Fill f : fills) {
+            if (Math.abs(f.bottom() - t.top()) <= 2f && f.height() >= 6f && f.x() >= t.left() - 2f
+                    && f.right() <= t.right() + 2f) {
+                band.add(f);
+                covered += f.width();
+                bandTop = Math.min(bandTop, f.top());
+            }
+        }
+        if (width <= 0 || covered < BAND_COVER * width) {
+            return t;
+        }
+        List<Line> inside = new ArrayList<>();
+        for (Line l : segments) {
+            float cy = (l.top + l.bottom) / 2f;
+            if (cy > bandTop && cy < t.top() && l.x >= t.left() - 1 && l.right <= t.right() + 1) {
+                inside.add(l);
+            }
+        }
+        if (inside.isEmpty() || FrameEdgeRows.headerAbove(inside, t.top(), t.colEdges()).size() != inside.size()) {
+            return t;
+        }
+        List<Row> lead = rows(inside);
+        int k = lead.size();
+        Box frame = new Box(t.left(), bandTop, t.right(), t.bottom());
+        List<FoundCell> cells = new ArrayList<>();
+        addRows(cells, lead, 0, t, frame);
+        for (int i = 0; i < cells.size(); i++) {
+            FoundCell c = cells.get(i);
+            Integer rgb = fillAt(band, (c.left() + c.right()) / 2f);
+            cells.set(i, new FoundCell(c.row(), c.col(), 1, 1, c.left(), c.top(), c.right(), c.bottom(), false, false,
+                    false, false, rgb, c.hAlign(), c.vAlign(), c.text()));
+        }
+        for (FoundCell c : t.cells()) {
+            cells.add(new FoundCell(c.row() + k, c.col(), c.rowSpan(), c.colSpan(), c.left(), c.top(), c.right(), c.bottom(),
+                    c.borderTop(), c.borderBottom(), c.borderLeft(), c.borderRight(), c.fill(), c.hAlign(), c.vAlign(), c.text()));
+        }
+        return new TableDetection.Found(t.rows() + k, t.cols(), t.colEdges(), t.ruled(), t.headerRows() + k, t.padding(),
+                cells, t.left(), bandTop, t.right(), t.bottom());
+    }
+
+    private static Integer fillAt(List<Fill> band, float x) {
+        for (Fill f : band) {
+            if (x >= f.x() && x <= f.right()) {
+                return f.rgb();
+            }
+        }
+        return null;
     }
 
     static TableDetection.Found addFrameHeader(TableDetection.Found t, Box frame, List<Line> segments) {
