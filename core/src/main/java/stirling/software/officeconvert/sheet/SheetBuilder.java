@@ -57,6 +57,7 @@ public final class SheetBuilder {
         final float textWidth;
         int next;
         int frozen;
+        int header;
         Placed last;
         float lastBottom = Float.NaN;
         float lastSize;
@@ -90,8 +91,7 @@ public final class SheetBuilder {
 
     public void page(PageLayout layout) throws IOException {
         PageData page = layout.page();
-        Conventions[] prior = settings.split() != Split.PAGE && open != null && open.last != null
-                ? open.last.grid().conventions : null;
+        Conventions[] prior = open != null && open.last != null ? open.last.grid().conventions : null;
         PageItems.Prepared prepared =
                 PageItems.of(layout, stats, document, prior, settings.typed(), settings.dropHyphens());
         omitted = prepared.taken();
@@ -151,6 +151,10 @@ public final class SheetBuilder {
                 && open.next + rows(groups.getFirst()) < MAX_ROWS) {
             List<Object> group = groups.getFirst();
             append(open, carried, page);
+            if (open.frozen == 0 && open.header > 0 && open.ranges.size() == 1) {
+                NamedRange range = open.ranges.getFirst();
+                freeze(open, range.firstRow(), open.header, range.lastRow() - range.firstRow() + 1 - open.header);
+            }
             for (Object item : group.subList(1, group.size())) {
                 write(open, item, page);
             }
@@ -176,10 +180,8 @@ public final class SheetBuilder {
             List<TableGrid> grids = grids(group);
             if (grids.size() == 1 && s.ranges.size() == 1) {
                 TableGrid grid = grids.getFirst();
-                int first = s.ranges.getFirst().firstRow();
-                if (grid.headerRows > 0 && first < FREEZE_WITHIN && grid.rows - grid.headerRows >= FREEZE_MIN_DATA) {
-                    s.frozen = first + grid.headerRows;
-                }
+                s.header = grid.headerRows;
+                freeze(s, s.ranges.getFirst().firstRow(), grid.headerRows, grid.rows - grid.headerRows);
             }
             if (g == groups.size() - 1 && s.last != null) {
                 open = s;
@@ -203,6 +205,13 @@ public final class SheetBuilder {
             }
         }
         return true;
+    }
+
+    /** Freezes a table's header rows when the table starts near the sheet's top and has enough rows below them. */
+    private static void freeze(Sheet s, int first, int header, int dataRows) {
+        if (header > 0 && first < FREEZE_WITHIN && dataRows >= FREEZE_MIN_DATA) {
+            s.frozen = first + header;
+        }
     }
 
     private static int rows(List<Object> group) {

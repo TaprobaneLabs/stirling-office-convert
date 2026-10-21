@@ -73,7 +73,12 @@ final class SpreadsheetPdfs {
 
     /** A ledger whose ruled table runs from the first page onto the second, its header row repeated there. */
     static Path ledger(Path dir) throws IOException {
-        Path pdf = dir.resolve("ledger.pdf");
+        return ledger(dir, 30);
+    }
+
+    /** The same ledger with {@code firstRows} rows at the foot of its first page. */
+    static Path ledger(Path dir, int firstRows) throws IOException {
+        Path pdf = dir.resolve("ledger" + firstRows + ".pdf");
         String[] header = {"Date", "Account", "Description", "Amount"};
         try (PDDocument doc = new PDDocument()) {
             int row = 0;
@@ -81,14 +86,14 @@ final class SpreadsheetPdfs {
                 PDPage page = new PDPage(PDRectangle.A4);
                 doc.addPage(page);
                 try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                    int rows = p == 0 ? firstRows : 12;
+                    float[] cols = {60, 150, 240, 420, 520};
+                    float rowH = 20;
                     float top = 780;
                     if (p == 0) {
                         text(cs, BOLD, 16, 60, 790, "General ledger");
-                        top = 760;
+                        top = 60 + (rows + 1) * rowH;
                     }
-                    int rows = p == 0 ? 30 : 12;
-                    float[] cols = {60, 150, 240, 420, 520};
-                    float rowH = 20;
                     for (int r = 0; r <= rows + 1; r++) {
                         cs.moveTo(cols[0], top - r * rowH);
                         cs.lineTo(cols[cols.length - 1], top - r * rowH);
