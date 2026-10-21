@@ -289,4 +289,51 @@ class PdfToPptxTest {
         PdfToPptx.convert(file, out, PdfToPptx.Options.defaults());
         return SlideFixtures.text(SlideFixtures.parts(Files.readAllBytes(out)), "ppt/slides/slide1.xml");
     }
+
+    @Test
+    void aChartsManyTickLabelsStayText() throws Exception {
+        Path chart = dir.resolve("chart.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(SlideFixtures.WIDE);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                SlideFixtures.text(cs, SlideFixtures.SANS, 28, 60, 490, "Prices by market");
+                cs.setNonStrokingColor(0.95f, 0.96f, 0.98f);
+                cs.addRect(100, 105, 700, 330);
+                cs.fill();
+                cs.setNonStrokingColor(0f, 0f, 0f);
+                for (int k = 0; k < 4; k++) {
+                    float left = 110 + 172 * k;
+                    cs.setStrokingColor(0.55f, 0.1f + 0.2f * k, 0.2f);
+                    cs.setLineWidth(2);
+                    cs.moveTo(left, 200);
+                    for (int x = 1; x <= 17; x++) {
+                        cs.lineTo(left + 10 * x, 200 + (x % 2 == 0 ? 120 : 40) + 5 * k);
+                    }
+                    cs.stroke();
+                    cs.setLineWidth(1);
+                    for (int i = 0; i < 12; i++) {
+                        SlideFixtures.text(cs, SlideFixtures.SANS, 9, left + 4, 116 + 26 * i + 3 * k,
+                                String.format("%d.%02d", k + 1, i));
+                    }
+                }
+            }
+            doc.save(chart.toFile());
+        }
+        Path out = dir.resolve("chart.pptx");
+        PdfToPptx.convert(chart, out, PdfToPptx.Options.defaults());
+        String slide = SlideFixtures.text(SlideFixtures.parts(Files.readAllBytes(out)), "ppt/slides/slide1.xml");
+        StringBuilder runs = new StringBuilder();
+        Matcher m = Pattern.compile("<a:t>([^<]*)</a:t>").matcher(slide);
+        while (m.find()) {
+            runs.append(m.group(1)).append(' ');
+        }
+        int found = 0;
+        for (int k = 0; k < 4; k++) {
+            for (int i = 0; i < 12; i++) {
+                found += runs.indexOf(String.format("%d.%02d", k + 1, i)) >= 0 ? 1 : 0;
+            }
+        }
+        assertEquals(48, found, "48 tick labels on 48 baselines kept as text over the chart's picture");
+    }
 }

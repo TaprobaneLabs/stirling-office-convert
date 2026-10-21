@@ -11,6 +11,10 @@ public final class LineBuilder {
 
     private static final float SEGMENT_GAP_EM = 0.9f;
 
+    private static final float MAX_TRACKING_EM = 2f;
+
+    private static final float WIDE_TRACKING_EM = 0.8f;
+
     private static final Comparator<Line> BY_BASELINE_THEN_X = (a, b) -> {
         int c = Double.compare(a.baseline, b.baseline);
         return c != 0 ? c : Double.compare(a.x, b.x);
@@ -150,7 +154,28 @@ public final class LineBuilder {
         }
         float[] gaps = Arrays.copyOf(all, n);
         float median = select(gaps, gaps.length / 2);
-        return median > 0.05f * glyphs.getFirst().size ? median : 0f;
+        // The row's typical size, so a small marker or superscript ahead of the text doesn't set the scale
+        float[] sizes = new float[glyphs.size()];
+        for (int i = 0; i < sizes.length; i++) {
+            sizes[i] = glyphs.get(i).size;
+        }
+        float size = select(sizes, sizes.length / 2);
+        // Letter spacing stays within an em or so. Labels spread along an axis ("0 5 10 15 20 25") make the gap
+        // between labels the row's median gap, ems wide, and must not join into one word: a gap past two ems is
+        // never spacing, and one past WIDE_TRACKING_EM isn't either when the glyphs of many labels touch.
+        if (median <= 0.05f * size || median > MAX_TRACKING_EM * size) {
+            return 0f;
+        }
+        if (median > WIDE_TRACKING_EM * size) {
+            int close = 0;
+            for (float g : gaps) {
+                close += g < 0.5f * median ? 1 : 0;
+            }
+            if (close * 4 > n) {
+                return 0f;
+            }
+        }
+        return median;
     }
 
     static float select(float[] a, int k) {
