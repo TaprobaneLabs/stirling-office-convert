@@ -785,7 +785,12 @@ final class RunBuilder {
         return fix != null ? exact * fix.scale() / 100f + fix.added() * g.text.length() : exact;
     }
 
-    record Fit(float edge, float preferred, boolean justified) {}
+    /**
+     * {@code whole}: only a fit that keeps every line counts (otherwise justified lines are squeezed one by one).
+     * {@code firstStart} and {@code restStart}: where Word starts the first and later lines, or NaN to measure each line
+     * from where it starts in the PDF.
+     */
+    record Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart) {}
 
     private float fit(List<Line> lines, Fit target, BitSet hardBreaks, float[] squeezes) {
         if (Float.isNaN(target.edge())) {
@@ -818,6 +823,9 @@ final class RunBuilder {
                     bestScore = score;
                 }
             }
+        }
+        if (target.whole() && bestScore < lines.size() * (lines.size() + 1) / 2) {
+            return Float.NaN;
         }
         Arrays.fill(squeezes, bestSqueeze);
         return best;
@@ -854,7 +862,8 @@ final class RunBuilder {
         List<float[]> spans = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             Line l = lines.get(i);
-            float room = target.edge() - l.x;
+            float start = i == 0 ? target.firstStart() : target.restStart();
+            float room = target.edge() - (Float.isNaN(start) ? l.x : start);
             Word lastWord = l.words.getLast();
             Glyph last = lastWord.last();
             Word next = i + 1 < lines.size() && !hardBreaks.get(i + 1) ? lines.get(i + 1).words.getFirst() : null;

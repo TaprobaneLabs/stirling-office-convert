@@ -28,6 +28,7 @@ final class ParagraphFactory {
     private final ListTracker lists = new ListTracker();
     private int misses;
     private boolean fitting;
+    private boolean singleColumn;
     private boolean innerColumn;
 
     ParagraphFactory(DocStats stats, RunBuilder runs, StyleSheet styles, Numbering numbering) {
@@ -119,7 +120,7 @@ final class ParagraphFactory {
         if (markerTab) {
             hangFromMarker(p, d, colLeft);
         }
-        RunBuilder.Fit fit = fitTarget(d, p, flow, skip, markerTab, colRight);
+        RunBuilder.Fit fit = fitTarget(d, p, flow, skip, markerTab, colLeft, colRight);
         runs.fill(p, d.lines, skip, colLeft, colRight, hostSize, d.hardBreaks, d.pageBreaks, markerTab, fit);
         boolean fitted = !Float.isNaN(runs.fitted());
         if (fitted) {
@@ -164,7 +165,17 @@ final class ParagraphFactory {
     }
 
     void fitting(boolean on) {
+        fitting(on, false);
+    }
+
+    /**
+     * {@code singleColumn}: a page without flowing columns. There a justified paragraph keeps its fit only when the fit
+     * keeps every line, and a paragraph wrapped beside a float isn't fitted, as the fit measures every line to the
+     * column's edge.
+     */
+    void fitting(boolean on, boolean singleColumn) {
         fitting = on;
+        this.singleColumn = singleColumn;
     }
 
     int misses() {
@@ -172,19 +183,31 @@ final class ParagraphFactory {
     }
 
     private RunBuilder.Fit fitTarget(ParaDraft d, Paragraph p, boolean flow, int skip, boolean markerTab,
-            float colRight) {
+            float colLeft, float colRight) {
         if (!flow) {
             return null;
         }
-        float edge = p.bidi || markerTab || !fitting ? Float.NaN
+        float edge = p.bidi || markerTab || !fitting || singleColumn && narrowed(d) ? Float.NaN
                 : colRight - d.right - (innerColumn ? SectionPlanner.RIGHT_SLACK : 0);
+        // Word starts each line at the paragraph's indents, not where its PDF line starts (within a couple of points)
+        float rest = singleColumn && skip == 0 && !markerTab ? colLeft + p.indentLeft : Float.NaN;
+        float first = rest + p.indentFirst;
         if (d.align == Align.JUSTIFY && !Float.isNaN(d.justifySlack)) {
-            return new RunBuilder.Fit(edge, d.justifySlack, true);
+            return new RunBuilder.Fit(edge, d.justifySlack, true, singleColumn, first, rest);
         }
         if (Float.isNaN(edge) || d.align != Align.LEFT || skip > 0) {
             return null;
         }
-        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false);
+        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest);
+    }
+
+    private static boolean narrowed(ParaDraft d) {
+        for (Line l : d.lines) {
+            if (l.narrowed) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static float standInSlack(ParaDraft d) {

@@ -154,7 +154,7 @@ public final class DocumentBuilder {
         float flowBottom = flowBottom(layout);
         int misses = paragraphs.misses();
         flowing = flowsOn(layout, bodyBottom);
-        paragraphs.fitting(flowing);
+        paragraphs.fitting(flowing || pageFlows, !flowing);
         float footTop = flowing && textOnly(layout) ? footTop(layout, flowBottom) : Float.MAX_VALUE;
         for (PageLayout.Band band : layout.bands()) {
             if (band.columns().stream().allMatch(c -> c.items().isEmpty())) {
