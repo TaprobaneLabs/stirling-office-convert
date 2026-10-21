@@ -267,27 +267,30 @@ final class TableAssembler {
     }
 
     /**
-     * Rows shaded in bands: the row's fill skips the next row and shades the one after, so the first shaded row isn't
-     * a header. A header whose colour returns only on a total row further down keeps its place.
+     * Rows shaded in bands: the row's fill skips the next row, shades the one after and skips the next again, so the
+     * first shaded row isn't a header. A header whose colour returns only on a total row keeps its place, the total
+     * being the last row or further down.
      */
     private static boolean banded(int fill, List<ExtractedCell> body) {
         int first = Integer.MAX_VALUE;
         for (ExtractedCell c : body) {
             first = Math.min(first, c.row());
         }
-        return !shades(body, first, fill) && shades(body, first + 1, fill);
+        return shades(body, first, fill) == Boolean.FALSE && shades(body, first + 1, fill) == Boolean.TRUE
+                && shades(body, first + 2, fill) == Boolean.FALSE;
     }
 
-    private static boolean shades(List<ExtractedCell> cells, int row, int fill) {
-        boolean any = false;
+    /** Whether every cell of the row has the fill, or null when the table has no such row. */
+    private static Boolean shades(List<ExtractedCell> cells, int row, int fill) {
+        Boolean all = null;
         for (ExtractedCell c : cells) {
             if (c.row() == row) {
                 if (!Objects.equals(c.style().fillRgb(), fill)) {
                     return false;
                 }
-                any = true;
+                all = true;
             }
         }
-        return any;
+        return all;
     }
 }
