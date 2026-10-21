@@ -339,11 +339,13 @@ final class TableGrid {
             parts.add(new StringBuilder());
             pieces.add(new ArrayList<>());
         }
-        for (ColumnSplit.Piece p : r.pieces()) {
-            int k = ColumnSplit.part(cuts, p.x());
-            parts.get(k).append(parts.get(k).isEmpty() ? "" : " ").append(p.text());
-            pieces.get(k).add(p);
-            width[k] += p.right() - p.x();
+        for (ColumnSplit.Piece whole : r.pieces()) {
+            for (ColumnSplit.Piece p : ColumnSplit.atCuts(whole, cuts)) {
+                int k = ColumnSplit.part(cuts, p.x());
+                parts.get(k).append(parts.get(k).isEmpty() ? "" : " ").append(p.text());
+                pieces.get(k).add(p);
+                width[k] += p.right() - p.x();
+            }
         }
         List<Raw> out = new ArrayList<>();
         TableDetection.FoundCell c = r.cell();
