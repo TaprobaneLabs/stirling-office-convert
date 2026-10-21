@@ -77,6 +77,8 @@ public final class DocumentBuilder {
     private float flowLow;
     private float footHigh;
     private float noteLow;
+    // The section's bottom margin without the footnotes' share, which later pages are fitted against (fit())
+    private float bandMargin;
     // Sections on the current page (one carried over from the last page once a band reuses it), each section's lowest text
     private final List<Section> pageSections = new ArrayList<>();
     private final Map<Section, Float> sectionLows = new IdentityHashMap<>();
@@ -209,7 +211,9 @@ public final class DocumentBuilder {
         }
         bandAt = -1;
         if (section != null) {
-            reserveFoot(flowBottom, paragraphs.misses() == misses ? footTop : Float.MAX_VALUE, noteBottom(layout));
+            // A page of another size that opened no section of its own (a note continuation alone) leaves the last one be
+            float notesHere = section.samePage(base) ? noteBottom(layout) : -Float.MAX_VALUE;
+            reserveFoot(flowBottom, paragraphs.misses() == misses ? footTop : Float.MAX_VALUE, notesHere);
         }
         if (section == null) {
             section = base.copy();
@@ -313,6 +317,7 @@ public final class DocumentBuilder {
         if (footHigh != Float.MAX_VALUE) {
             margin = Math.max(margin, footMargin(footHigh - FOOT_GAP));
         }
+        bandMargin = margin;
         sectionLows.merge(section, flowLow, Math::max);
         if (noteLow != -Float.MAX_VALUE && noteLow + NOTE_SLACK >= flowLow + FOOT_CLEAR) {
             margin = Math.max(margin, footMargin(noteLow + NOTE_SLACK));
@@ -815,7 +820,9 @@ public final class DocumentBuilder {
             return;
         }
         float footer = pageCount == 1 ? firstFooterHeight : footerHeight;
-        float limit = section.pageHeight - Math.max(section.marginBottom, footer > 0 ? section.footerDistance + footer : 0);
+        // The footnotes' share of the margin may still go back (a later page's body may run lower): fit without it
+        float margin = reservedFor == section ? bandMargin : section.marginBottom;
+        float limit = section.pageHeight - Math.max(margin, footer > 0 ? section.footerDistance + footer : 0);
         float excess = bottom + noteHeight - pageShift + FIT_SAFETY * stats.pitchFor(stats.bodySize) - limit;
         if (excess <= 0) {
             return;
