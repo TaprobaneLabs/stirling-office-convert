@@ -132,8 +132,6 @@ final class PageFrames {
                         } else {
                             apartFooter = Math.min(apartFooter, l.top);
                         }
-                        lefts.add(l.x);
-                        rights.add(l.right);
                         continue;
                     }
                     if (r != null) {

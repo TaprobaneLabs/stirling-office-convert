@@ -145,17 +145,18 @@ public final class HeaderFooter {
      * the same running line, not body text: it's set apart there too, so it doesn't stretch the page frame or flow.
      */
     private void setApartCopies() {
-        // Each running line's digit runs, kept where they're the same on every page (null where they change, as page
-        // numbers do): a copy must have the fixed ones of one of them
+        // Each occurrence's digit runs, null where the running line holds its page number or page count: a copy must
+        // have the rest of one of them (a section number that changes isn't a page number, and must match too)
         Map<String, List<String[]>> fixed = new HashMap<>();
         for (RunningLine r : candidates.values()) {
             if (accepted.contains(r) || demoted.contains(r.signature)) {
-                String[] own = null;
                 for (Line l : r.occurrences.values()) {
-                    own = own == null ? digitRuns(l) : sharedRuns(own, digitRuns(l));
-                }
-                if (own != null) {
-                    fixed.computeIfAbsent(placeless(r.signature), k -> new ArrayList<>()).add(own);
+                    String[] runs = digitRuns(l);
+                    for (int k = 0; k < runs.length; k++) {
+                        boolean page = k < r.pageOffsets.length && r.pageOffsets[k] != Integer.MIN_VALUE;
+                        runs[k] = page || k < r.totalPages.length && r.totalPages[k] ? null : runs[k];
+                    }
+                    fixed.computeIfAbsent(placeless(r.signature), x -> new ArrayList<>()).add(runs);
                 }
             }
         }
@@ -184,15 +185,6 @@ public final class HeaderFooter {
 
     private static String[] digitRuns(Line l) {
         return DIGITS.matcher(l.text()).results().map(MatchResult::group).toArray(String[]::new);
-    }
-
-    /** The runs two lines share, null where they differ; all null when the lines have different counts of runs. */
-    private static String[] sharedRuns(String[] a, String[] b) {
-        String[] out = new String[Math.max(a.length, b.length)];
-        for (int i = 0; a.length == b.length && i < a.length; i++) {
-            out[i] = a[i] != null && a[i].equals(b[i]) ? a[i] : null;
-        }
-        return out;
     }
 
     private static boolean fits(String[] runs, String[] fixed) {

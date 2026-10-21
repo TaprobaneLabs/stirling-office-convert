@@ -52,4 +52,19 @@ class UnsampledCopyTest {
         List<Line> other = lines(HEADER.replace("FY2022", "FY2021"), 50);
         assertEquals(0, hf.furniture(page(31), other).size(), "a line there with another year isn't a copy");
     }
+
+    @Test
+    void aSectionNumberThatChangesIsNoPageNumber() {
+        for (String copy : new String[] {"Quarterly Results for Quarter 2", "Quarterly Results for Quarter 3"}) {
+            HeaderFooter hf = new HeaderFooter();
+            for (int p = 0; p < 6; p++) {
+                hf.addPage(page(p), lines("Quarterly Results for Quarter " + (p < 3 ? 1 : 2), 30));
+            }
+            hf.addPage(page(6), lines(copy, 50));
+            hf.finish(7);
+            boolean seen = copy.endsWith("2");
+            assertEquals(seen ? 1 : 0, hf.furniture(page(6), lines(copy, 50)).size(),
+                    seen ? "a copy of a quarter's header is set apart" : "a quarter no header had isn't a copy");
+        }
+    }
 }
