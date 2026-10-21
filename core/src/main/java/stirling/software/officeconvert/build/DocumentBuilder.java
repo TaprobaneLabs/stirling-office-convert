@@ -76,6 +76,7 @@ public final class DocumentBuilder {
     private float reservedBottom;
     private float flowLow;
     private float footHigh;
+    private float noteLow;
 
     private record Spaced(Paragraph p, int band, int column) {}
 
@@ -204,7 +205,7 @@ public final class DocumentBuilder {
         }
         bandAt = -1;
         if (section != null) {
-            reserveFoot(flowBottom, paragraphs.misses() == misses ? footTop : Float.MAX_VALUE);
+            reserveFoot(flowBottom, paragraphs.misses() == misses ? footTop : Float.MAX_VALUE, noteBottom(layout));
         }
         if (section == null) {
             section = base.copy();
@@ -287,27 +288,57 @@ public final class DocumentBuilder {
         return top;
     }
 
-    private void reserveFoot(float flowBottom, float footTop) {
+    /**
+     * Raises the section's bottom margin so its body ends where the PDF's does: above a foot band (footTop), and where
+     * the PDF's footnotes end (noteBottom), since Word sets footnotes on the bottom margin. A foot band stays clear of
+     * the lowest body text on the section's pages; the notes count only where they end below it, as a margin the PDF's
+     * notes were set on would.
+     */
+    private void reserveFoot(float flowBottom, float footTop, float noteBottom) {
         if (reservedFor != section) {
             reservedFor = section;
             reservedBottom = section.marginBottom;
             flowLow = -Float.MAX_VALUE;
             footHigh = Float.MAX_VALUE;
+            noteLow = -Float.MAX_VALUE;
         }
         flowLow = Math.max(flowLow, flowBottom);
         footHigh = Math.min(footHigh, footTop);
-        if (footHigh == Float.MAX_VALUE) {
-            return;
+        noteLow = Math.max(noteLow, noteBottom);
+        float margin = reservedBottom;
+        if (footHigh != Float.MAX_VALUE) {
+            margin = Math.max(margin, footMargin(footHigh - FOOT_GAP));
         }
-        float body = Math.max(flowLow + FOOT_CLEAR, footHigh - FOOT_GAP);
-        if (body > section.marginTop + 72) {
-            section.marginBottom = Math.max(reservedBottom, section.pageHeight - body);
+        if (noteLow != -Float.MAX_VALUE && noteLow + NOTE_SLACK >= flowLow + FOOT_CLEAR) {
+            margin = Math.max(margin, footMargin(noteLow + NOTE_SLACK));
         }
+        section.marginBottom = margin;
+    }
+
+    private float footMargin(float bottom) {
+        float body = Math.max(flowLow + FOOT_CLEAR, bottom);
+        return body > section.marginTop + 72 ? section.pageHeight - body : 0;
+    }
+
+    /** Where the page's footnotes end, as the bottom of Word's last note line; -MAX_VALUE without notes. */
+    private float noteBottom(PageLayout layout) {
+        float bottom = -Float.MAX_VALUE;
+        for (PageLayout.Note note : layout.notes()) {
+            for (ParaDraft d : note.paras()) {
+                bottom = Math.max(bottom, paragraphs.wordBottom(d));
+            }
+        }
+        for (ParaDraft d : layout.noteContinuation()) {
+            bottom = Math.max(bottom, paragraphs.wordBottom(d));
+        }
+        return bottom;
     }
 
     private static final float FOOT_CLEAR = 2f;
 
     private static final float FOOT_GAP = 1f;
+
+    private static final float NOTE_SLACK = 6f;
 
     private void openSection(PageLayout.Band band, Section base, boolean sizeChanged, Cursor at) throws IOException {
         List<float[]> cols = SectionPlanner.columnsOf(band, base);
