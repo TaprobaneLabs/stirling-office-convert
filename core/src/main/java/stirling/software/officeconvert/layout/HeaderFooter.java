@@ -13,7 +13,7 @@ import stirling.software.officeconvert.extract.PageData;
 
 public final class HeaderFooter {
 
-    private static final float ZONE = 0.13f;
+    static final float ZONE = 0.13f;
     private static final float MIN_SHARE = 0.4f;
     private static final Pattern DIGITS = Pattern.compile("[0-9]+");
     private static final Pattern ROMAN_ONLY = Pattern.compile("(?i)^[-– ]*[ivxlc]{1,6}[-– ]*$");
@@ -29,6 +29,8 @@ public final class HeaderFooter {
     private record Seen(String signature, float top, float bottom, Line line) {}
     private final List<RunningLine> accepted = new ArrayList<>();
     private final Set<String> furniture = new HashSet<>();
+    // Running lines accepted, then set apart (they move on some pages), and their text set elsewhere
+    private final Set<String> demoted = new HashSet<>();
     private final Map<Integer, Integer> numberOffsets = new HashMap<>();
     private Integer pageNumberOffset;
     private int pageCount;
@@ -127,11 +129,48 @@ public final class HeaderFooter {
         dropInconsistent(true);
         dropInconsistent(false);
         dropOverlapped();
+        setApartCopies();
         if (sampled >= 4) {
             numberOffsets.entrySet().stream().max(Map.Entry.comparingByValue())
                     .filter(e -> e.getValue() >= Math.max(3, 0.3f * sampled))
                     .ifPresent(e -> pageNumberOffset = e.getKey());
         }
+    }
+
+    /**
+     * A running line's text set elsewhere on a few pages (a report's contents page carrying its header higher up, say) is
+     * the same running line, not body text: it's set apart there too, so it doesn't stretch the page frame or flow.
+     */
+    private void setApartCopies() {
+        Set<String> running = new HashSet<>();
+        for (RunningLine r : accepted) {
+            running.add(placeless(r.signature));
+        }
+        for (String sig : demoted) {
+            running.add(placeless(sig));
+        }
+        for (RunningLine r : candidates.values()) {
+            if (!accepted.contains(r) && worded(r.signature) && running.contains(placeless(r.signature))) {
+                furniture.add(r.signature);
+                demoted.add(r.signature);
+            }
+        }
+    }
+
+    /** A set-apart running line bounds the page frame when it has words: a bare page number may sit anywhere. */
+    private void demote(String signature) {
+        if (worded(signature)) {
+            demoted.add(signature);
+        }
+    }
+
+    private static boolean worded(String signature) {
+        return signature.split("\\|", 4)[3].chars().filter(Character::isLetter).count() >= 4;
+    }
+
+    private static String placeless(String signature) {
+        String[] parts = signature.split("\\|", 4);
+        return parts[0] + "|" + parts[3];
     }
 
     private void acceptLonePageNumbers() {
@@ -182,8 +221,22 @@ public final class HeaderFooter {
             if (r.top == top) {
                 accepted.remove(r);
                 furniture.add(r.signature);
+                demote(r.signature);
             }
         }
+    }
+
+    /** The page's lines of running lines set apart: they bound the page frame as a Word header or footer would. */
+    public List<Line> demoted(PageData page, List<Line> segments) {
+        float h = page.height();
+        List<Line> out = new ArrayList<>();
+        for (Line seg : segments) {
+            boolean top = seg.bottom < h * ZONE;
+            if ((top || seg.top > h * (1 - ZONE)) && demoted.contains(signature(seg, top, page.width()))) {
+                out.add(seg);
+            }
+        }
+        return out;
     }
 
     public List<Line> furniture(PageData page, List<Line> segments) {
@@ -245,6 +298,7 @@ public final class HeaderFooter {
             if (overlapped) {
                 accepted.remove(r);
                 furniture.add(r.signature);
+                demote(r.signature);
             }
         }
     }
