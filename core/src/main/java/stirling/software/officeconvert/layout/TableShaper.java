@@ -249,7 +249,8 @@ final class TableShaper {
         addRows(cells, lead, 0, t, frame);
         for (int i = 0; i < cells.size(); i++) {
             FoundCell c = cells.get(i);
-            Integer rgb = fillAt(band, (c.left() + c.right()) / 2f);
+            Row row = lead.get(c.row());
+            Integer rgb = fillAt(band, (c.left() + c.right()) / 2f, (row.top() + row.bottom()) / 2f);
             cells.set(i, new FoundCell(c.row(), c.col(), 1, 1, c.left(), c.top(), c.right(), c.bottom(), false, false,
                     false, false, rgb, c.hAlign(), c.vAlign(), c.text()));
         }
@@ -277,11 +278,11 @@ final class TableShaper {
         return covered;
     }
 
-    /** The colour painted last at x, which is the one shown. */
-    private static Integer fillAt(List<Fill> band, float x) {
+    /** The colour painted last behind a cell, which is the one shown. */
+    private static Integer fillAt(List<Fill> band, float x, float y) {
         Integer rgb = null;
         for (Fill f : band) {
-            if (x >= f.x() && x <= f.right()) {
+            if (x >= f.x() && x <= f.right() && y >= f.top() && y <= f.bottom()) {
                 rgb = f.rgb();
             }
         }
