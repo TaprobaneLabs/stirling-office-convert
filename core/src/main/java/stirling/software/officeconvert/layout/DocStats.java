@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import stirling.software.officeconvert.extract.FontInfo;
+import stirling.software.officeconvert.extract.FontNames;
 import stirling.software.officeconvert.extract.PageData;
 import stirling.software.officeconvert.model.Scripts;
 
@@ -89,6 +90,8 @@ public final class DocStats {
 
     public float bodySize = 11f;
     public FontInfo bodyFont = FontInfo.DEFAULT;
+    /** Office families whose sampled text is mostly set in an open font Word lacks, with that font (Cambria: Caladea). */
+    public Map<String, String> openFonts = Map.of();
     public boolean bodyBold;
     public List<Tier> tiers = List.of();
 
@@ -178,6 +181,27 @@ public final class DocStats {
         return frames.frame(width, height);
     }
 
+    private static Map<String, String> openFonts(Map<FontInfo, Integer> chars) {
+        Map<String, Integer> all = new HashMap<>();
+        Map<String, Integer> open = new HashMap<>();
+        Map<String, String> names = new HashMap<>();
+        chars.forEach((font, n) -> {
+            all.merge(font.family(), n, Integer::sum);
+            String name = FontNames.openFamily(font.postScriptName());
+            if (name != null) {
+                open.merge(font.family(), n, Integer::sum);
+                names.put(font.family(), name);
+            }
+        });
+        Map<String, String> out = new HashMap<>();
+        open.forEach((family, n) -> {
+            if (n * 2 > all.get(family)) {
+                out.put(family, names.get(family));
+            }
+        });
+        return out;
+    }
+
     private static String tierKey(float size, boolean bold) {
         return size + (bold ? "b" : "r");
     }
@@ -190,6 +214,7 @@ public final class DocStats {
             Map<FontInfo, Integer> bodyFonts = new HashMap<>();
             fontChars.forEach(bodyFonts::put);
             bodyFont = Line.mode(bodyFonts, FontInfo.DEFAULT);
+            openFonts = openFonts(fontChars);
         }
         bodyBold = totalChars > 0 && boldChars * 2 > totalChars;
         headerFooter.finish(pageCount);

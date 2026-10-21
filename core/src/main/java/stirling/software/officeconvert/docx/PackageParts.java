@@ -17,11 +17,14 @@ final class PackageParts {
 
     private PackageParts() {}
 
-    static String settings(HeaderFooterSet hf, boolean footnotes) {
+    static String settings(HeaderFooterSet hf, boolean footnotes, boolean embedsFonts) {
         boolean evenOdd = hf != null && (!hf.evenHeader().isEmpty() || !hf.evenFooter().isEmpty());
         return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
                 + "<w:settings xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
-                + "<w:zoom w:percent=\"100\"/><w:defaultTabStop w:val=\"720\"/>"
+                + "<w:zoom w:percent=\"100\"/>"
+                // Word keeps embedded fonts when it saves the document only with this on
+                + (embedsFonts ? "<w:embedTrueTypeFonts/>" : "")
+                + "<w:defaultTabStop w:val=\"720\"/>"
                 + (evenOdd ? "<w:evenAndOddHeaders/>" : "")
                 + "<w:characterSpacingControl w:val=\"doNotCompress\"/>"
                 + (footnotes ? "<w:footnotePr><w:footnote w:id=\"-1\"/><w:footnote w:id=\"0\"/></w:footnotePr>" : "")
@@ -33,9 +36,11 @@ final class PackageParts {
                 + "</w:compat></w:settings>";
     }
 
-    static String fontTable(Iterable<String> fonts) {
+    static String fontTable(Iterable<String> fonts, EmbeddedFonts embedded) {
         StringBuilder sb = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
-                + "<w:fonts xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">");
+                + "<w:fonts xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\""
+                + (embedded.isEmpty() ? "" : " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"")
+                + ">");
         for (String f : fonts) {
             boolean symbol = FontNames.isSymbolFamily(f);
             boolean mono = FontNames.looksMono(f);
@@ -44,7 +49,9 @@ final class PackageParts {
             sb.append("<w:font w:name=\"").append(Xml.esc(f)).append("\">")
                     .append("<w:charset w:val=\"").append(symbol ? "02" : "00").append("\"/>")
                     .append("<w:family w:val=\"").append(family).append("\"/>")
-                    .append("<w:pitch w:val=\"").append(mono ? "fixed" : "variable").append("\"/></w:font>");
+                    .append("<w:pitch w:val=\"").append(mono ? "fixed" : "variable").append("\"/>");
+            embedded.fontTableEntry(sb, f);
+            sb.append("</w:font>");
         }
         sb.append("</w:fonts>");
         return sb.toString();
@@ -106,13 +113,14 @@ final class PackageParts {
         return sb.toString();
     }
 
-    static String contentTypes(boolean numbering, boolean footnotes, Map<String, String> partRels) {
+    static String contentTypes(boolean numbering, boolean footnotes, boolean fonts, Map<String, String> partRels) {
         StringBuilder sb = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
                 + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
                 + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
                 + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
                 + "<Default Extension=\"png\" ContentType=\"image/png\"/>"
                 + "<Default Extension=\"jpeg\" ContentType=\"image/jpeg\"/>"
+                + (fonts ? "<Default Extension=\"odttf\" ContentType=\"" + EmbeddedFonts.CONTENT_TYPE + "\"/>" : "")
                 + "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>"
                 + "<Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/>"
                 + "<Override PartName=\"/word/settings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml\"/>"

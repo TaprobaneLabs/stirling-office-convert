@@ -78,8 +78,10 @@ public final class DocxWriter implements DocSink, Closeable {
     public void begin(StyleSheet styles, HeaderFooterSet running) {
         this.body = new BodyXml(ctx, styles);
         ctx.scripts = styles.scripts;
+        ctx.openFonts = styles.openFonts;
         this.running = running;
-        ctx.fonts.add(styles.normal.font());
+        ctx.fonts.add(ctx.name(styles.normal.font()));
+        ctx.embedded.use(ctx.name(styles.normal.font()), styles.normal.bold(), styles.normal.italic());
         if (running != null) {
             addPart("header", running.header(), "default");
             addPart("footer", running.footer(), "default");
@@ -158,21 +160,26 @@ public final class DocxWriter implements DocSink, Closeable {
         }
         boolean hasNumbering = numbering != null && !numbering.isEmpty();
         if (hasNumbering) {
-            entry("word/numbering.xml", NumberingPart.xml(numbering, styleSheet));
+            entry("word/numbering.xml", NumberingPart.xml(numbering, styleSheet, ctx));
         }
         if (hasFootnotes()) {
             String sep = "<w:footnote w:type=\"separator\" w:id=\"-1\"><w:p><w:pPr><w:spacing w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/></w:pPr><w:r><w:separator/></w:r></w:p></w:footnote>"
                     + "<w:footnote w:type=\"continuationSeparator\" w:id=\"0\"><w:p><w:pPr><w:spacing w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>";
             subPart("word/footnotes.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<w:footnotes " + NS + ">" + sep + footnotes + "</w:footnotes>");
         }
-        entry("word/styles.xml", StylesPart.xml(styleSheet));
-        entry("word/settings.xml", PackageParts.settings(hf, hasFootnotes()));
-        entry("word/fontTable.xml", PackageParts.fontTable(ctx.fonts));
+        entry("word/styles.xml", StylesPart.xml(styleSheet, ctx));
+        boolean embeds = !ctx.embedded.isEmpty();
+        entry("word/settings.xml", PackageParts.settings(hf, hasFootnotes(), embeds));
+        entry("word/fontTable.xml", PackageParts.fontTable(ctx.fonts, ctx.embedded));
+        if (embeds) {
+            entry("word/_rels/fontTable.xml.rels", ctx.embedded.rels());
+            ctx.embedded.writeParts(this::entry);
+        }
         for (Object[] m : mediaFiles) {
             ZipParts.picture(zip, "word/media/" + m[0], m[1] instanceof byte[] b ? b : spill.read((SpillFile.Block) m[1]));
         }
         entry("word/_rels/document.xml.rels", PackageParts.documentRels(hasNumbering, hasFootnotes(), partRels, ctx));
-        entry("[Content_Types].xml", PackageParts.contentTypes(hasNumbering, hasFootnotes(), partRels));
+        entry("[Content_Types].xml", PackageParts.contentTypes(hasNumbering, hasFootnotes(), embeds, partRels));
         entry("_rels/.rels",
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
                         + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
@@ -216,8 +223,12 @@ public final class DocxWriter implements DocSink, Closeable {
     }
 
     private void entry(String name, String content) throws IOException {
+        entry(name, content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void entry(String name, byte[] content) throws IOException {
         zip.putNextEntry(new ZipEntry(name));
-        zip.write(content.getBytes(StandardCharsets.UTF_8));
+        zip.write(content);
         zip.closeEntry();
     }
 

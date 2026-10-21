@@ -10,6 +10,8 @@ public final class StyleSheet {
     private final Map<String, Style> styles = new LinkedHashMap<>();
     public final RunStyle normal;
     public Scripts.Profile scripts = new Scripts.Profile();
+    /** Office families the PDF sets in an open font instead (Cambria: Caladea), for writers that can embed it. */
+    public Map<String, String> openFonts = Map.of();
 
     public StyleSheet(RunStyle normal) {
         this.normal = normal;

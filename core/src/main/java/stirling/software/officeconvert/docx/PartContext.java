@@ -14,10 +14,18 @@ final class PartContext {
     final Map<String, String> linkRels = new LinkedHashMap<>();
     final Map<String, String> headerRelIds = new LinkedHashMap<>();
     final Set<String> fonts = new LinkedHashSet<>();
+    final EmbeddedFonts embedded = new EmbeddedFonts();
     Scripts.Profile scripts = new Scripts.Profile();
+    Map<String, String> openFonts = Map.of();
     private int nextRel = 20;
     private int nextDocPr = 1;
     private int nextBookmark = 1;
+
+    /** The name the document gives a family: the open font the PDF set it in, when the DOCX can embed that font. */
+    String name(String family) {
+        String open = family == null ? null : openFonts.get(family);
+        return open != null && EmbeddedFonts.bundled(open) ? open : family;
+    }
 
     String imageRel(Picture.MediaRef ref) {
         return imageRels.computeIfAbsent(ref.name(), n -> "rId" + nextRel++);

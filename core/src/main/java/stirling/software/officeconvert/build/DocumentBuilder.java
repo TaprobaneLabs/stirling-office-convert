@@ -107,6 +107,7 @@ public final class DocumentBuilder {
                 new RunStyle(stats.bodyFont.family(), round(stats.bodySize), false, false, false, false, 0, -1, 0, false);
         this.styles = new StyleSheet(normal);
         styles.scripts = stats.scripts;
+        styles.openFonts = stats.openFonts;
         this.paragraphs = new ParagraphFactory(stats, runs, styles, numbering);
         this.tables = new TableBuilder(paragraphs);
         this.placer = new MediaPlacer(document, figureDpi, pictures, sink, paragraphs);

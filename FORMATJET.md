@@ -16,7 +16,8 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
   which fails when a document group's words, numbers, words in place or editable share drops by more than
   2 points. The `formatjet-regression` job needs the secret `FORMATJET_DISPATCH_TOKEN`.
 - **Licence:** MIT, as upstream ([LICENSE](LICENSE)). Runtime dependencies are Apache PDFBox and Apache POI
-  (Apache-2.0).
+  (Apache-2.0). The jar also carries the Caladea fonts (SIL OFL 1.1, notice in `META-INF/licenses/caladea`), which
+  Word documents embed when the PDF sets their text in Caladea.
 
 ## Changes from upstream
 
