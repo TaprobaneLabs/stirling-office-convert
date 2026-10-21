@@ -76,6 +76,16 @@ public final class DocumentBuilder {
     private float reservedBottom;
     private float flowLow;
     private float footHigh;
+    private float noteLow;
+    // The section's bottom margin without the footnotes' share, which later pages are fitted against (fit())
+    private float bandMargin;
+    // Sections on the current page (one carried over from the last page once a band reuses it), each section's lowest text
+    private final List<Section> pageSections = new ArrayList<>();
+    private final Map<Section, Float> sectionLows = new IdentityHashMap<>();
+    // Sections with a page whose notes sit closer under the body than Word's separator line allows
+    private final Set<Section> tightSections = Collections.newSetFromMap(new IdentityHashMap<>());
+    // The margin each section had before another page's notes moved it, to restore if it turns tight
+    private final Map<Section, Float> beforeNotes = new IdentityHashMap<>();
 
     private record Spaced(Paragraph p, int band, int column) {}
 
@@ -127,6 +137,7 @@ public final class DocumentBuilder {
             firstFooterHeight = set.titlePage() ? SectionPlanner.runningLineHeight(stats.bodySize) : footerHeight;
         }
         release();
+        pageSections.clear();
         if (carry != null && !carriedOn(layout)) {
             Carry c = carry;
             carry = null;
@@ -204,7 +215,11 @@ public final class DocumentBuilder {
         }
         bandAt = -1;
         if (section != null) {
-            reserveFoot(flowBottom, paragraphs.misses() == misses ? footTop : Float.MAX_VALUE);
+            // A page of another size that opened no section of its own (a note continuation alone) leaves the last one be
+            float notesHere = section.samePage(base) ? noteBottom(layout) : -Float.MAX_VALUE;
+            // Word's separator line takes about a body line: notes the PDF packs closer under the body can't keep it
+            boolean tight = notesHere != -Float.MAX_VALUE && noteTop(layout) - flowBottom < stats.bodySize;
+            reserveFoot(flowBottom, paragraphs.misses() == misses ? footTop : Float.MAX_VALUE, notesHere, tight);
         }
         if (section == null) {
             section = base.copy();
@@ -287,31 +302,104 @@ public final class DocumentBuilder {
         return top;
     }
 
-    private void reserveFoot(float flowBottom, float footTop) {
+    /**
+     * Raises the section's bottom margin so its body ends where the PDF's does: above a foot band (footTop), and where
+     * the PDF's footnotes end (noteBottom), since Word sets footnotes on the bottom margin. A foot band stays clear of
+     * the lowest body text on the section's pages; the notes count only where they end below it, as a margin the PDF's
+     * notes were set on would.
+     */
+    private void reserveFoot(float flowBottom, float footTop, float noteBottom, boolean tight) {
         if (reservedFor != section) {
             reservedFor = section;
             reservedBottom = section.marginBottom;
             flowLow = -Float.MAX_VALUE;
             footHigh = Float.MAX_VALUE;
+            noteLow = -Float.MAX_VALUE;
         }
         flowLow = Math.max(flowLow, flowBottom);
         footHigh = Math.min(footHigh, footTop);
-        if (footHigh == Float.MAX_VALUE) {
+        noteLow = Math.max(noteLow, noteBottom);
+        float margin = reservedBottom;
+        if (footHigh != Float.MAX_VALUE) {
+            margin = Math.max(margin, footMargin(footHigh - FOOT_GAP));
+        }
+        bandMargin = margin;
+        sectionLows.merge(section, flowLow, Math::max);
+        if (tight) {
+            tightSections.add(section);
+            tightSections.addAll(pageSections);
+            for (Section s : pageSections) {
+                Float before = beforeNotes.remove(s);
+                if (before != null && s != section) {
+                    s.marginBottom = before;
+                }
+            }
+        }
+        if (noteLow != -Float.MAX_VALUE && !tightSections.contains(section)
+                && noteLow + NOTE_SLACK >= flowLow + FOOT_CLEAR) {
+            margin = Math.max(margin, footMargin(noteLow + NOTE_SLACK));
+        }
+        section.marginBottom = margin;
+        if (noteBottom == -Float.MAX_VALUE || tight) {
             return;
         }
-        float body = Math.max(flowLow + FOOT_CLEAR, footHigh - FOOT_GAP);
-        if (body > section.marginTop + 72) {
-            section.marginBottom = Math.max(reservedBottom, section.pageHeight - body);
+        // A note's reference may sit in a section the page closed before its notes were counted, one carried over from
+        // earlier pages too: it moves as well, where none of its pages has body text below the notes.
+        float body = noteBottom + NOTE_SLACK;
+        for (Section s : pageSections) {
+            float low = Math.max(sectionLows.getOrDefault(s, -Float.MAX_VALUE), flowBottom);
+            if (s != section && !tightSections.contains(s) && body >= low + FOOT_CLEAR && body > s.marginTop + 72) {
+                beforeNotes.putIfAbsent(s, s.marginBottom);
+                s.marginBottom = Math.max(s.marginBottom, s.pageHeight - body);
+            }
         }
+    }
+
+    private float footMargin(float bottom) {
+        float body = Math.max(flowLow + FOOT_CLEAR, bottom);
+        return body > section.marginTop + 72 ? section.pageHeight - body : 0;
+    }
+
+    /** Where the page's footnotes end, as the bottom of Word's last note line; -MAX_VALUE without notes. */
+    private float noteBottom(PageLayout layout) {
+        float bottom = -Float.MAX_VALUE;
+        for (PageLayout.Note note : layout.notes()) {
+            for (ParaDraft d : note.paras()) {
+                bottom = Math.max(bottom, paragraphs.wordBottom(d));
+            }
+        }
+        for (ParaDraft d : layout.noteContinuation()) {
+            bottom = Math.max(bottom, paragraphs.wordBottom(d));
+        }
+        return bottom;
+    }
+
+    /** Where the page's footnotes start, as the top of Word's first note line. */
+    private float noteTop(PageLayout layout) {
+        float top = Float.MAX_VALUE;
+        for (PageLayout.Note note : layout.notes()) {
+            for (ParaDraft d : note.paras()) {
+                top = Math.min(top, paragraphs.wordTop(d));
+            }
+        }
+        for (ParaDraft d : layout.noteContinuation()) {
+            top = Math.min(top, paragraphs.wordTop(d));
+        }
+        return top;
     }
 
     private static final float FOOT_CLEAR = 2f;
 
     private static final float FOOT_GAP = 1f;
 
+    private static final float NOTE_SLACK = 6f;
+
     private void openSection(PageLayout.Band band, Section base, boolean sizeChanged, Cursor at) throws IOException {
         List<float[]> cols = SectionPlanner.columnsOf(band, base);
         if (section != null && !(sizeChanged && at.pageTop) && SectionPlanner.sameColumns(section, cols)) {
+            if (!pageSections.contains(section)) {
+                pageSections.add(section);
+            }
             return;
         }
         if (section != null) {
@@ -329,6 +417,7 @@ public final class DocumentBuilder {
             at.breakOwed = false;
         }
         section = s;
+        pageSections.add(s);
     }
 
     private float column(PageLayout layout, PageLayout.Band band, int ci, boolean flowOn, Section base, Cursor at,
@@ -763,7 +852,9 @@ public final class DocumentBuilder {
             return;
         }
         float footer = pageCount == 1 ? firstFooterHeight : footerHeight;
-        float limit = section.pageHeight - Math.max(section.marginBottom, footer > 0 ? section.footerDistance + footer : 0);
+        // The footnotes' share of the margin may still go back (a later page's body may run lower): fit without it
+        float margin = reservedFor == section ? bandMargin : section.marginBottom;
+        float limit = section.pageHeight - Math.max(margin, footer > 0 ? section.footerDistance + footer : 0);
         float excess = bottom + noteHeight - pageShift + FIT_SAFETY * stats.pitchFor(stats.bodySize) - limit;
         if (excess <= 0) {
             return;
