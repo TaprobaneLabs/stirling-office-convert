@@ -22,7 +22,7 @@ import stirling.software.officeconvert.slides.PaintOrder.Kind;
 final class FigureText {
 
     private static final int MAX_GLYPHS = 400;
-    private static final int MAX_LINES = 40;
+    private static final int MAX_LINES = 80;
 
     private final ParagraphBuilder paragraphs;
 
