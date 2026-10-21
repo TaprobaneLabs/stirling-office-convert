@@ -175,6 +175,100 @@ final class SpreadsheetPdfs {
         return pdf;
     }
 
+    /** A short table whose plain header and total row share one shade. */
+    static Path shadedTotal(Path dir) throws IOException {
+        return shadedRows(dir, "total.pdf", new String[][] {{"Item", "2025", "2026"}, {"Rent", "1,200.00", "1,250.00"},
+            {"Power", "300.00", "320.00"}, {"Total", "1,500.00", "1,570.00"}}, new int[] {0, 3});
+    }
+
+    /** A plain header in the colour of the stripes under it, the first body row unshaded. */
+    static Path stripedHeader(Path dir) throws IOException {
+        return shadedRows(dir, "striped.pdf", new String[][] {{"Item", "2025", "2026"}, {"Rent", "1,200.00", "1,250.00"},
+            {"Power", "300.00", "320.00"}, {"Water", "80.00", "85.00"}, {"Rates", "410.00", "430.00"},
+            {"Phone", "60.00", "62.00"}}, new int[] {0, 2, 4});
+    }
+
+    private static Path shadedRows(Path dir, String name, String[][] rows, int[] shaded) throws IOException {
+        Path pdf = dir.resolve(name);
+        float[] cols = {60, 220, 320, 420};
+        float top = 700;
+        float rowH = 18;
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.setNonStrokingColor(0.85f, 0.85f, 0.85f);
+                for (int r : shaded) {
+                    cs.addRect(cols[0], top - (r + 1) * rowH, cols[cols.length - 1] - cols[0], rowH);
+                }
+                cs.fill();
+                cs.setNonStrokingColor(0f, 0f, 0f);
+                for (int r = 0; r <= rows.length; r++) {
+                    cs.moveTo(cols[0], top - r * rowH);
+                    cs.lineTo(cols[cols.length - 1], top - r * rowH);
+                }
+                for (float x : cols) {
+                    cs.moveTo(x, top);
+                    cs.lineTo(x, top - rows.length * rowH);
+                }
+                cs.stroke();
+                for (int r = 0; r < rows.length; r++) {
+                    for (int c = 0; c < rows[r].length; c++) {
+                        text(cs, REGULAR, 10, cols[c] + 4, top - r * rowH - 13, rows[r][c]);
+                    }
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        return pdf;
+    }
+
+    /** An invoice with a bold header row over banded rows, the first item row shaded. */
+    static Path banded(Path dir) throws IOException {
+        Path pdf = dir.resolve("banded.pdf");
+        float[] cols = {60, 250, 330, 430, 530};
+        float top = 700;
+        float rowH = 18;
+        int rows = 12;
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.setNonStrokingColor(0.84f, 0.89f, 0.95f);
+                for (int r = 1; r <= rows; r += 2) {
+                    cs.addRect(cols[0], top - (r + 1) * rowH, cols[cols.length - 1] - cols[0], rowH);
+                }
+                cs.fill();
+                cs.setNonStrokingColor(0f, 0f, 0f);
+                for (int r = 0; r <= rows + 1; r++) {
+                    cs.moveTo(cols[0], top - r * rowH);
+                    cs.lineTo(cols[cols.length - 1], top - r * rowH);
+                }
+                for (float x : cols) {
+                    cs.moveTo(x, top);
+                    cs.lineTo(x, top - (rows + 1) * rowH);
+                }
+                cs.stroke();
+                String[] header = {"Description", "Qty", "Unit price", "Amount"};
+                for (int c = 0; c < header.length; c++) {
+                    text(cs, BOLD, 10, cols[c] + 4, top - 13, header[c]);
+                }
+                for (int r = 1; r <= rows; r++) {
+                    int qty = 3 + r;
+                    double price = 10.25 * r + 0.5;
+                    String[] cells = {"Item " + r, String.valueOf(qty), String.format("%.2f", price),
+                        String.format("%,.2f", qty * price)};
+                    for (int c = 0; c < cells.length; c++) {
+                        float x = c == 0 ? cols[c] + 4 : cols[c + 1] - 4 - REGULAR.getStringWidth(cells[c]) / 1000f * 10;
+                        text(cs, REGULAR, 10, x, top - r * rowH - 13, cells[c]);
+                    }
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        return pdf;
+    }
+
     static void text(PDPageContentStream cs, PDType1Font font, float size, float x, float y, String s) throws IOException {
         cs.beginText();
         cs.setFont(font, size);

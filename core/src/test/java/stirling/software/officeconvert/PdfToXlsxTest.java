@@ -159,6 +159,32 @@ class PdfToXlsxTest {
     }
 
     @Test
+    void theFirstBandedRowIsNotAHeader() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.banded(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        assertTrue(number(sheet, "4") && number(sheet, "10.75") && number(sheet, "43"), "the shaded first item typed: " + sheet);
+        assertFalse(SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml").contains(">10.75<"), "no amount left as text");
+    }
+
+    @Test
+    void aHeaderShadedLikeTheTotalRowStaysTheHeader() throws IOException {
+        for (Path pdf : new Path[] {SpreadsheetPdfs.shadedTotal(dir), SpreadsheetPdfs.stripedHeader(dir)}) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            try (PDDocument doc = Loader.loadPDF(pdf.toFile())) {
+                PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+            }
+            Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+            assertTrue(SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml").contains(">2025<"),
+                    pdf.getFileName() + ": the year a header label");
+            assertTrue(number(SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml"), "1250"), "the first item typed");
+        }
+    }
+
+    @Test
     void odsCarriesTheSameValues() throws IOException {
         Map<String, byte[]> parts = convert(PdfToXlsx.Options.defaults().withFormat(PdfToXlsx.Format.ODS));
         String content = SpreadsheetPdfs.part(parts, "content.xml");
