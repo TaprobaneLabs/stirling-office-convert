@@ -220,18 +220,16 @@ final class TableShaper {
     static TableDetection.Found addBandHeader(TableDetection.Found t, List<Line> segments,
             List<Fill> fills) {
         float width = t.right() - t.left();
-        float covered = 0;
         float bandTop = Float.MAX_VALUE;
         List<Fill> band = new ArrayList<>();
         for (Fill f : fills) {
             if (Math.abs(f.bottom() - t.top()) <= 2f && f.height() >= 6f && f.x() >= t.left() - 2f
                     && f.right() <= t.right() + 2f) {
                 band.add(f);
-                covered += f.width();
                 bandTop = Math.min(bandTop, f.top());
             }
         }
-        if (width <= 0 || covered < BAND_COVER * width) {
+        if (width <= 0 || covered(band) < BAND_COVER * width) {
             return t;
         }
         List<Line> inside = new ArrayList<>();
@@ -263,13 +261,31 @@ final class TableShaper {
                 cells, t.left(), bandTop, t.right(), t.bottom());
     }
 
-    private static Integer fillAt(List<Fill> band, float x) {
-        for (Fill f : band) {
-            if (x >= f.x() && x <= f.right()) {
-                return f.rgb();
+    /** The width the fills cover between them, overlaps counted once. */
+    static float covered(List<Fill> band) {
+        List<Fill> sorted = new ArrayList<>(band);
+        sorted.sort(Comparator.comparingDouble(Fill::x));
+        float covered = 0;
+        float reach = -Float.MAX_VALUE;
+        for (Fill f : sorted) {
+            float from = Math.max(f.x(), reach);
+            if (f.right() > from) {
+                covered += f.right() - from;
+                reach = f.right();
             }
         }
-        return null;
+        return covered;
+    }
+
+    /** The colour painted last at x, which is the one shown. */
+    private static Integer fillAt(List<Fill> band, float x) {
+        Integer rgb = null;
+        for (Fill f : band) {
+            if (x >= f.x() && x <= f.right()) {
+                rgb = f.rgb();
+            }
+        }
+        return rgb;
     }
 
     static TableDetection.Found addFrameHeader(TableDetection.Found t, Box frame, List<Line> segments) {

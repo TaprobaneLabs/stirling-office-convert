@@ -73,7 +73,15 @@ final class SpreadsheetPdfs {
 
     /** A ruled grid under a header row drawn only as a dark band with white text, as a spreadsheet prints one. */
     static Path bandHeader(Path dir) throws IOException {
-        Path pdf = dir.resolve("band.pdf");
+        return bandHeader(dir, true);
+    }
+
+    /**
+     * With {@code full}, a light band under dark per-column fills painted over it; without, two dark fills of two
+     * shades over much the same 45% of the width, under black text.
+     */
+    static Path bandHeader(Path dir, boolean full) throws IOException {
+        Path pdf = dir.resolve(full ? "band.pdf" : "halfband.pdf");
         String[] header = {"Date", "Account", "Description", "Amount"};
         float[] cols = {60, 150, 250, 420, 520};
         float top = 700;
@@ -83,12 +91,24 @@ final class SpreadsheetPdfs {
             PDPage page = new PDPage(PDRectangle.A4);
             doc.addPage(page);
             try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
-                cs.setNonStrokingColor(32 / 255f, 80 / 255f, 120 / 255f);
-                for (int c = 0; c < header.length; c++) {
-                    cs.addRect(cols[c], top - rowH, cols[c + 1] - cols[c], rowH);
+                if (full) {
+                    cs.setNonStrokingColor(0.9f, 0.9f, 0.9f);
+                    cs.addRect(cols[0], top - rowH, cols[cols.length - 1] - cols[0], rowH);
+                    cs.fill();
+                    cs.setNonStrokingColor(32 / 255f, 80 / 255f, 120 / 255f);
+                    for (int c = 0; c < header.length; c++) {
+                        cs.addRect(cols[c], top - rowH, cols[c + 1] - cols[c], rowH);
+                    }
+                    cs.fill();
+                } else {
+                    float part = 0.45f * (cols[cols.length - 1] - cols[0]);
+                    for (int twice = 0; twice < 2; twice++) {
+                        cs.setNonStrokingColor(twice == 0 ? 0.2f : 0.3f, 0.3f, 0.4f);
+                        cs.addRect(cols[0] + twice * 10, top - rowH, part, rowH);
+                        cs.fill();
+                    }
                 }
-                cs.fill();
-                cs.setNonStrokingColor(1f, 1f, 1f);
+                cs.setNonStrokingColor(full ? 1f : 0f, full ? 1f : 0f, full ? 1f : 0f);
                 for (int c = 0; c < header.length; c++) {
                     text(cs, BOLD, 10, cols[c] + 4, top - 13, header[c]);
                 }

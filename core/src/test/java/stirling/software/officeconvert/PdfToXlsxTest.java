@@ -112,6 +112,16 @@ class PdfToXlsxTest {
     }
 
     @Test
+    void aFillOverPartOfTheHeaderIsNoBand() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.bandHeader(dir, false).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        String strings = SpreadsheetPdfs.part(SpreadsheetPdfs.parts(out.toByteArray()), "xl/sharedStrings.xml");
+        assertFalse(strings.contains(">Account<"), "two fills over the same half cover half: " + strings);
+    }
+
+    @Test
     void aHeaderBandOverAGridIsTheTablesHeaderRow() throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.bandHeader(dir).toFile())) {
