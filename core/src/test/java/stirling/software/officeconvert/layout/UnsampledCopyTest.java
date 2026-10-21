@@ -67,4 +67,17 @@ class UnsampledCopyTest {
                     seen ? "a copy of a quarter's header is set apart" : "a quarter no header had isn't a copy");
         }
     }
+
+    @Test
+    void copiesOfTwoQuartersHeadersAreBothCopies() {
+        HeaderFooter hf = new HeaderFooter();
+        for (int p = 0; p < 6; p++) {
+            hf.addPage(page(p), lines("Quarterly Results for Quarter " + (p < 3 ? 1 : 2), 30));
+        }
+        hf.addPage(page(6), lines("Quarterly Results for Quarter 1", 50));
+        hf.addPage(page(7), lines("Quarterly Results for Quarter 2", 50));
+        hf.finish(8);
+        assertEquals(1, hf.demoted(612, 792, lines("Quarterly Results for Quarter 2", 50)).size(),
+                "copies of each quarter's header in one slot are set apart and bound the page frame");
+    }
 }

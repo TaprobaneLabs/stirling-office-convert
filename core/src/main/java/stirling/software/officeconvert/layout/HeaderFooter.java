@@ -165,7 +165,7 @@ public final class HeaderFooter {
             if (accepted.contains(r) || sources == null || !worded(r.signature)) {
                 continue;
             }
-            if (sources.stream().anyMatch(runs -> r.occurrences.values().stream().allMatch(l -> fits(digitRuns(l), runs)))) {
+            if (r.occurrences.values().stream().allMatch(l -> sources.stream().anyMatch(runs -> fits(digitRuns(l), runs)))) {
                 furniture.add(r.signature);
                 demoted.add(r.signature);
                 copyDigits.put(r.signature, sources);
