@@ -120,7 +120,7 @@ final class ParagraphFactory {
         if (markerTab) {
             hangFromMarker(p, d, colLeft);
         }
-        RunBuilder.Fit fit = fitTarget(d, p, flow, skip, markerTab, colRight);
+        RunBuilder.Fit fit = fitTarget(d, p, flow, skip, markerTab, colLeft, colRight);
         runs.fill(p, d.lines, skip, colLeft, colRight, hostSize, d.hardBreaks, d.pageBreaks, markerTab, fit);
         boolean fitted = !Float.isNaN(runs.fitted());
         if (fitted) {
@@ -183,19 +183,22 @@ final class ParagraphFactory {
     }
 
     private RunBuilder.Fit fitTarget(ParaDraft d, Paragraph p, boolean flow, int skip, boolean markerTab,
-            float colRight) {
+            float colLeft, float colRight) {
         if (!flow) {
             return null;
         }
         float edge = p.bidi || markerTab || !fitting || singleColumn && narrowed(d) ? Float.NaN
                 : colRight - d.right - (innerColumn ? SectionPlanner.RIGHT_SLACK : 0);
+        // Word starts each line at the paragraph's indents, not where its PDF line starts (within a couple of points)
+        float rest = singleColumn && skip == 0 && !markerTab ? colLeft + p.indentLeft : Float.NaN;
+        float first = rest + p.indentFirst;
         if (d.align == Align.JUSTIFY && !Float.isNaN(d.justifySlack)) {
-            return new RunBuilder.Fit(edge, d.justifySlack, true, singleColumn);
+            return new RunBuilder.Fit(edge, d.justifySlack, true, singleColumn, first, rest);
         }
         if (Float.isNaN(edge) || d.align != Align.LEFT || skip > 0) {
             return null;
         }
-        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false);
+        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest);
     }
 
     private static boolean narrowed(ParaDraft d) {
