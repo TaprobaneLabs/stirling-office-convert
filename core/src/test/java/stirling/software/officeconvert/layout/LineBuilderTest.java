@@ -137,6 +137,49 @@ class LineBuilderTest {
     }
 
     @Test
+    void keepsEvenlySpacedAxisLabelsApart() {
+        List<Glyph> glyphs = new ArrayList<>();
+        String[] labels = {"0", "5", "10", "15", "20", "25"};
+        for (int i = 0; i < labels.length; i++) {
+            place(glyphs, labels[i], 320 + 68 * i, 300, 12);
+        }
+
+        Line line = LineBuilder.join(LineBuilder.build(glyphs));
+
+        assertEquals(List.of(labels), line.words.stream().map(w -> w.text).toList());
+
+        List<Glyph> tight = new ArrayList<>();
+        String[] hours = {"1", "5", "9", "13", "17", "21"};
+        for (int i = 0; i < hours.length; i++) {
+            place(tight, hours[i], 260 + 32.7f * i, 300, 12);
+        }
+        Line hourLine = LineBuilder.join(LineBuilder.build(tight));
+        assertEquals(List.of(hours), hourLine.words.stream().map(w -> w.text).toList(), "labels 1.7 em apart");
+    }
+
+    @Test
+    void keepsALetterSpacedWordWholeAfterAPlainOne() {
+        List<Glyph> glyphs = new ArrayList<>();
+        place(glyphs, "Tech", 72, 100, 10);
+        placeTracked(glyphs, "SPACING", 100, 100, 3f);
+
+        Line line = LineBuilder.join(LineBuilder.build(glyphs));
+
+        assertEquals(List.of("Tech", "SPACING"), line.words.stream().map(w -> w.text).toList());
+    }
+
+    @Test
+    void keepsAWidelySpacedHeadingWholeAfterASmallMarker() {
+        List<Glyph> glyphs = new ArrayList<>();
+        place(glyphs, "1", 60, 100, 4);
+        placeTracked(glyphs, "HEADINGS", 72, 100, 9f);
+
+        Line line = LineBuilder.join(LineBuilder.build(glyphs));
+
+        assertEquals("HEADINGS", line.words.getLast().text);
+    }
+
+    @Test
     void marksRaisedSmallGlyphsAsSuperscript() {
         List<Glyph> glyphs = new ArrayList<>();
         place(glyphs, "E=mc", 72, 100, 10);
