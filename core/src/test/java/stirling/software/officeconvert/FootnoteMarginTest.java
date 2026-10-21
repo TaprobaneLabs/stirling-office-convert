@@ -57,11 +57,18 @@ class FootnoteMarginTest {
 
     @Test
     void aReferenceAboveColumnsMovesItsSectionsMarginToo() throws Exception {
-        float noteBaseline = 680;
-        String xml = convert(makeColumnsPdf(noteBaseline));
+        assertEverySectionEndsAtTheNote(convert(makeColumnsPdf(680, false)));
+    }
+
+    @Test
+    void aReferenceInColumnsCarriedFromTheLastPageMovesTheirSectionToo() throws Exception {
+        assertEverySectionEndsAtTheNote(convert(makeColumnsPdf(680, true)));
+    }
+
+    private static void assertEverySectionEndsAtTheNote(String xml) {
         assertTrue(xml.contains("w:footnoteReference"), "the note is a Word footnote");
         Matcher m = Pattern.compile("<w:pgMar [^>]*w:bottom=\"(\\d+)\"").matcher(xml);
-        float pdfBottom = noteBaseline + 0.2f * NOTE_PITCH;
+        float pdfBottom = 680 + 0.2f * NOTE_PITCH;
         int sections = 0;
         while (m.find()) {
             sections++;
@@ -69,24 +76,52 @@ class FootnoteMarginTest {
             assertTrue(Math.abs(wordBottom - pdfBottom) <= 8,
                     "section " + sections + " ends at " + wordBottom + ", the PDF's note at " + pdfBottom);
         }
-        assertTrue(sections >= 2, "the title and the columns are sections of their own: " + sections);
+        assertTrue(sections >= 2, "the full-width text and the columns are sections of their own: " + sections);
     }
 
-    /** A full-width title holding the note's reference, two columns of text under it, and the note at the foot. */
-    private Path makeColumnsPdf(float noteBaseline) throws IOException {
+    /**
+     * A full-width title holding the note's reference, two columns of text under it, and the note at the foot. With
+     * {@code carried}, a page of the same two columns comes first, and the note's page opens with those columns, the
+     * reference in the first, then a full-width paragraph.
+     */
+    private Path makeColumnsPdf(float noteBaseline, boolean carried) throws IOException {
         Path pdf = dir.resolve("columns.pdf");
         String half = "The agencies expect institutions to take all steps";
+        String full = "Examiners will continue monitoring the transition through the normal supervisory process.";
         float width = FONT.getStringWidth(half) / 1000f * SIZE;
+        float[] lefts = {72, 72 + width + 24};
         try (PDDocument doc = new PDDocument()) {
+            if (carried) {
+                PDPage first = new PDPage(PDRectangle.LETTER);
+                doc.addPage(first);
+                try (PDPageContentStream cs = new PDPageContentStream(doc, first)) {
+                    for (float left : lefts) {
+                        for (int i = 0; i < 30; i++) {
+                            text(cs, left, 90 + i * PITCH, half, SIZE, 0);
+                        }
+                    }
+                }
+            }
             PDPage page = new PDPage(PDRectangle.LETTER);
             doc.addPage(page);
             try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
-                String title = "Joint Statement on Completing the Transition";
-                text(cs, 72, 90, title, 18, 0);
-                text(cs, 72 + FONT.getStringWidth(title) / 1000f * 18, 90, "1", 9, 7);
-                for (float left : new float[] {72, 72 + width + 24}) {
-                    for (int i = 0; i < 30; i++) {
-                        text(cs, left, 130 + i * PITCH, half, SIZE, 0);
+                float top = carried ? 90 : 130;
+                if (!carried) {
+                    String title = "Joint Statement on Completing the Transition";
+                    text(cs, 72, 90, title, 18, 0);
+                    text(cs, 72 + FONT.getStringWidth(title) / 1000f * 18, 90, "1", 9, 7);
+                }
+                for (float left : lefts) {
+                    for (int i = 0; i < (carried ? 12 : 30); i++) {
+                        text(cs, left, top + i * PITCH, half, SIZE, 0);
+                        if (carried && left == 72 && i == 2) {
+                            text(cs, left + width, top + i * PITCH, "1", 7, 4);
+                        }
+                    }
+                }
+                if (carried) {
+                    for (int i = 0; i < 4; i++) {
+                        text(cs, 72, top + (13 + i) * PITCH, full, SIZE, 0);
                     }
                 }
                 float firstNote = noteBaseline - NOTE_PITCH;

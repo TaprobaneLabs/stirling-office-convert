@@ -77,8 +77,9 @@ public final class DocumentBuilder {
     private float flowLow;
     private float footHigh;
     private float noteLow;
-    // Sections opened on the current page: a footnote's reference may sit in one closed before the page ends
+    // Sections on the current page, the one carried over from the last page included, and each section's lowest body text
     private final List<Section> pageSections = new ArrayList<>();
+    private final Map<Section, Float> sectionLows = new IdentityHashMap<>();
 
     private record Spaced(Paragraph p, int band, int column) {}
 
@@ -131,6 +132,9 @@ public final class DocumentBuilder {
         }
         release();
         pageSections.clear();
+        if (section != null) {
+            pageSections.add(section);
+        }
         if (carry != null && !carriedOn(layout)) {
             Carry c = carry;
             carry = null;
@@ -312,16 +316,23 @@ public final class DocumentBuilder {
         if (footHigh != Float.MAX_VALUE) {
             margin = Math.max(margin, footMargin(footHigh - FOOT_GAP));
         }
+        sectionLows.merge(section, flowLow, Math::max);
         if (noteLow != -Float.MAX_VALUE && noteLow + NOTE_SLACK >= flowLow + FOOT_CLEAR) {
-            float notes = footMargin(noteLow + NOTE_SLACK);
-            margin = Math.max(margin, notes);
-            if (noteBottom != -Float.MAX_VALUE) {
-                for (Section s : pageSections) {
-                    s.marginBottom = Math.max(s.marginBottom, notes);
-                }
-            }
+            margin = Math.max(margin, footMargin(noteLow + NOTE_SLACK));
         }
         section.marginBottom = margin;
+        if (noteBottom == -Float.MAX_VALUE) {
+            return;
+        }
+        // A note's reference may sit in a section the page closed before its notes were counted, one carried over from
+        // earlier pages too: it moves as well, where none of its pages has body text below the notes.
+        float body = noteBottom + NOTE_SLACK;
+        for (Section s : pageSections) {
+            float low = Math.max(sectionLows.getOrDefault(s, -Float.MAX_VALUE), flowBottom);
+            if (s != section && body >= low + FOOT_CLEAR && body > s.marginTop + 72) {
+                s.marginBottom = Math.max(s.marginBottom, s.pageHeight - body);
+            }
+        }
     }
 
     private float footMargin(float bottom) {
