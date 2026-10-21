@@ -70,6 +70,11 @@ class RunningCopiesTest {
         assertNotSetApart(convert(makePdf(OTHER_YEAR)));
     }
 
+    @Test
+    void aLineMatchingNoOneHeaderInItsFixedDigitsStaysBodyText() throws Exception {
+        assertNotSetApart(convert(makePdf(OTHER_YEAR, false, HEADER.replace("FY2022", "FY2020"))));
+    }
+
     private static void assertNotSetApart(String xml) {
         int at = xml.indexOf("FY2021");
         assertTrue(at >= 0, "the contents page's line is converted");
@@ -101,6 +106,14 @@ class RunningCopiesTest {
 
     /** As above; with {@code numbered}, each header line ends in its page number ("... In Brief 4"). */
     private Path makePdf(String contentsHeader, boolean numbered) throws IOException {
+        return makePdf(contentsHeader, numbered, null);
+    }
+
+    /**
+     * As above; with {@code laterHeader}, the running pages are twelve, the last six headed by it a little lower, so
+     * the two headers are two running lines.
+     */
+    private Path makePdf(String contentsHeader, boolean numbered, String laterHeader) throws IOException {
         Path pdf = dir.resolve("report.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage cover = new PDPage(PDRectangle.LETTER);
@@ -124,11 +137,12 @@ class RunningCopiesTest {
                 }
                 text(cs, 90, 776, FOOTER, 9);
             }
-            for (int p = 1; p <= 6; p++) {
+            for (int p = 1; p <= (laterHeader == null ? 6 : 12); p++) {
                 PDPage page = new PDPage(PDRectangle.LETTER);
                 doc.addPage(page);
                 try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
-                    text(cs, 190, 44, HEADER + (numbered ? " " + (p + 2) : ""), 9);
+                    boolean later = laterHeader != null && p > 6;
+                    text(cs, 190, later ? 52 : 44, (later ? laterHeader : HEADER) + (numbered ? " " + (p + 2) : ""), 9);
                     for (int i = 0; BODY_TOP + i * PITCH <= 700; i++) {
                         text(cs, 90, BODY_TOP + i * PITCH, LINE, 12);
                     }

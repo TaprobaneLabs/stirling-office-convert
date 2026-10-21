@@ -144,21 +144,25 @@ public final class HeaderFooter {
      */
     private void setApartCopies() {
         // Each running line's digit runs, kept where they're the same on every page (null where they change, as page
-        // numbers do): a copy must have the fixed ones too
-        Map<String, String[]> fixed = new HashMap<>();
+        // numbers do): a copy must have the fixed ones of one of them
+        Map<String, List<String[]>> fixed = new HashMap<>();
         for (RunningLine r : candidates.values()) {
             if (accepted.contains(r) || demoted.contains(r.signature)) {
+                String[] own = null;
                 for (Line l : r.occurrences.values()) {
-                    fixed.merge(placeless(r.signature), digitRuns(l), HeaderFooter::sharedRuns);
+                    own = own == null ? digitRuns(l) : sharedRuns(own, digitRuns(l));
+                }
+                if (own != null) {
+                    fixed.computeIfAbsent(placeless(r.signature), k -> new ArrayList<>()).add(own);
                 }
             }
         }
         for (RunningLine r : candidates.values()) {
-            String[] runs = fixed.get(placeless(r.signature));
-            if (accepted.contains(r) || runs == null || !worded(r.signature)) {
+            List<String[]> sources = fixed.get(placeless(r.signature));
+            if (accepted.contains(r) || sources == null || !worded(r.signature)) {
                 continue;
             }
-            if (r.occurrences.values().stream().allMatch(l -> fits(digitRuns(l), runs))) {
+            if (sources.stream().anyMatch(runs -> r.occurrences.values().stream().allMatch(l -> fits(digitRuns(l), runs)))) {
                 furniture.add(r.signature);
                 demoted.add(r.signature);
             }
