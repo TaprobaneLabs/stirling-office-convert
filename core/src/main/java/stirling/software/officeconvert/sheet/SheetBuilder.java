@@ -57,6 +57,7 @@ public final class SheetBuilder {
         final float textWidth;
         int next;
         int frozen;
+        int header;
         Placed last;
         float lastBottom = Float.NaN;
         float lastSize;
@@ -90,8 +91,7 @@ public final class SheetBuilder {
 
     public void page(PageLayout layout) throws IOException {
         PageData page = layout.page();
-        Conventions[] prior = settings.split() != Split.PAGE && open != null && open.last != null
-                ? open.last.grid().conventions : null;
+        Conventions[] prior = open != null && open.last != null ? open.last.grid().conventions : null;
         PageItems.Prepared prepared =
                 PageItems.of(layout, stats, document, prior, settings.typed(), settings.dropHyphens());
         omitted = prepared.taken();
@@ -144,7 +144,27 @@ public final class SheetBuilder {
     private void pageSheets(PageData page, List<Object> items, float textWidth) throws IOException {
         List<List<Object>> groups = settings.splitLargeTables() ? groups(items) : List.of(items);
         int number = page.index() + 1;
-        for (int g = 0; g < groups.size(); g++) {
+        int from = 0;
+        // A table carried over the page break goes on, with the rest of its group, on the sheet it started on
+        if (open != null && !items.isEmpty() && items.getFirst() instanceof TableGrid carried
+                && carriesOn(open.last, carried, page) && sameCaptions(open.last.grid(), carried)
+                && open.next + rows(groups.getFirst()) < MAX_ROWS) {
+            List<Object> group = groups.getFirst();
+            append(open, carried, page);
+            if (open.frozen == 0 && open.header > 0 && open.ranges.size() == 1) {
+                NamedRange range = open.ranges.getFirst();
+                freeze(open, range.firstRow(), open.header, range.lastRow() - range.firstRow() + 1 - open.header);
+            }
+            for (Object item : group.subList(1, group.size())) {
+                write(open, item, page);
+            }
+            from = 1;
+            if (groups.size() == 1 && open.last != null) {
+                return;
+            }
+        }
+        closeOpen();
+        for (int g = from; g < groups.size(); g++) {
             List<Object> group = groups.get(g);
             String name = groups.size() == 1 ? "Page " + number : "Page " + number + " Table " + (g + 1);
             Sheet s = start(page, name, textWidth);
@@ -160,13 +180,46 @@ public final class SheetBuilder {
             List<TableGrid> grids = grids(group);
             if (grids.size() == 1 && s.ranges.size() == 1) {
                 TableGrid grid = grids.getFirst();
-                int first = s.ranges.getFirst().firstRow();
-                if (grid.headerRows > 0 && first < FREEZE_WITHIN && grid.rows - grid.headerRows >= FREEZE_MIN_DATA) {
-                    s.frozen = first + grid.headerRows;
-                }
+                s.header = grid.headerRows;
+                freeze(s, s.ranges.getFirst().firstRow(), grid.headerRows, grid.rows - grid.headerRows);
             }
-            end(s);
+            if (g == groups.size() - 1 && s.last != null) {
+                open = s;
+            } else {
+                end(s);
+            }
         }
+    }
+
+    /** Captions over the carried part are left out when it joins, so only a repeated caption (or none) may be. */
+    private static boolean sameCaptions(TableGrid prev, TableGrid next) {
+        if (next.above.isEmpty()) {
+            return true;
+        }
+        if (next.above.size() != prev.above.size()) {
+            return false;
+        }
+        for (int i = 0; i < next.above.size(); i++) {
+            if (!next.above.get(i).text().equals(prev.above.get(i).text())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Freezes a table's header rows when the table starts near the sheet's top and has enough rows below them. */
+    private static void freeze(Sheet s, int first, int header, int dataRows) {
+        if (header > 0 && first < FREEZE_WITHIN && dataRows >= FREEZE_MIN_DATA) {
+            s.frozen = first + header;
+        }
+    }
+
+    private static int rows(List<Object> group) {
+        int n = 0;
+        for (Object item : group) {
+            n += item instanceof TableGrid g ? g.rows + g.above.size() + 1 : 2;
+        }
+        return n;
     }
 
     private static List<List<Object>> groups(List<Object> items) {

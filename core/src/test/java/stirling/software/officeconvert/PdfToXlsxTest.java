@@ -112,6 +112,53 @@ class PdfToXlsxTest {
     }
 
     @Test
+    void aTableCarriedOverAPageBreakStaysOnItsSheet() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.ledger(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String book = SpreadsheetPdfs.part(parts, "xl/workbook.xml");
+        assertEquals(1, book.split("<sheet ").length - 1, book);
+        assertTrue(book.contains("<sheet name=\"Page 1\""), book);
+        String strings = SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml");
+        assertTrue(strings.contains("Entry 42") && strings.contains("Closing balance carried to the next year."), strings);
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        assertEquals(1, sheet.split("<v>" + index(strings, "Description") + "</v>").length - 1, "the repeated header left out");
+        assertTrue(number(sheet, "1637.5"), "the last row typed");
+    }
+
+    @Test
+    void aShortFirstPartFreezesTheHeaderOnceTheTableGoesOn() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.ledger(dir, 4).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        assertEquals(1, SpreadsheetPdfs.part(parts, "xl/workbook.xml").split("<sheet ").length - 1);
+        assertTrue(SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml").contains("state=\"frozen\""),
+                "4 rows on the first page and 12 on the next: the header frozen");
+    }
+
+    @Test
+    void amountsInCellsMergedByAMissingRuleGoBackToTheirColumns() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.statement(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        String strings = SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml");
+        assertFalse(strings.contains("1,081.64") || strings.contains("2,400.00"), "no amount left as text");
+        Matcher paidIn = Pattern.compile("<c r=\"([A-Z]+)[0-9]+\"( s=\"[0-9]+\")?><v>1081.64</v>").matcher(sheet);
+        Matcher paidOut = Pattern.compile("<c r=\"([A-Z]+)[0-9]+\"( s=\"[0-9]+\")?><v>950</v>").matcher(sheet);
+        assertTrue(paidIn.find() && paidOut.find(), sheet);
+        assertEquals((char) (paidOut.group(1).charAt(0) + 1), paidIn.group(1).charAt(0), "paid in one column right of paid out");
+        assertEquals(1, sheet.split("<mergeCell ").length - 1, "only the year label stays merged: " + sheet);
+        assertTrue(strings.contains(">2026<"), "the year label kept as a label");
+    }
+
+    @Test
     void theFirstBandedRowIsNotAHeader() throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.banded(dir).toFile())) {
