@@ -221,7 +221,7 @@ final class TableAssembler {
             for (int r = header + 1; r < rows; r++) {
                 body.addAll(byRow.get(r));
             }
-            if (!rowDiffers(byRow.get(header), body)) {
+            if (!rowDiffers(byRow.get(header), body, header > 0)) {
                 break;
             }
             header++;
@@ -229,7 +229,7 @@ final class TableAssembler {
         return header;
     }
 
-    private static boolean rowDiffers(List<ExtractedCell> row, List<ExtractedCell> body) {
+    private static boolean rowDiffers(List<ExtractedCell> row, List<ExtractedCell> body, boolean underHeader) {
         int filled = 0;
         int bold = 0;
         Integer rowFill = row.isEmpty() ? null : row.getFirst().style().fillRgb();
@@ -262,14 +262,15 @@ final class TableAssembler {
         boolean boldHeader = bold == filled && (bodyFilled == 0 || bodyBold * 10 < bodyFilled * 6);
         int bodyFill = mode(bodyFills, NO_FILL);
         boolean fillHeader =
-                uniformFill && rowFill != null && !banded(rowFill, body) && (bodyFill == NO_FILL || rowFill != bodyFill);
+                uniformFill && rowFill != null && !(underHeader && banded(rowFill, body))
+                        && (bodyFill == NO_FILL || rowFill != bodyFill);
         return boldHeader || fillHeader;
     }
 
     /**
      * Rows shaded in bands: the row's fill skips the next row, shades the one after and skips the next again, so the
-     * first shaded row isn't a header. A header whose colour returns only on a total row keeps its place, the total
-     * being the last row or further down.
+     * first shaded row under a header isn't a second header. A header whose colour returns only on a total row keeps
+     * its place, the total being the last row or further down, and so does a table's top row in its stripes' colour.
      */
     private static boolean banded(int fill, List<ExtractedCell> body) {
         int first = Integer.MAX_VALUE;

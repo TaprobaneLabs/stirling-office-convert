@@ -125,13 +125,16 @@ class PdfToXlsxTest {
 
     @Test
     void aHeaderShadedLikeTheTotalRowStaysTheHeader() throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.shadedTotal(dir).toFile())) {
-            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        for (Path pdf : new Path[] {SpreadsheetPdfs.shadedTotal(dir), SpreadsheetPdfs.stripedHeader(dir)}) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            try (PDDocument doc = Loader.loadPDF(pdf.toFile())) {
+                PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+            }
+            Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+            assertTrue(SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml").contains(">2025<"),
+                    pdf.getFileName() + ": the year a header label");
+            assertTrue(number(SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml"), "1250"), "the first item typed");
         }
-        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
-        assertTrue(SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml").contains(">2025<"), "the year a header label");
-        assertTrue(number(SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml"), "1570"), "the total typed");
     }
 
     @Test

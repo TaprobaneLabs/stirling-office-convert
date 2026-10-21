@@ -73,9 +73,19 @@ final class SpreadsheetPdfs {
 
     /** A short table whose plain header and total row share one shade. */
     static Path shadedTotal(Path dir) throws IOException {
-        Path pdf = dir.resolve("total.pdf");
-        String[][] rows = {{"Item", "2025", "2026"}, {"Rent", "1,200.00", "1,250.00"}, {"Power", "300.00", "320.00"},
-            {"Total", "1,500.00", "1,570.00"}};
+        return shadedRows(dir, "total.pdf", new String[][] {{"Item", "2025", "2026"}, {"Rent", "1,200.00", "1,250.00"},
+            {"Power", "300.00", "320.00"}, {"Total", "1,500.00", "1,570.00"}}, new int[] {0, 3});
+    }
+
+    /** A plain header in the colour of the stripes under it, the first body row unshaded. */
+    static Path stripedHeader(Path dir) throws IOException {
+        return shadedRows(dir, "striped.pdf", new String[][] {{"Item", "2025", "2026"}, {"Rent", "1,200.00", "1,250.00"},
+            {"Power", "300.00", "320.00"}, {"Water", "80.00", "85.00"}, {"Rates", "410.00", "430.00"},
+            {"Phone", "60.00", "62.00"}}, new int[] {0, 2, 4});
+    }
+
+    private static Path shadedRows(Path dir, String name, String[][] rows, int[] shaded) throws IOException {
+        Path pdf = dir.resolve(name);
         float[] cols = {60, 220, 320, 420};
         float top = 700;
         float rowH = 18;
@@ -84,7 +94,7 @@ final class SpreadsheetPdfs {
             doc.addPage(page);
             try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
                 cs.setNonStrokingColor(0.85f, 0.85f, 0.85f);
-                for (int r : new int[] {0, rows.length - 1}) {
+                for (int r : shaded) {
                     cs.addRect(cols[0], top - (r + 1) * rowH, cols[cols.length - 1] - cols[0], rowH);
                 }
                 cs.fill();
