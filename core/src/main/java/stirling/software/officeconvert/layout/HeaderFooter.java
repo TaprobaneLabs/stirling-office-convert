@@ -7,13 +7,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 
 import stirling.software.officeconvert.extract.PageData;
 
 public final class HeaderFooter {
 
-    private static final float ZONE = 0.13f;
+    static final float ZONE = 0.13f;
     private static final float MIN_SHARE = 0.4f;
     private static final Pattern DIGITS = Pattern.compile("[0-9]+");
     private static final Pattern ROMAN_ONLY = Pattern.compile("(?i)^[-– ]*[ivxlc]{1,6}[-– ]*$");
@@ -29,6 +30,10 @@ public final class HeaderFooter {
     private record Seen(String signature, float top, float bottom, Line line) {}
     private final List<RunningLine> accepted = new ArrayList<>();
     private final Set<String> furniture = new HashSet<>();
+    // Running lines accepted, then set apart (they move on some pages), and their text set elsewhere
+    private final Set<String> demoted = new HashSet<>();
+    // A copy's fixed digits per running line it may copy: each line in its slot is checked against them on every page
+    private final Map<String, List<String[]>> copyDigits = new HashMap<>();
     private final Map<Integer, Integer> numberOffsets = new HashMap<>();
     private Integer pageNumberOffset;
     private int pageCount;
@@ -127,11 +132,84 @@ public final class HeaderFooter {
         dropInconsistent(true);
         dropInconsistent(false);
         dropOverlapped();
+        setApartCopies();
         if (sampled >= 4) {
             numberOffsets.entrySet().stream().max(Map.Entry.comparingByValue())
                     .filter(e -> e.getValue() >= Math.max(3, 0.3f * sampled))
                     .ifPresent(e -> pageNumberOffset = e.getKey());
         }
+    }
+
+    /**
+     * A running line's text set elsewhere on a few pages (a report's contents page carrying its header higher up, say) is
+     * the same running line, not body text: it's set apart there too, so it doesn't stretch the page frame or flow.
+     */
+    private void setApartCopies() {
+        // Each occurrence's digit runs, null where the running line holds its page number or page count: a copy must
+        // have the rest of one of them (a section number that changes isn't a page number, and must match too)
+        Map<String, List<String[]>> fixed = new HashMap<>();
+        for (RunningLine r : candidates.values()) {
+            if (accepted.contains(r) || demoted.contains(r.signature)) {
+                for (Line l : r.occurrences.values()) {
+                    String[] runs = digitRuns(l);
+                    for (int k = 0; k < runs.length; k++) {
+                        boolean page = k < r.pageOffsets.length && r.pageOffsets[k] != Integer.MIN_VALUE;
+                        runs[k] = page || k < r.totalPages.length && r.totalPages[k] ? null : runs[k];
+                    }
+                    fixed.computeIfAbsent(placeless(r.signature), x -> new ArrayList<>()).add(runs);
+                }
+            }
+        }
+        for (RunningLine r : candidates.values()) {
+            List<String[]> sources = fixed.get(placeless(r.signature));
+            if (accepted.contains(r) || sources == null || !worded(r.signature)) {
+                continue;
+            }
+            if (r.occurrences.values().stream().allMatch(l -> sources.stream().anyMatch(runs -> fits(digitRuns(l), runs)))) {
+                furniture.add(r.signature);
+                demoted.add(r.signature);
+                copyDigits.put(r.signature, sources);
+            }
+        }
+    }
+
+    private boolean isFurniture(String signature, Line seg) {
+        return furniture.contains(signature) && copies(signature, seg);
+    }
+
+    /** Whether a line in a copy's slot has the fixed digits of a running line it copies (pages not sampled too). */
+    private boolean copies(String signature, Line seg) {
+        List<String[]> sources = copyDigits.get(signature);
+        return sources == null || sources.stream().anyMatch(runs -> fits(digitRuns(seg), runs));
+    }
+
+    private static String[] digitRuns(Line l) {
+        return DIGITS.matcher(l.text()).results().map(MatchResult::group).toArray(String[]::new);
+    }
+
+    private static boolean fits(String[] runs, String[] fixed) {
+        for (int i = 0; i < fixed.length; i++) {
+            if (fixed[i] != null && (i >= runs.length || !fixed[i].equals(runs[i]))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** A set-apart running line bounds the page frame when it has words: a bare page number may sit anywhere. */
+    private void demote(String signature) {
+        if (worded(signature)) {
+            demoted.add(signature);
+        }
+    }
+
+    private static boolean worded(String signature) {
+        return signature.split("\\|", 4)[3].chars().filter(Character::isLetter).count() >= 4;
+    }
+
+    private static String placeless(String signature) {
+        String[] parts = signature.split("\\|", 4);
+        return parts[0] + "|" + parts[3];
     }
 
     private void acceptLonePageNumbers() {
@@ -182,8 +260,22 @@ public final class HeaderFooter {
             if (r.top == top) {
                 accepted.remove(r);
                 furniture.add(r.signature);
+                demote(r.signature);
             }
         }
+    }
+
+    /** The page's lines of running lines set apart: they bound the page frame as a Word header or footer would. */
+    List<Line> demoted(float w, float h, List<Line> segments) {
+        List<Line> out = new ArrayList<>();
+        for (Line seg : segments) {
+            boolean top = seg.bottom < h * ZONE;
+            String sig = (top || seg.top > h * (1 - ZONE)) ? signature(seg, top, w) : null;
+            if (sig != null && demoted.contains(sig) && copies(sig, seg)) {
+                out.add(seg);
+            }
+        }
+        return out;
     }
 
     public List<Line> furniture(PageData page, List<Line> segments) {
@@ -198,7 +290,7 @@ public final class HeaderFooter {
             if (carriesPageNumber(seg, page.index())) {
                 numberRows.add(seg.baseline);
                 out.add(seg);
-            } else if (furniture.contains(signature(seg, top, page.width()))) {
+            } else if (isFurniture(signature(seg, top, page.width()), seg)) {
                 out.add(seg);
             }
         }
@@ -245,6 +337,7 @@ public final class HeaderFooter {
             if (overlapped) {
                 accepted.remove(r);
                 furniture.add(r.signature);
+                demote(r.signature);
             }
         }
     }

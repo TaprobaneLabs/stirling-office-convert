@@ -1,9 +1,12 @@
 package stirling.software.officeconvert.layout;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.DoubleUnaryOperator;
 
 import stirling.software.officeconvert.extract.PageData;
@@ -106,6 +109,10 @@ final class PageFrames {
             float hSize = 0;
             float fBase = Float.NaN;
             float fSize = 0;
+            // Running lines set apart on each page as text boxes (a header that moves on some pages, say): not body
+            // text either, they bound the body as a Word header or footer would.
+            float apartHeader = -Float.MAX_VALUE;
+            float apartFooter = Float.MAX_VALUE;
             float w = e.getValue().getFirst().width();
             float h = e.getValue().getFirst().height();
             for (Sample s : e.getValue()) {
@@ -115,8 +122,18 @@ final class PageFrames {
                     textLeft = Math.min(textLeft, o.x);
                     textRight = Math.max(textRight, o.right);
                 }
+                Set<Line> apart = Collections.newSetFromMap(new IdentityHashMap<>());
+                apart.addAll(headerFooter.demoted(s.width(), s.height(), s.segments()));
                 for (Line l : s.segments()) {
                     RunningLine r = headerFooter.match(s.width(), s.height(), l);
+                    if (r == null && apart.contains(l)) {
+                        if (l.bottom < s.height() * HeaderFooter.ZONE) {
+                            apartHeader = Math.max(apartHeader, l.bottom);
+                        } else {
+                            apartFooter = Math.min(apartFooter, l.top);
+                        }
+                        continue;
+                    }
                     if (r != null) {
                         if (r.top) {
                             hTop = Math.min(hTop, l.top);
@@ -154,8 +171,10 @@ final class PageFrames {
                     }
                 }
             }
-            float headerLimit = hBottom == -Float.MAX_VALUE ? 0 : hBottom + 1;
-            float footerLimit = fTop == Float.MAX_VALUE ? h : fTop - 1;
+            float headerEdge = Math.max(hBottom, apartHeader);
+            float footerEdge = Math.min(fTop, apartFooter);
+            float headerLimit = headerEdge == -Float.MAX_VALUE ? 0 : headerEdge + 1;
+            float footerLimit = footerEdge == Float.MAX_VALUE ? h : footerEdge - 1;
             for (Sample s : e.getValue()) {
                 for (float[] b : s.boxes()) {
                     if (b[1] >= headerLimit && b[3] <= footerLimit) {
