@@ -154,7 +154,12 @@ public final class LineBuilder {
         }
         float[] gaps = Arrays.copyOf(all, n);
         float median = select(gaps, gaps.length / 2);
-        float size = glyphs.getFirst().size;
+        // The row's typical size, so a small marker or superscript ahead of the text doesn't set the scale
+        float[] sizes = new float[glyphs.size()];
+        for (int i = 0; i < sizes.length; i++) {
+            sizes[i] = glyphs.get(i).size;
+        }
+        float size = select(sizes, sizes.length / 2);
         // Letter spacing stays within an em or so. Labels spread along an axis ("0 5 10 15 20 25") make the gap
         // between labels the row's median gap, ems wide, and must not join into one word: a gap past two ems is
         // never spacing, and one past WIDE_TRACKING_EM isn't either when the glyphs of many labels touch.

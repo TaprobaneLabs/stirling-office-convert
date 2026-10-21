@@ -169,6 +169,17 @@ class LineBuilderTest {
     }
 
     @Test
+    void keepsAWidelySpacedHeadingWholeAfterASmallMarker() {
+        List<Glyph> glyphs = new ArrayList<>();
+        place(glyphs, "1", 60, 100, 4);
+        placeTracked(glyphs, "HEADINGS", 72, 100, 9f);
+
+        Line line = LineBuilder.join(LineBuilder.build(glyphs));
+
+        assertEquals("HEADINGS", line.words.getLast().text);
+    }
+
+    @Test
     void marksRaisedSmallGlyphsAsSuperscript() {
         List<Glyph> glyphs = new ArrayList<>();
         place(glyphs, "E=mc", 72, 100, 10);
