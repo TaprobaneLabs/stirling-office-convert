@@ -227,6 +227,19 @@ public final class FontNames {
         return family != null && OFFICE.contains(family);
     }
 
+    // Open fonts that take an Office font's place without its widths: Word's Cambria sets text wider than Caladea.
+    private static final Map<String, String> OPEN = Map.of("caladea", "Caladea");
+
+    /** The open font a PDF font is when Word's font of the same family has other widths (Caladea), else null. */
+    public static String openFamily(String postScriptName) {
+        if (postScriptName == null || postScriptName.isBlank()) {
+            return null;
+        }
+        String base = trimPsSuffix(basePart(stripSubset(postScriptName.strip())));
+        String open = OPEN.get(key(base));
+        return open != null ? open : OPEN.get(key(stripStyleWords(base)));
+    }
+
     /** Whether a PostScript name is the family's own (TimesNewRomanPSMT for Times New Roman), not an alias's. */
     public static boolean namesFamily(String postScriptName, String family) {
         return postScriptName != null && family != null
@@ -284,7 +297,7 @@ public final class FontNames {
     public static boolean looksSerif(String family) {
         String k = key(family);
         return k.contains("times") || k.contains("roman") || k.contains("serif") && !k.contains("sans")
-                || k.contains("georgia") || k.contains("cambria") || k.contains("garamond")
+                || k.contains("georgia") || k.contains("cambria") || k.contains("caladea") || k.contains("garamond")
                 || k.contains("book") || k.contains("palatino") || k.contains("century")
                 || k.contains("minion") || k.contains("baskerville") || k.contains("caslon")
                 || k.contains("mincho") || k.contains("song") || k.contains("constantia");

@@ -8,7 +8,7 @@ final class NumberingPart {
 
     private NumberingPart() {}
 
-    static String xml(Numbering numbering, StyleSheet styles) {
+    static String xml(Numbering numbering, StyleSheet styles, PartContext ctx) {
         StringBuilder sb = new StringBuilder(4096);
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n")
                 .append("<w:numbering xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">");
@@ -32,9 +32,10 @@ final class NumberingPart {
                 if (l != null && l.markerStyle() != null) {
                     RunStyle m = l.markerStyle();
                     RunStyle base = styles.normal;
+                    ctx.embedded.use(ctx.name(m.font() != null ? m.font() : base.font()), m.bold(), m.italic());
                     sb.append("<w:rPr>");
                     if (m.font() != null && ("bullet".equals(format) || !m.font().equals(base.font()))) {
-                        String f = Xml.esc(m.font());
+                        String f = Xml.esc(ctx.name(m.font()));
                         sb.append("<w:rFonts w:ascii=\"").append(f).append("\" w:hAnsi=\"").append(f)
                                 .append("\" w:eastAsia=\"").append(f).append("\" w:cs=\"").append(f)
                                 .append("\" w:hint=\"default\"/>");

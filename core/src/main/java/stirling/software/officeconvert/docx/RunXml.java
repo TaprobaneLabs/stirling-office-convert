@@ -20,7 +20,7 @@ final class RunXml {
             return;
         }
         if (style != null && style.font() != null) {
-            ctx.fonts.add(style.font());
+            ctx.fonts.add(ctx.name(style.font()));
         }
         if (hasRtlChars(text)) {
             for (String[] seg : directionSegments(text)) {
@@ -146,17 +146,19 @@ final class RunXml {
     private void runProps(StringBuilder sb, RunStyle s, RunStyle base, String text) {
         String family = s.font() != null ? s.font() : base.font();
         Scripts.Fonts f = Scripts.fonts(family, text, ctx.scripts);
+        ctx.embedded.use(ctx.name(f.latin()), s.bold(), s.italic());
         boolean own = s.font() != null && !s.font().equals(base.font());
         if (own || !Objects.equals(f.latin(), family) || !Objects.equals(f.eastAsian(), family)
                 || !Objects.equals(f.complex(), family) || f.eastAsianHint()) {
             for (String name : new String[] {f.latin(), f.eastAsian(), f.complex()}) {
                 if (name != null) {
-                    ctx.fonts.add(name);
+                    ctx.fonts.add(ctx.name(name));
                 }
             }
-            String latin = Xml.esc(f.latin());
+            String latin = Xml.esc(ctx.name(f.latin()));
             sb.append("<w:rFonts w:ascii=\"").append(latin).append("\" w:hAnsi=\"").append(latin)
-                    .append("\" w:eastAsia=\"").append(Xml.esc(f.eastAsian())).append("\" w:cs=\"").append(Xml.esc(f.complex()))
+                    .append("\" w:eastAsia=\"").append(Xml.esc(ctx.name(f.eastAsian()))).append("\" w:cs=\"")
+                    .append(Xml.esc(ctx.name(f.complex())))
                     .append(f.eastAsianHint() ? "\" w:hint=\"eastAsia\"/>" : "\"/>");
         }
         if (s.bold() != base.bold()) {

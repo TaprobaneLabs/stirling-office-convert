@@ -8,16 +8,17 @@ final class StylesPart {
 
     private StylesPart() {}
 
-    static String xml(StyleSheet sheet) {
+    static String xml(StyleSheet sheet, PartContext ctx) {
         RunStyle normal = sheet.normal;
         StringBuilder sb = new StringBuilder(4096);
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n")
                 .append("<w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">")
                 .append("<w:docDefaults><w:rPrDefault><w:rPr>");
         Scripts.Fonts slots = Scripts.defaults(normal.font(), sheet.scripts);
-        String latin = Xml.esc(normal.font());
+        String latin = Xml.esc(ctx.name(normal.font()));
         sb.append("<w:rFonts w:ascii=\"").append(latin).append("\" w:hAnsi=\"").append(latin).append("\" w:eastAsia=\"")
-                .append(Xml.esc(slots.eastAsian())).append("\" w:cs=\"").append(Xml.esc(slots.complex())).append("\"/>");
+                .append(Xml.esc(ctx.name(slots.eastAsian()))).append("\" w:cs=\"").append(Xml.esc(ctx.name(slots.complex())))
+                .append("\"/>");
         int hp = Xml.halfPoints(normal.size());
         sb.append("<w:sz w:val=\"").append(hp).append("\"/><w:szCs w:val=\"").append(hp).append("\"/>")
                 .append("<w:lang w:val=\"").append(latinLanguage(sheet.scripts)).append("\" w:eastAsia=\"")
@@ -74,9 +75,10 @@ final class StylesPart {
             sb.append("</w:pPr>");
             RunStyle r = s.run();
             if (r != null && r != normal) {
+                ctx.embedded.use(ctx.name(r.font()), r.bold(), r.italic());
                 sb.append("<w:rPr>");
                 if (!r.font().equals(normal.font())) {
-                    fonts(sb, r.font());
+                    fonts(sb, ctx.name(r.font()));
                 }
                 if (r.bold()) {
                     sb.append("<w:b/><w:bCs/>");
