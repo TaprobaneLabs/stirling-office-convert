@@ -82,6 +82,8 @@ public final class DocumentBuilder {
     // Sections on the current page (one carried over from the last page once a band reuses it), each section's lowest text
     private final List<Section> pageSections = new ArrayList<>();
     private final Map<Section, Float> sectionLows = new IdentityHashMap<>();
+    // Sections with a page whose notes sit closer under the body than Word's separator line allows
+    private final Set<Section> tightSections = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private record Spaced(Paragraph p, int band, int column) {}
 
@@ -213,7 +215,9 @@ public final class DocumentBuilder {
         if (section != null) {
             // A page of another size that opened no section of its own (a note continuation alone) leaves the last one be
             float notesHere = section.samePage(base) ? noteBottom(layout) : -Float.MAX_VALUE;
-            reserveFoot(flowBottom, paragraphs.misses() == misses ? footTop : Float.MAX_VALUE, notesHere);
+            // Word's separator line takes about a body line: notes the PDF packs closer under the body can't keep it
+            boolean tight = notesHere != -Float.MAX_VALUE && noteTop(layout) - flowBottom < stats.bodySize;
+            reserveFoot(flowBottom, paragraphs.misses() == misses ? footTop : Float.MAX_VALUE, notesHere, tight);
         }
         if (section == null) {
             section = base.copy();
@@ -302,7 +306,7 @@ public final class DocumentBuilder {
      * the lowest body text on the section's pages; the notes count only where they end below it, as a margin the PDF's
      * notes were set on would.
      */
-    private void reserveFoot(float flowBottom, float footTop, float noteBottom) {
+    private void reserveFoot(float flowBottom, float footTop, float noteBottom, boolean tight) {
         if (reservedFor != section) {
             reservedFor = section;
             reservedBottom = section.marginBottom;
@@ -319,11 +323,16 @@ public final class DocumentBuilder {
         }
         bandMargin = margin;
         sectionLows.merge(section, flowLow, Math::max);
-        if (noteLow != -Float.MAX_VALUE && noteLow + NOTE_SLACK >= flowLow + FOOT_CLEAR) {
+        if (tight) {
+            tightSections.add(section);
+            tightSections.addAll(pageSections);
+        }
+        if (noteLow != -Float.MAX_VALUE && !tightSections.contains(section)
+                && noteLow + NOTE_SLACK >= flowLow + FOOT_CLEAR) {
             margin = Math.max(margin, footMargin(noteLow + NOTE_SLACK));
         }
         section.marginBottom = margin;
-        if (noteBottom == -Float.MAX_VALUE) {
+        if (noteBottom == -Float.MAX_VALUE || tight) {
             return;
         }
         // A note's reference may sit in a section the page closed before its notes were counted, one carried over from
@@ -331,7 +340,7 @@ public final class DocumentBuilder {
         float body = noteBottom + NOTE_SLACK;
         for (Section s : pageSections) {
             float low = Math.max(sectionLows.getOrDefault(s, -Float.MAX_VALUE), flowBottom);
-            if (s != section && body >= low + FOOT_CLEAR && body > s.marginTop + 72) {
+            if (s != section && !tightSections.contains(s) && body >= low + FOOT_CLEAR && body > s.marginTop + 72) {
                 s.marginBottom = Math.max(s.marginBottom, s.pageHeight - body);
             }
         }
@@ -354,6 +363,20 @@ public final class DocumentBuilder {
             bottom = Math.max(bottom, paragraphs.wordBottom(d));
         }
         return bottom;
+    }
+
+    /** Where the page's footnotes start, as the top of Word's first note line. */
+    private float noteTop(PageLayout layout) {
+        float top = Float.MAX_VALUE;
+        for (PageLayout.Note note : layout.notes()) {
+            for (ParaDraft d : note.paras()) {
+                top = Math.min(top, paragraphs.wordTop(d));
+            }
+        }
+        for (ParaDraft d : layout.noteContinuation()) {
+            top = Math.min(top, paragraphs.wordTop(d));
+        }
+        return top;
     }
 
     private static final float FOOT_CLEAR = 2f;
