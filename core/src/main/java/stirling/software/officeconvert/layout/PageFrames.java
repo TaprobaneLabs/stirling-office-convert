@@ -13,13 +13,13 @@ import stirling.software.officeconvert.extract.PageData;
 
 final class PageFrames {
 
-    private record Sample(PageData page, float width, float height, List<float[]> boxes, List<Line> segments) {}
+    private record Sample(float width, float height, List<float[]> boxes, List<Line> segments) {}
 
     private final List<Sample> samples = new ArrayList<>();
     private final Map<String, PageFrame> frames = new HashMap<>();
 
     void add(PageData page, List<Line> segments) {
-        samples.add(new Sample(page, page.width(), page.height(), graphicBoxes(page, page.width(), page.height()), segments));
+        samples.add(new Sample(page.width(), page.height(), graphicBoxes(page, page.width(), page.height()), segments));
     }
 
     private static List<float[]> graphicBoxes(PageData page, float w, float h) {
@@ -123,7 +123,7 @@ final class PageFrames {
                     textRight = Math.max(textRight, o.right);
                 }
                 Set<Line> apart = Collections.newSetFromMap(new IdentityHashMap<>());
-                apart.addAll(headerFooter.demoted(s.page(), s.segments()));
+                apart.addAll(headerFooter.demoted(s.width(), s.height(), s.segments()));
                 for (Line l : s.segments()) {
                     RunningLine r = headerFooter.match(s.width(), s.height(), l);
                     if (r == null && apart.contains(l)) {

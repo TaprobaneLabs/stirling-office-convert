@@ -227,12 +227,11 @@ public final class HeaderFooter {
     }
 
     /** The page's lines of running lines set apart: they bound the page frame as a Word header or footer would. */
-    public List<Line> demoted(PageData page, List<Line> segments) {
-        float h = page.height();
+    List<Line> demoted(float w, float h, List<Line> segments) {
         List<Line> out = new ArrayList<>();
         for (Line seg : segments) {
             boolean top = seg.bottom < h * ZONE;
-            if ((top || seg.top > h * (1 - ZONE)) && demoted.contains(signature(seg, top, page.width()))) {
+            if ((top || seg.top > h * (1 - ZONE)) && demoted.contains(signature(seg, top, w))) {
                 out.add(seg);
             }
         }
