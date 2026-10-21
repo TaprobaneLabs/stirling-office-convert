@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 
 import stirling.software.officeconvert.extract.PageData;
@@ -142,31 +143,48 @@ public final class HeaderFooter {
      * the same running line, not body text: it's set apart there too, so it doesn't stretch the page frame or flow.
      */
     private void setApartCopies() {
-        // Each running line's texts, digits included: where they never change, they aren't page numbers and must match
-        Map<String, Set<String>> running = new HashMap<>();
+        // Each running line's digit runs, kept where they're the same on every page (null where they change, as page
+        // numbers do): a copy must have the fixed ones too
+        Map<String, String[]> fixed = new HashMap<>();
         for (RunningLine r : candidates.values()) {
             if (accepted.contains(r) || demoted.contains(r.signature)) {
-                Set<String> texts = running.computeIfAbsent(placeless(r.signature), k -> new HashSet<>());
                 for (Line l : r.occurrences.values()) {
-                    texts.add(digitsKept(l));
+                    fixed.merge(placeless(r.signature), digitRuns(l), HeaderFooter::sharedRuns);
                 }
             }
         }
         for (RunningLine r : candidates.values()) {
-            Set<String> texts = running.get(placeless(r.signature));
-            if (accepted.contains(r) || texts == null || !worded(r.signature)) {
+            String[] runs = fixed.get(placeless(r.signature));
+            if (accepted.contains(r) || runs == null || !worded(r.signature)) {
                 continue;
             }
-            if (texts.size() > 1 || r.occurrences.values().stream().allMatch(l -> texts.contains(digitsKept(l)))) {
+            if (r.occurrences.values().stream().allMatch(l -> fits(digitRuns(l), runs))) {
                 furniture.add(r.signature);
                 demoted.add(r.signature);
             }
         }
     }
 
-    /** A line's text as signatures compare it (case and spacing aside), its digits kept. */
-    private static String digitsKept(Line l) {
-        return l.text().strip().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+    private static String[] digitRuns(Line l) {
+        return DIGITS.matcher(l.text()).results().map(MatchResult::group).toArray(String[]::new);
+    }
+
+    /** The runs two lines share, null where they differ; all null when the lines have different counts of runs. */
+    private static String[] sharedRuns(String[] a, String[] b) {
+        String[] out = new String[Math.max(a.length, b.length)];
+        for (int i = 0; a.length == b.length && i < a.length; i++) {
+            out[i] = a[i] != null && a[i].equals(b[i]) ? a[i] : null;
+        }
+        return out;
+    }
+
+    private static boolean fits(String[] runs, String[] fixed) {
+        for (int i = 0; i < fixed.length; i++) {
+            if (fixed[i] != null && (i >= runs.length || !fixed[i].equals(runs[i]))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** A set-apart running line bounds the page frame when it has words: a bare page number may sit anywhere. */

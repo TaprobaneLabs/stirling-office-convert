@@ -55,8 +55,22 @@ class RunningCopiesTest {
     }
 
     @Test
+    void aNumberedHeadersCopyIsStillACopy() throws Exception {
+        float top = margin(convert(makePdf(HEADER, true)), "top");
+        assertTrue(top > 50 && top < BODY_TOP, "a header ending in its page number is matched past it: top margin " + top);
+    }
+
+    @Test
+    void aLineDifferingInTheFixedDigitsOfANumberedHeaderStaysBodyText() throws Exception {
+        assertNotSetApart(convert(makePdf(OTHER_YEAR, true)));
+    }
+
+    @Test
     void aLineDifferingInItsFixedDigitsStaysBodyText() throws Exception {
-        String xml = convert(makePdf(OTHER_YEAR));
+        assertNotSetApart(convert(makePdf(OTHER_YEAR)));
+    }
+
+    private static void assertNotSetApart(String xml) {
         int at = xml.indexOf("FY2021");
         assertTrue(at >= 0, "the contents page's line is converted");
         assertTrue(xml.lastIndexOf("<w:txbxContent", at) <= xml.lastIndexOf("</w:txbxContent>", at),
@@ -82,6 +96,11 @@ class RunningCopiesTest {
      * six pages of running text.
      */
     private Path makePdf(String contentsHeader) throws IOException {
+        return makePdf(contentsHeader, false);
+    }
+
+    /** As above; with {@code numbered}, each header line ends in its page number ("... In Brief 4"). */
+    private Path makePdf(String contentsHeader, boolean numbered) throws IOException {
         Path pdf = dir.resolve("report.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage cover = new PDPage(PDRectangle.LETTER);
@@ -98,7 +117,7 @@ class RunningCopiesTest {
             PDPage contents = new PDPage(PDRectangle.LETTER);
             doc.addPage(contents);
             try (PDPageContentStream cs = new PDPageContentStream(doc, contents)) {
-                text(cs, 190, 30, contentsHeader, 9);
+                text(cs, 190, 30, contentsHeader + (numbered ? " 2" : ""), 9);
                 text(cs, 90, BODY_TOP, "Contents", 16);
                 for (int i = 1; i <= 6; i++) {
                     text(cs, 90, BODY_TOP + 10 + i * 16, "Section " + i + " of the report", 12);
@@ -109,7 +128,7 @@ class RunningCopiesTest {
                 PDPage page = new PDPage(PDRectangle.LETTER);
                 doc.addPage(page);
                 try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
-                    text(cs, 190, 44, HEADER, 9);
+                    text(cs, 190, 44, HEADER + (numbered ? " " + (p + 2) : ""), 9);
                     for (int i = 0; BODY_TOP + i * PITCH <= 700; i++) {
                         text(cs, 90, BODY_TOP + i * PITCH, LINE, 12);
                     }
