@@ -84,6 +84,8 @@ public final class DocumentBuilder {
     private final Map<Section, Float> sectionLows = new IdentityHashMap<>();
     // Sections with a page whose notes sit closer under the body than Word's separator line allows
     private final Set<Section> tightSections = Collections.newSetFromMap(new IdentityHashMap<>());
+    // The margin each section had before another page's notes moved it, to restore if it turns tight
+    private final Map<Section, Float> beforeNotes = new IdentityHashMap<>();
 
     private record Spaced(Paragraph p, int band, int column) {}
 
@@ -326,6 +328,12 @@ public final class DocumentBuilder {
         if (tight) {
             tightSections.add(section);
             tightSections.addAll(pageSections);
+            for (Section s : pageSections) {
+                Float before = beforeNotes.remove(s);
+                if (before != null && s != section) {
+                    s.marginBottom = before;
+                }
+            }
         }
         if (noteLow != -Float.MAX_VALUE && !tightSections.contains(section)
                 && noteLow + NOTE_SLACK >= flowLow + FOOT_CLEAR) {
@@ -341,6 +349,7 @@ public final class DocumentBuilder {
         for (Section s : pageSections) {
             float low = Math.max(sectionLows.getOrDefault(s, -Float.MAX_VALUE), flowBottom);
             if (s != section && !tightSections.contains(s) && body >= low + FOOT_CLEAR && body > s.marginTop + 72) {
+                beforeNotes.putIfAbsent(s, s.marginBottom);
                 s.marginBottom = Math.max(s.marginBottom, s.pageHeight - body);
             }
         }
