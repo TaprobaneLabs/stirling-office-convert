@@ -6,6 +6,7 @@ import java.awt.Color;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipFile;
@@ -45,6 +46,12 @@ class RunningCopiesTest {
         float bottom = margin(xml, "bottom");
         assertTrue(top > 50 && top < BODY_TOP, "the body starts below the header, near its PDF top: top margin " + top);
         assertTrue(bottom > 12, "the cover's band doesn't set the bottom margin either: " + bottom);
+    }
+
+    @Test
+    void aCopyInCapitalsIsStillACopy() throws Exception {
+        float top = margin(convert(makePdf(HEADER.toUpperCase(Locale.ROOT))), "top");
+        assertTrue(top > 50 && top < BODY_TOP, "case doesn't make the copy body text: top margin " + top);
     }
 
     @Test

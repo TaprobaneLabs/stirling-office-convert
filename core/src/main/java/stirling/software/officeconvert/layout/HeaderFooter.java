@@ -148,7 +148,7 @@ public final class HeaderFooter {
             if (accepted.contains(r) || demoted.contains(r.signature)) {
                 Set<String> texts = running.computeIfAbsent(placeless(r.signature), k -> new HashSet<>());
                 for (Line l : r.occurrences.values()) {
-                    texts.add(l.text().strip());
+                    texts.add(digitsKept(l));
                 }
             }
         }
@@ -157,11 +157,16 @@ public final class HeaderFooter {
             if (accepted.contains(r) || texts == null || !worded(r.signature)) {
                 continue;
             }
-            if (texts.size() > 1 || r.occurrences.values().stream().allMatch(l -> texts.contains(l.text().strip()))) {
+            if (texts.size() > 1 || r.occurrences.values().stream().allMatch(l -> texts.contains(digitsKept(l)))) {
                 furniture.add(r.signature);
                 demoted.add(r.signature);
             }
         }
+    }
+
+    /** A line's text as signatures compare it (case and spacing aside), its digits kept. */
+    private static String digitsKept(Line l) {
+        return l.text().strip().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 
     /** A set-apart running line bounds the page frame when it has words: a bare page number may sit anywhere. */
