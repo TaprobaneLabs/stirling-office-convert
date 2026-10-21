@@ -32,6 +32,8 @@ public final class HeaderFooter {
     private final Set<String> furniture = new HashSet<>();
     // Running lines accepted, then set apart (they move on some pages), and their text set elsewhere
     private final Set<String> demoted = new HashSet<>();
+    // A copy's fixed digits per running line it may copy: each line in its slot is checked against them on every page
+    private final Map<String, List<String[]>> copyDigits = new HashMap<>();
     private final Map<Integer, Integer> numberOffsets = new HashMap<>();
     private Integer pageNumberOffset;
     private int pageCount;
@@ -165,8 +167,19 @@ public final class HeaderFooter {
             if (sources.stream().anyMatch(runs -> r.occurrences.values().stream().allMatch(l -> fits(digitRuns(l), runs)))) {
                 furniture.add(r.signature);
                 demoted.add(r.signature);
+                copyDigits.put(r.signature, sources);
             }
         }
+    }
+
+    private boolean isFurniture(String signature, Line seg) {
+        return furniture.contains(signature) && copies(signature, seg);
+    }
+
+    /** Whether a line in a copy's slot has the fixed digits of a running line it copies (pages not sampled too). */
+    private boolean copies(String signature, Line seg) {
+        List<String[]> sources = copyDigits.get(signature);
+        return sources == null || sources.stream().anyMatch(runs -> fits(digitRuns(seg), runs));
     }
 
     private static String[] digitRuns(Line l) {
@@ -265,7 +278,8 @@ public final class HeaderFooter {
         List<Line> out = new ArrayList<>();
         for (Line seg : segments) {
             boolean top = seg.bottom < h * ZONE;
-            if ((top || seg.top > h * (1 - ZONE)) && demoted.contains(signature(seg, top, w))) {
+            String sig = (top || seg.top > h * (1 - ZONE)) ? signature(seg, top, w) : null;
+            if (sig != null && demoted.contains(sig) && copies(sig, seg)) {
                 out.add(seg);
             }
         }
@@ -284,7 +298,7 @@ public final class HeaderFooter {
             if (carriesPageNumber(seg, page.index())) {
                 numberRows.add(seg.baseline);
                 out.add(seg);
-            } else if (furniture.contains(signature(seg, top, page.width()))) {
+            } else if (isFurniture(signature(seg, top, page.width()), seg)) {
                 out.add(seg);
             }
         }
