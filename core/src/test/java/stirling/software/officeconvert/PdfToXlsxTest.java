@@ -112,6 +112,108 @@ class PdfToXlsxTest {
     }
 
     @Test
+    void aTableCarriedOverAPageBreakStaysOnItsSheet() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.ledger(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String book = SpreadsheetPdfs.part(parts, "xl/workbook.xml");
+        assertEquals(1, book.split("<sheet ").length - 1, book);
+        assertTrue(book.contains("<sheet name=\"Page 1\""), book);
+        String strings = SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml");
+        assertTrue(strings.contains("Entry 42") && strings.contains("Closing balance carried to the next year."), strings);
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        assertEquals(1, sheet.split("<v>" + index(strings, "Description") + "</v>").length - 1, "the repeated header left out");
+        assertTrue(number(sheet, "1637.5"), "the last row typed");
+    }
+
+    @Test
+    void aShortFirstPartFreezesTheHeaderOnceTheTableGoesOn() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.ledger(dir, 4).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        assertEquals(1, SpreadsheetPdfs.part(parts, "xl/workbook.xml").split("<sheet ").length - 1);
+        assertTrue(SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml").contains("state=\"frozen\""),
+                "4 rows on the first page and 12 on the next: the header frozen");
+    }
+
+    @Test
+    void amountsInCellsMergedByAMissingRuleGoBackToTheirColumns() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.statement(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        String strings = SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml");
+        assertFalse(strings.contains("1,081.64") || strings.contains("2,400.00"), "no amount left as text");
+        Matcher paidIn = Pattern.compile("<c r=\"([A-Z]+)[0-9]+\"( s=\"[0-9]+\")?><v>1081.64</v>").matcher(sheet);
+        Matcher paidOut = Pattern.compile("<c r=\"([A-Z]+)[0-9]+\"( s=\"[0-9]+\")?><v>950</v>").matcher(sheet);
+        assertTrue(paidIn.find() && paidOut.find(), sheet);
+        assertEquals((char) (paidOut.group(1).charAt(0) + 1), paidIn.group(1).charAt(0), "paid in one column right of paid out");
+        assertEquals(1, sheet.split("<mergeCell ").length - 1, "only the year label stays merged: " + sheet);
+        assertTrue(strings.contains(">2026<"), "the year label kept as a label");
+    }
+
+    @Test
+    void theFirstBandedRowIsNotAHeader() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.banded(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        assertTrue(number(sheet, "4") && number(sheet, "10.75") && number(sheet, "43"), "the shaded first item typed: " + sheet);
+        assertFalse(SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml").contains(">10.75<"), "no amount left as text");
+    }
+
+    @Test
+    void aHeaderShadedLikeTheTotalRowStaysTheHeader() throws IOException {
+        for (Path pdf : new Path[] {SpreadsheetPdfs.shadedTotal(dir), SpreadsheetPdfs.stripedHeader(dir)}) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            try (PDDocument doc = Loader.loadPDF(pdf.toFile())) {
+                PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+            }
+            Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+            assertTrue(SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml").contains(">2025<"),
+                    pdf.getFileName() + ": the year a header label");
+            assertTrue(number(SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml"), "1250"), "the first item typed");
+        }
+    }
+
+    @Test
+    void aFillOverPartOfTheHeaderIsNoBand() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.bandHeader(dir, false).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        String strings = SpreadsheetPdfs.part(SpreadsheetPdfs.parts(out.toByteArray()), "xl/sharedStrings.xml");
+        assertFalse(strings.contains(">Account<"), "two fills over the same half cover half: " + strings);
+    }
+
+    @Test
+    void aHeaderBandOverAGridIsTheTablesHeaderRow() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.bandHeader(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String strings = SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml");
+        for (String label : new String[] {"Date", "Account", "Description", "Amount"}) {
+            assertTrue(strings.contains(">" + label + "<"), label + " in a cell of its own: " + strings);
+        }
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        Matcher amount = Pattern.compile("<c r=\"D([0-9]+)\" s=\"[0-9]+\" t=\"s\"><v>" + index(strings, "Amount") + "</v>")
+                .matcher(sheet);
+        assertTrue(amount.find(), "Amount over the amounts' column: " + sheet);
+        assertTrue(SpreadsheetPdfs.part(parts, "xl/workbook.xml").contains("Page1_Table1"));
+        assertTrue(SpreadsheetPdfs.part(parts, "xl/styles.xml").contains("205078"), "the band's fill kept");
+    }
+
+    @Test
     void odsCarriesTheSameValues() throws IOException {
         Map<String, byte[]> parts = convert(PdfToXlsx.Options.defaults().withFormat(PdfToXlsx.Format.ODS));
         String content = SpreadsheetPdfs.part(parts, "content.xml");
