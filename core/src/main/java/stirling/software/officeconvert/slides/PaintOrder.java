@@ -53,6 +53,8 @@ final class PaintOrder extends PDFGraphicsStreamEngine {
 
     private static final int MAX_MARKS = 30_000;
 
+    private static final int MAX_CLIP_SEGMENTS = 5_000;
+
     private static final double MIN_SLANT = 1.0;
 
     private final AffineTransform toDisplay;
@@ -61,6 +63,8 @@ final class PaintOrder extends PDFGraphicsStreamEngine {
     private final List<Mark> marks = new ArrayList<>();
     private final List<Slant> slants = new ArrayList<>();
     private final GeneralPath path = new GeneralPath();
+    private int segments;
+    private int pendingClip = -1;
     private Point2D current = new Point2D.Float();
     private int order;
     private final OperatorBudget budget = new OperatorBudget("ordering paint");
@@ -432,12 +436,14 @@ final class PaintOrder extends PDFGraphicsStreamEngine {
         path.lineTo(p2.getX(), p2.getY());
         path.lineTo(p3.getX(), p3.getY());
         path.closePath();
+        segments += 4;
         current = p0;
     }
 
     @Override
     public void moveTo(float x, float y) {
         path.moveTo(x, y);
+        segments++;
         current = new Point2D.Float(x, y);
     }
 
@@ -448,6 +454,7 @@ final class PaintOrder extends PDFGraphicsStreamEngine {
         } else {
             path.lineTo(x, y);
         }
+        segments++;
         current = new Point2D.Float(x, y);
     }
 
@@ -458,6 +465,7 @@ final class PaintOrder extends PDFGraphicsStreamEngine {
         } else {
             path.curveTo(x1, y1, x2, y2, x3, y3);
         }
+        segments++;
         current = new Point2D.Float(x3, y3);
     }
 
@@ -475,7 +483,7 @@ final class PaintOrder extends PDFGraphicsStreamEngine {
 
     @Override
     public void endPath() {
-        path.reset();
+        reset();
     }
 
     @Override
@@ -483,23 +491,36 @@ final class PaintOrder extends PDFGraphicsStreamEngine {
         Rectangle2D b = path.getBounds2D();
         double w = getGraphicsState().getLineWidth() / 2.0;
         mark(Kind.STROKE, new Rectangle2D.Double(b.getX() - w, b.getY() - w, b.getWidth() + 2 * w, b.getHeight() + 2 * w));
-        path.reset();
+        reset();
     }
 
     @Override
     public void fillPath(int windingRule) {
         mark(Kind.FILL, path.getBounds2D());
-        path.reset();
+        reset();
     }
 
     @Override
     public void fillAndStrokePath(int windingRule) {
         mark(Kind.FILL, path.getBounds2D());
-        path.reset();
+        reset();
     }
 
+    /** W and W* take effect once the path is painted or ended, as in PDFBox's renderer. */
     @Override
     public void clip(int windingRule) {
+        pendingClip = windingRule;
+    }
+
+    private void reset() {
+        if (pendingClip >= 0) {
+            GeneralPath clip = segments > MAX_CLIP_SEGMENTS ? new GeneralPath(path.getBounds2D()) : new GeneralPath(path);
+            clip.setWindingRule(pendingClip == Path2D.WIND_EVEN_ODD ? Path2D.WIND_EVEN_ODD : Path2D.WIND_NON_ZERO);
+            getGraphicsState().intersectClippingPath(clip);
+            pendingClip = -1;
+        }
+        path.reset();
+        segments = 0;
     }
 
     @Override

@@ -222,6 +222,38 @@ class PdfToPptxTest {
     }
 
     @Test
+    void aCroppedPhotoIsOnePicture() throws Exception {
+        BufferedImage img = new BufferedImage(360, 240, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < img.getHeight(); y++) {
+            for (int x = 0; x < img.getWidth(); x++) {
+                img.setRGB(x, y, new Color(40 + x * 200 / 360, 60 + y * 180 / 240, 150).getRGB());
+            }
+        }
+        Path cropped = dir.resolve("cropped.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(SlideFixtures.WIDE);
+            doc.addPage(page);
+            PDImageXObject x = LosslessFactory.createFromImage(doc, img);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                // A presentation app's crop: the whole photo drawn under a smaller clip.
+                cs.saveGraphicsState();
+                cs.addRect(130, 120, 300, 200);
+                cs.clip();
+                cs.drawImage(x, 100, 100, 360, 240);
+                cs.restoreGraphicsState();
+            }
+            doc.save(cropped.toFile());
+        }
+        Path out = dir.resolve("cropped.pptx");
+        PdfToPptx.convert(cropped, out, PdfToPptx.Options.defaults());
+        Map<String, byte[]> files = SlideFixtures.parts(Files.readAllBytes(out));
+        String slide = SlideFixtures.text(files, "ppt/slides/slide1.xml");
+        assertEquals(1, count(slide, "<p:pic>"), "the photo is placed once, cropped, not rendered again on top of itself");
+        assertEquals(1, files.keySet().stream().filter(n -> n.startsWith("ppt/media/")).count());
+        assertTrue(slide.contains("<a:srcRect"), "the crop is the picture's own");
+    }
+
+    @Test
     void aDarkPageOverWhitePaperKeepsItsBackground() throws Exception {
         Path dark = dir.resolve("dark.pdf");
         try (PDDocument doc = new PDDocument()) {
