@@ -1,6 +1,7 @@
 package stirling.software.officeconvert.sheet;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import stirling.software.officeconvert.extract.PageGraphics.Rule;
@@ -261,13 +262,20 @@ final class TableGrid {
     /**
      * A body cell merged across columns only because its row lacks a rule (alternate rows of a statement drawn without
      * one) holds numbers that each sit inside one column. They go back to those columns, so they're typed and the
-     * paid-in amount doesn't land under paid out.
+     * paid-in amount doesn't land under paid out. A row above must already divide those columns: a label spanning the
+     * columns under it (a year over its level and change) is merged on purpose.
      */
     private static List<Raw> unmerged(List<Raw> raws, float[] e, int header, Conventions document) {
+        int[] firstCut = new int[e.length];
+        Arrays.fill(firstCut, Integer.MAX_VALUE);
+        for (Raw r : raws) {
+            firstCut[r.col()] = Math.min(firstCut[r.col()], r.row());
+            firstCut[r.col() + r.colSpan()] = Math.min(firstCut[r.col() + r.colSpan()], r.row());
+        }
         List<Raw> out = new ArrayList<>(raws.size());
         for (Raw r : raws) {
             List<Raw> parts = r.colSpan() > 1 && r.rowSpan() == 1 && r.row() >= header && r.pieces() != null
-                    ? columnCells(r, e, document) : null;
+                    && dividedAbove(r, firstCut) ? columnCells(r, e, document) : null;
             if (parts == null) {
                 out.add(r);
             } else {
@@ -275,6 +283,15 @@ final class TableGrid {
             }
         }
         return out;
+    }
+
+    private static boolean dividedAbove(Raw r, int[] firstCut) {
+        for (int c = r.col() + 1; c < r.col() + r.colSpan(); c++) {
+            if (firstCut[c] >= r.row()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static List<Raw> columnCells(Raw r, float[] e, Conventions document) {

@@ -125,7 +125,8 @@ class PdfToXlsxTest {
         Matcher paidOut = Pattern.compile("<c r=\"([A-Z]+)[0-9]+\"( s=\"[0-9]+\")?><v>950</v>").matcher(sheet);
         assertTrue(paidIn.find() && paidOut.find(), sheet);
         assertEquals((char) (paidOut.group(1).charAt(0) + 1), paidIn.group(1).charAt(0), "paid in one column right of paid out");
-        assertFalse(sheet.contains("<mergeCell "), "no merged body cells");
+        assertEquals(1, sheet.split("<mergeCell ").length - 1, "only the year label stays merged: " + sheet);
+        assertTrue(strings.contains(">2026<"), "the year label kept as a label");
     }
 
     @Test

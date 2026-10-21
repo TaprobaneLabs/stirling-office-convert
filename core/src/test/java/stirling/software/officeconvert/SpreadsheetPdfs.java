@@ -71,10 +71,14 @@ final class SpreadsheetPdfs {
         return pdf;
     }
 
-    /** A statement whose ruled table lacks the rule between paid out and paid in on every other row. */
+    /**
+     * A statement whose ruled table lacks the rule between paid out and paid in on every other row, under a year
+     * label merged across both on purpose.
+     */
     static Path statement(Path dir) throws IOException {
         Path pdf = dir.resolve("statement.pdf");
         String[][] rows = {
+            {"", "", "2026", "", ""},
             {"Date", "Description", "Paid out", "Paid in", "Balance"},
             {"01 Jul", "Rent", "950.00", "", "4,050.00"},
             {"02 Jul", "Salary", "", "2,400.00", "6,450.00"},
@@ -97,7 +101,7 @@ final class SpreadsheetPdfs {
                 }
                 for (int r = 0; r < rows.length; r++) {
                     for (int c = 0; c < cols.length; c++) {
-                        if (c == 3 && r % 2 == 0 && r > 0) {
+                        if (c == 3 && (r == 0 || r % 2 == 1 && r > 1)) {
                             continue;
                         }
                         cs.moveTo(cols[c], top - r * rowH);
@@ -108,8 +112,8 @@ final class SpreadsheetPdfs {
                 for (int r = 0; r < rows.length; r++) {
                     for (int c = 0; c < rows[r].length; c++) {
                         String s = rows[r][c];
-                        PDType1Font font = r == 0 ? BOLD : REGULAR;
-                        float x = c >= 2 ? cols[c + 1] - 4 - font.getStringWidth(s) / 1000f * 10 : cols[c] + 4;
+                        PDType1Font font = r <= 1 ? BOLD : REGULAR;
+                        float x = c >= 2 && r > 0 ? cols[c + 1] - 4 - font.getStringWidth(s) / 1000f * 10 : cols[c] + 4;
                         text(cs, font, 10, x, top - r * rowH - 14, s);
                     }
                 }
