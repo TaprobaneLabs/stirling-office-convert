@@ -40,3 +40,6 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.3` | Take a header band over a ruled grid into the table as its header row (#16) | Not offered yet |
 | `0.2.2-fj.4` | Keep chart axis labels spread along a row apart instead of reading them as letter-spaced text (#20) | Not offered yet |
 | `0.2.2-fj.4` | Keep a slide chart's labels as text up to 80 lines instead of baking them into its picture (#21) | Not offered yet |
+| `0.2.2-fj.5` | Fit paragraphs on single-column pages to their PDF lines, as on pages with flowing columns (#17) | Not offered yet |
+| `0.2.2-fj.5` | Set the bottom margin where the PDF's footnotes end, so Word places them where the PDF does (#18) | Not offered yet |
+| `0.2.2-fj.5` | Bound the page frame by running lines set apart on each page, such as a header the contents page carries higher (#19) | Not offered yet |
