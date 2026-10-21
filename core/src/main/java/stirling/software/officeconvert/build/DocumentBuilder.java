@@ -77,6 +77,8 @@ public final class DocumentBuilder {
     private float flowLow;
     private float footHigh;
     private float noteLow;
+    // Sections opened on the current page: a footnote's reference may sit in one closed before the page ends
+    private final List<Section> pageSections = new ArrayList<>();
 
     private record Spaced(Paragraph p, int band, int column) {}
 
@@ -128,6 +130,7 @@ public final class DocumentBuilder {
             firstFooterHeight = set.titlePage() ? SectionPlanner.runningLineHeight(stats.bodySize) : footerHeight;
         }
         release();
+        pageSections.clear();
         if (carry != null && !carriedOn(layout)) {
             Carry c = carry;
             carry = null;
@@ -310,7 +313,13 @@ public final class DocumentBuilder {
             margin = Math.max(margin, footMargin(footHigh - FOOT_GAP));
         }
         if (noteLow != -Float.MAX_VALUE && noteLow + NOTE_SLACK >= flowLow + FOOT_CLEAR) {
-            margin = Math.max(margin, footMargin(noteLow + NOTE_SLACK));
+            float notes = footMargin(noteLow + NOTE_SLACK);
+            margin = Math.max(margin, notes);
+            if (noteBottom != -Float.MAX_VALUE) {
+                for (Section s : pageSections) {
+                    s.marginBottom = Math.max(s.marginBottom, notes);
+                }
+            }
         }
         section.marginBottom = margin;
     }
@@ -360,6 +369,7 @@ public final class DocumentBuilder {
             at.breakOwed = false;
         }
         section = s;
+        pageSections.add(s);
     }
 
     private float column(PageLayout layout, PageLayout.Band band, int ci, boolean flowOn, Section base, Cursor at,

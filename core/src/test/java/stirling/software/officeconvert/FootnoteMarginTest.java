@@ -55,6 +55,54 @@ class FootnoteMarginTest {
                 "page 2's last line, at " + lastBody + ", still fits above the margin at " + wordBottom);
     }
 
+    @Test
+    void aReferenceAboveColumnsMovesItsSectionsMarginToo() throws Exception {
+        float noteBaseline = 680;
+        String xml = convert(makeColumnsPdf(noteBaseline));
+        assertTrue(xml.contains("w:footnoteReference"), "the note is a Word footnote");
+        Matcher m = Pattern.compile("<w:pgMar [^>]*w:bottom=\"(\\d+)\"").matcher(xml);
+        float pdfBottom = noteBaseline + 0.2f * NOTE_PITCH;
+        int sections = 0;
+        while (m.find()) {
+            sections++;
+            float wordBottom = HEIGHT - Integer.parseInt(m.group(1)) / 20f;
+            assertTrue(Math.abs(wordBottom - pdfBottom) <= 8,
+                    "section " + sections + " ends at " + wordBottom + ", the PDF's note at " + pdfBottom);
+        }
+        assertTrue(sections >= 2, "the title and the columns are sections of their own: " + sections);
+    }
+
+    /** A full-width title holding the note's reference, two columns of text under it, and the note at the foot. */
+    private Path makeColumnsPdf(float noteBaseline) throws IOException {
+        Path pdf = dir.resolve("columns.pdf");
+        String half = "The agencies expect institutions to take all steps";
+        float width = FONT.getStringWidth(half) / 1000f * SIZE;
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LETTER);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                String title = "Joint Statement on Completing the Transition";
+                text(cs, 72, 90, title, 18, 0);
+                text(cs, 72 + FONT.getStringWidth(title) / 1000f * 18, 90, "1", 9, 7);
+                for (float left : new float[] {72, 72 + width + 24}) {
+                    for (int i = 0; i < 30; i++) {
+                        text(cs, left, 130 + i * PITCH, half, SIZE, 0);
+                    }
+                }
+                float firstNote = noteBaseline - NOTE_PITCH;
+                cs.setLineWidth(0.5f);
+                cs.moveTo(72, HEIGHT - (firstNote - NOTE_PITCH));
+                cs.lineTo(216, HEIGHT - (firstNote - NOTE_PITCH));
+                cs.stroke();
+                text(cs, 72, firstNote, "1", 6.5f, 3.5f);
+                text(cs, 76, firstNote, NOTE, NOTE_SIZE, 0);
+                text(cs, 72, noteBaseline, "It runs to a second line.", NOTE_SIZE, 0);
+            }
+            doc.save(pdf.toFile());
+        }
+        return pdf;
+    }
+
     private static float bottomMargin(String xml) {
         Matcher m = Pattern.compile("<w:pgMar [^>]*w:bottom=\"(\\d+)\"").matcher(xml);
         assertTrue(m.find(), "section has page margins");
