@@ -1,6 +1,7 @@
 package stirling.software.officeconvert.sheet;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import stirling.software.officeconvert.extract.PageGraphics.Rule;
@@ -121,7 +122,8 @@ final class TableGrid {
             boolean typed, boolean dropHyphens) {
         TableDetection.Found t = item.table();
         Split split = split(place(item, dropHyphens), t.colEdges(), t.cols());
-        List<Raw> raw = new ArrayList<>(split.raws());
+        List<Raw> raw = typed ? unmerged(split.raws(), split.edges(), t.headerRows(), document)
+                : new ArrayList<>(split.raws());
         List<CellText> above = new ArrayList<>();
         int prose = proseRows(raw, t.rows());
         for (int r = 0; r < prose; r++) {
@@ -257,6 +259,81 @@ final class TableGrid {
         return new Split(out, e, start[cols]);
     }
 
+    /**
+     * A body cell merged across columns only because its row lacks a rule (alternate rows of a statement drawn without
+     * one) holds numbers that each sit inside one column. They go back to those columns, so they're typed and the
+     * paid-in amount doesn't land under paid out. A row above must already divide those columns: a label spanning the
+     * columns under it (a year over its level and change) is merged on purpose.
+     */
+    private static List<Raw> unmerged(List<Raw> raws, float[] e, int header, Conventions document) {
+        int[] firstCut = new int[e.length];
+        Arrays.fill(firstCut, Integer.MAX_VALUE);
+        for (Raw r : raws) {
+            firstCut[r.col()] = Math.min(firstCut[r.col()], r.row());
+            firstCut[r.col() + r.colSpan()] = Math.min(firstCut[r.col() + r.colSpan()], r.row());
+        }
+        List<Raw> out = new ArrayList<>(raws.size());
+        for (Raw r : raws) {
+            List<Raw> parts = r.colSpan() > 1 && r.rowSpan() == 1 && r.row() >= header && r.pieces() != null
+                    && dividedAbove(r, firstCut) ? columnCells(r, e, document) : null;
+            if (parts == null) {
+                out.add(r);
+            } else {
+                out.addAll(parts);
+            }
+        }
+        return out;
+    }
+
+    private static boolean dividedAbove(Raw r, int[] firstCut) {
+        for (int c = r.col() + 1; c < r.col() + r.colSpan(); c++) {
+            if (firstCut[c] >= r.row()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<Raw> columnCells(Raw r, float[] e, Conventions document) {
+        int span = r.colSpan();
+        List<StringBuilder> parts = new ArrayList<>();
+        List<List<ColumnSplit.Piece>> pieces = new ArrayList<>();
+        float[] width = new float[span];
+        for (int k = 0; k < span; k++) {
+            parts.add(new StringBuilder());
+            pieces.add(new ArrayList<>());
+        }
+        float[] inner = Arrays.copyOfRange(e, r.col() + 1, r.col() + span);
+        for (ColumnSplit.Piece whole : r.pieces()) {
+            for (ColumnSplit.Piece p : ColumnSplit.atCuts(whole, inner)) {
+                int k = 0;
+                while (k < span && !(p.x() >= e[r.col() + k] - 1f && p.right() <= e[r.col() + k + 1] + 1f)) {
+                    k++;
+                }
+                if (k == span || CellTyper.type(p.text(), document).isText()) {
+                    return null;
+                }
+                parts.get(k).append(parts.get(k).isEmpty() ? "" : " ").append(p.text());
+                pieces.get(k).add(p);
+                width[k] += p.right() - p.x();
+            }
+        }
+        List<Raw> out = new ArrayList<>(span);
+        TableDetection.FoundCell c = r.cell();
+        CellText t = r.text();
+        for (int k = 0; k < span; k++) {
+            int col = r.col() + k;
+            TableDetection.FoundCell sub = new TableDetection.FoundCell(c.row(), c.col(), 1, 1, e[col], c.top(), e[col + 1],
+                    c.bottom(), c.borderTop(), c.borderBottom(), k == 0 && c.borderLeft(), k == span - 1 && c.borderRight(),
+                    c.fill(), TableDetection.HAlign.GENERAL, c.vAlign(), "");
+            String text = parts.get(k).toString();
+            CellText piece = text.isEmpty() ? CellText.EMPTY : new CellText(text, t.size(), t.bold(), t.italic(),
+                    t.underline(), t.strike(), t.rgb(), t.scripted(), width[k], 1);
+            out.add(new Raw(sub, r.row(), col, 1, 1, piece, text.isEmpty() ? null : pieces.get(k)));
+        }
+        return out;
+    }
+
     private static List<Raw> pieceCells(Raw r, float[] cuts, int first, float[] e) {
         List<StringBuilder> parts = new ArrayList<>();
         List<List<ColumnSplit.Piece>> pieces = new ArrayList<>();
@@ -265,11 +342,13 @@ final class TableGrid {
             parts.add(new StringBuilder());
             pieces.add(new ArrayList<>());
         }
-        for (ColumnSplit.Piece p : r.pieces()) {
-            int k = ColumnSplit.part(cuts, p.x());
-            parts.get(k).append(parts.get(k).isEmpty() ? "" : " ").append(p.text());
-            pieces.get(k).add(p);
-            width[k] += p.right() - p.x();
+        for (ColumnSplit.Piece whole : r.pieces()) {
+            for (ColumnSplit.Piece p : ColumnSplit.atCuts(whole, cuts)) {
+                int k = ColumnSplit.part(cuts, p.x());
+                parts.get(k).append(parts.get(k).isEmpty() ? "" : " ").append(p.text());
+                pieces.get(k).add(p);
+                width[k] += p.right() - p.x();
+            }
         }
         List<Raw> out = new ArrayList<>();
         TableDetection.FoundCell c = r.cell();

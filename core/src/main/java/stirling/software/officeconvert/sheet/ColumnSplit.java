@@ -4,15 +4,20 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import stirling.software.officeconvert.layout.Line;
 import stirling.software.officeconvert.layout.ParaDraft;
+import stirling.software.officeconvert.layout.Word;
 
 final class ColumnSplit {
 
-    record Piece(String text, float x, float right) {}
+    /** Text between wider gaps in a one-line cell, with its words' extents. */
+    record Piece(String text, float x, float right, List<Piece> words) {}
 
     private static final float AGREE = 0.6f;
+
+    private static final Pattern NUMBER = Pattern.compile("[-+−(]?[$€£]?\\d[\\d,.]*%?\\)?");
 
     private ColumnSplit() {}
 
@@ -25,19 +30,46 @@ final class ColumnSplit {
             return null;
         }
         List<Piece> out = new ArrayList<>();
-        StringBuilder sb = new StringBuilder();
-        float x = line.words.getFirst().x;
-        float right = x;
+        List<Piece> words = new ArrayList<>();
         for (int i = 0; i < line.words.size(); i++) {
             if (i > 0 && line.gaps[i] != Line.SPACE) {
-                out.add(new Piece(sb.toString(), x, right));
-                sb.setLength(0);
-                x = line.words.get(i).x;
+                out.add(piece(words));
+                words = new ArrayList<>();
             }
-            sb.append(sb.isEmpty() ? "" : " ").append(line.words.get(i).text);
-            right = line.words.get(i).right;
+            Word w = line.words.get(i);
+            words.add(new Piece(w.text, w.x, w.right, List.of()));
         }
-        out.add(new Piece(sb.toString(), x, right));
+        out.add(piece(words));
+        return out;
+    }
+
+    private static Piece piece(List<Piece> words) {
+        StringBuilder sb = new StringBuilder();
+        for (Piece w : words) {
+            sb.append(sb.isEmpty() ? "" : " ").append(w.text());
+        }
+        return new Piece(sb.toString(), words.getFirst().x(), words.getLast().right(), List.copyOf(words));
+    }
+
+    /**
+     * A piece across a cut is split at the cut when every word is a number: two quarters' figures a space apart
+     * ("3.3 7.0") under a year whose quarters have no rules between them. Labels stay whole.
+     */
+    static List<Piece> atCuts(Piece p, float[] cuts) {
+        if (p.words().size() < 2 || part(cuts, p.x()) == part(cuts, p.words().getLast().x())
+                || !p.words().stream().allMatch(w -> NUMBER.matcher(w.text()).matches())) {
+            return List.of(p);
+        }
+        List<Piece> out = new ArrayList<>();
+        List<Piece> run = new ArrayList<>();
+        for (Piece w : p.words()) {
+            if (!run.isEmpty() && part(cuts, w.x()) != part(cuts, run.getFirst().x())) {
+                out.add(piece(run));
+                run = new ArrayList<>();
+            }
+            run.add(w);
+        }
+        out.add(piece(run));
         return out;
     }
 
