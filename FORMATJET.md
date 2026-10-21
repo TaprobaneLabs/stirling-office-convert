@@ -34,3 +34,7 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.2` | Count Office fonts the PDF names without embedding as exact (#10) | Not offered yet |
 | `0.2.2-fj.2` | Print each running header piece once (#11) | Not offered yet |
 | `0.2.2-fj.2` | Fit pages whose flowing columns sit under other bands (#12) | Not offered yet |
+| `0.2.2-fj.3` | Keep a table carried over a page break on the sheet it started on, in the default sheet-per-page layout (#13) | Not offered yet |
+| `0.2.2-fj.3` | Put numbers back in their columns: cells merged by a missing rule, and figures a space apart across a sub-column cut (#14) | Not offered yet |
+| `0.2.2-fj.3` | Don't take the first banded row for a second header row (#15) | Not offered yet |
+| `0.2.2-fj.3` | Take a header band over a ruled grid into the table as its header row (#16) | Not offered yet |

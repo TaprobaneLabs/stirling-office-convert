@@ -45,8 +45,10 @@ final class TableFinder {
                     continue;
                 }
                 if (!Regions.overlapsMostly(b, claimed)) {
-                    found.add(f.gridded() ? t : TableShaper.addFrameHeader(t, f.box(), segments));
-                    claimed.add(b);
+                    TableDetection.Found kept = f.gridded() ? TableShaper.addBandHeader(t, segments, fills)
+                            : TableShaper.addFrameHeader(t, f.box(), segments);
+                    found.add(kept);
+                    claimed.add(f.gridded() ? boxOf(kept) : b);
                 }
             }
         }
