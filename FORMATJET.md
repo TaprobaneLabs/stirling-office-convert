@@ -44,3 +44,4 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.5` | Fit paragraphs on single-column pages to their PDF lines, as on pages with flowing columns (#17) | Not offered yet |
 | `0.2.2-fj.5` | Set the bottom margin where the PDF's footnotes end, so Word places them where the PDF does (#18) | Not offered yet |
 | `0.2.2-fj.5` | Bound the page frame by running lines set apart on each page, such as a header the contents page carries higher (#19) | Not offered yet |
+| `0.2.2-fj.6` | Embed Caladea in Word documents whose PDF sets their text in it, so Word breaks lines as the PDF does instead of in its wider Cambria (#22) | Not offered yet |
