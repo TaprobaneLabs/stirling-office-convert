@@ -112,6 +112,23 @@ class PdfToXlsxTest {
     }
 
     @Test
+    void aTableCarriedOverAPageBreakStaysOnItsSheet() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.ledger(dir).toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String book = SpreadsheetPdfs.part(parts, "xl/workbook.xml");
+        assertEquals(1, book.split("<sheet ").length - 1, book);
+        assertTrue(book.contains("<sheet name=\"Page 1\""), book);
+        String strings = SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml");
+        assertTrue(strings.contains("Entry 42") && strings.contains("Closing balance carried to the next year."), strings);
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        assertEquals(1, sheet.split("<v>" + index(strings, "Description") + "</v>").length - 1, "the repeated header left out");
+        assertTrue(number(sheet, "1637.5"), "the last row typed");
+    }
+
+    @Test
     void odsCarriesTheSameValues() throws IOException {
         Map<String, byte[]> parts = convert(PdfToXlsx.Options.defaults().withFormat(PdfToXlsx.Format.ODS));
         String content = SpreadsheetPdfs.part(parts, "content.xml");

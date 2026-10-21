@@ -144,7 +144,23 @@ public final class SheetBuilder {
     private void pageSheets(PageData page, List<Object> items, float textWidth) throws IOException {
         List<List<Object>> groups = settings.splitLargeTables() ? groups(items) : List.of(items);
         int number = page.index() + 1;
-        for (int g = 0; g < groups.size(); g++) {
+        int from = 0;
+        // A table carried over the page break goes on, with the rest of its group, on the sheet it started on
+        if (open != null && !items.isEmpty() && items.getFirst() instanceof TableGrid carried
+                && carriesOn(open.last, carried, page) && sameCaptions(open.last.grid(), carried)
+                && open.next + rows(groups.getFirst()) < MAX_ROWS) {
+            List<Object> group = groups.getFirst();
+            append(open, carried, page);
+            for (Object item : group.subList(1, group.size())) {
+                write(open, item, page);
+            }
+            from = 1;
+            if (groups.size() == 1 && open.last != null) {
+                return;
+            }
+        }
+        closeOpen();
+        for (int g = from; g < groups.size(); g++) {
             List<Object> group = groups.get(g);
             String name = groups.size() == 1 ? "Page " + number : "Page " + number + " Table " + (g + 1);
             Sheet s = start(page, name, textWidth);
@@ -165,8 +181,36 @@ public final class SheetBuilder {
                     s.frozen = first + grid.headerRows;
                 }
             }
-            end(s);
+            if (g == groups.size() - 1 && s.last != null) {
+                open = s;
+            } else {
+                end(s);
+            }
         }
+    }
+
+    /** Captions over the carried part are left out when it joins, so only a repeated caption (or none) may be. */
+    private static boolean sameCaptions(TableGrid prev, TableGrid next) {
+        if (next.above.isEmpty()) {
+            return true;
+        }
+        if (next.above.size() != prev.above.size()) {
+            return false;
+        }
+        for (int i = 0; i < next.above.size(); i++) {
+            if (!next.above.get(i).text().equals(prev.above.get(i).text())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int rows(List<Object> group) {
+        int n = 0;
+        for (Object item : group) {
+            n += item instanceof TableGrid g ? g.rows + g.above.size() + 1 : 2;
+        }
+        return n;
     }
 
     private static List<List<Object>> groups(List<Object> items) {
