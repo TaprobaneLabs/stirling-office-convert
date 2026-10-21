@@ -303,17 +303,20 @@ final class TableGrid {
             parts.add(new StringBuilder());
             pieces.add(new ArrayList<>());
         }
-        for (ColumnSplit.Piece p : r.pieces()) {
-            int k = 0;
-            while (k < span && !(p.x() >= e[r.col() + k] - 1f && p.right() <= e[r.col() + k + 1] + 1f)) {
-                k++;
+        float[] inner = Arrays.copyOfRange(e, r.col() + 1, r.col() + span);
+        for (ColumnSplit.Piece whole : r.pieces()) {
+            for (ColumnSplit.Piece p : ColumnSplit.atCuts(whole, inner)) {
+                int k = 0;
+                while (k < span && !(p.x() >= e[r.col() + k] - 1f && p.right() <= e[r.col() + k + 1] + 1f)) {
+                    k++;
+                }
+                if (k == span || CellTyper.type(p.text(), document).isText()) {
+                    return null;
+                }
+                parts.get(k).append(parts.get(k).isEmpty() ? "" : " ").append(p.text());
+                pieces.get(k).add(p);
+                width[k] += p.right() - p.x();
             }
-            if (k == span || CellTyper.type(p.text(), document).isText()) {
-                return null;
-            }
-            parts.get(k).append(parts.get(k).isEmpty() ? "" : " ").append(p.text());
-            pieces.get(k).add(p);
-            width[k] += p.right() - p.x();
         }
         List<Raw> out = new ArrayList<>(span);
         TableDetection.FoundCell c = r.cell();
