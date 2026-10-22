@@ -46,3 +46,4 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.5` | Bound the page frame by running lines set apart on each page, such as a header the contents page carries higher (#19) | Not offered yet |
 | `0.2.2-fj.6` | Embed Caladea in Word documents whose PDF sets their text in it, so Word breaks lines as the PDF does instead of in its wider Cambria (#22) | Not offered yet |
 | `0.2.2-fj.7` | Apply clips in slide paint order, so a photo a presentation app crops is placed once instead of rendered again over itself (#23) | Not offered yet |
+| `0.2.2-fj.8` | Write private-use bullets in the symbol font Word draws them with, so a LibreOffice PDF's bullets aren't boxes in Word (#24) | Not offered yet |
