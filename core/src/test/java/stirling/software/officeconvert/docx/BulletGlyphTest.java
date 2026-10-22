@@ -65,6 +65,35 @@ class BulletGlyphTest {
         assertTrue(second.contains("<w:rFonts w:ascii=\"Symbol\""), "a level with no marker style gets the font too");
     }
 
+    @Test
+    void aBulletKeptAsTextIsSetInSymbol() {
+        RunStyle arial = new RunStyle("Arial", 11f, false, false, false, false, 0, -1, 0, false);
+        StringBuilder sb = new StringBuilder();
+        new RunXml(new PartContext()).textRun(sb, SYMBOL_BULLET, arial, arial);
+        assertTrue(sb.toString().contains("<w:rFonts w:ascii=\"Symbol\""), sb.toString());
+    }
+
+    @Test
+    void onlyTheSymbolCharactersOfARunChangeFont() {
+        RunStyle arial = new RunStyle("Arial", 11f, false, false, false, false, 0, -1, 0, false);
+        StringBuilder sb = new StringBuilder();
+        new RunXml(new PartContext()).textRun(sb, SYMBOL_BULLET + " Risk assessment", arial, arial);
+        String xml = sb.toString();
+        assertEquals(2, xml.split("<w:r>", -1).length - 1, xml);
+        String words = xml.substring(xml.lastIndexOf("<w:r>"));
+        assertTrue(words.contains("Risk assessment"));
+        assertFalse(words.contains("Symbol"), "the words keep the run's font");
+    }
+
+    @Test
+    void aRunAlreadyInSymbolIsLeftAsItIs() {
+        RunStyle symbol = new RunStyle("Symbol", 11f, false, false, false, false, 0, -1, 0, true);
+        RunStyle arial = new RunStyle("Arial", 11f, false, false, false, false, 0, -1, 0, false);
+        StringBuilder sb = new StringBuilder();
+        new RunXml(new PartContext()).textRun(sb, SYMBOL_BULLET + "x", symbol, arial);
+        assertEquals(1, sb.toString().split("<w:r>", -1).length - 1, sb.toString());
+    }
+
     private static String level(String xml, int ilvl) {
         int start = xml.indexOf("<w:lvl w:ilvl=\"" + ilvl + "\">");
         return xml.substring(start, xml.indexOf("</w:lvl>", start));

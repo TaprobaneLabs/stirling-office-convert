@@ -9,7 +9,8 @@ import java.util.Set;
  * any other font Word draws an empty box. A PDF from LibreOffice sets such a bullet in OpenSymbol,
  * which the document names by an Office family, so the bullet goes back to the symbol font it came
  * from, as Word stores its own bullets. Other private-use characters have no font Word knows, so they
- * become a plain bullet.
+ * become a plain bullet. {@link RunXml} does the same for such characters in body text, such as a
+ * bullet kept as text before a tab.
  */
 record BulletGlyph(String text, String font) {
 
@@ -28,13 +29,23 @@ record BulletGlyph(String text, String font) {
         if (c < '' || c > '') {
             return new BulletGlyph(text, null);
         }
-        if (c < '' || c > '') {
+        if (!symbolRange(c)) {
             return new BulletGlyph(BULLET, null);
         }
         if (symbolFont(markerFont)) {
             return new BulletGlyph(text, null);
         }
-        return new BulletGlyph(text, WINGDINGS.contains(c) ? "Wingdings" : "Symbol");
+        return new BulletGlyph(text, symbolFontFor(c));
+    }
+
+    /** Where Symbol and Wingdings characters sit when a document stores them as Unicode. */
+    static boolean symbolRange(char c) {
+        return c >= '' && c <= '';
+    }
+
+    /** The font that draws a character of {@link #symbolRange}: Wingdings for its bullets, else Symbol. */
+    static String symbolFontFor(char c) {
+        return WINGDINGS.contains(c) ? "Wingdings" : "Symbol";
     }
 
     static boolean symbolFont(String font) {
