@@ -42,6 +42,26 @@ class BulletGlyphTest {
     }
 
     @Test
+    void anIconFontsMarkerBecomesAPlainBulletNotASymbolGlyph() {
+        // Font Awesome's square sits at U+F0C8, where Symbol has a different glyph.
+        BulletGlyph g = BulletGlyph.of("", "Arial");
+        assertEquals("•", g.text());
+        assertNull(g.font());
+    }
+
+    @Test
+    void anIconInBodyTextIsLeftAsItIs() {
+        RunStyle arial = new RunStyle("Arial", 11f, false, false, false, false, 0, -1, 0, false);
+        StringBuilder sb = new StringBuilder();
+        // Font Awesome's envelope (U+F0E0) and eye (U+F06E, also a Wingdings bullet) stay as they are.
+        new RunXml(new PartContext()).textRun(sb, SYMBOL_BULLET + "x mail  view", arial, arial);
+        String xml = sb.toString();
+        assertTrue(xml.contains("x mail  view"), "icons keep the run's font: " + xml);
+        assertFalse(xml.contains("Wingdings"), xml);
+        assertTrue(xml.contains("<w:rFonts w:ascii=\"Symbol\""), "Symbol's bullet still moves");
+    }
+
+    @Test
     void ordinaryBulletsAreLeftAlone() {
         for (String b : new String[] {"•", "▪", "-", "o"}) {
             BulletGlyph g = BulletGlyph.of(b, "Arial");

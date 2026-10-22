@@ -24,7 +24,7 @@ final class RunXml {
         }
         String family = style != null && style.font() != null ? style.font() : base != null ? base.font() : null;
         if (base != null && hasSymbolChars(text) && !BulletGlyph.symbolFont(family == null ? null : ctx.name(family))) {
-            // Symbol and Wingdings characters in another font: Word would draw boxes (BulletGlyph).
+            // Symbol's bullet in another font: Word would draw a box (BulletGlyph).
             RunStyle own = style != null ? style : base;
             for (String[] seg : symbolSegments(text)) {
                 directedRun(sb, seg[0], seg[1] != null ? own.withFont(seg[1]) : style, base);
@@ -35,12 +35,7 @@ final class RunXml {
     }
 
     private static boolean hasSymbolChars(String s) {
-        for (int i = 0; i < s.length(); i++) {
-            if (BulletGlyph.symbolRange(s.charAt(i))) {
-                return true;
-            }
-        }
-        return false;
+        return s.indexOf(BulletGlyph.SYMBOL_BULLET) >= 0;
     }
 
     /** The text in pieces, each with the symbol font it needs or null for the run's own font. */
@@ -60,7 +55,7 @@ final class RunXml {
     }
 
     private static String fontOf(char c) {
-        return BulletGlyph.symbolRange(c) ? BulletGlyph.symbolFontFor(c) : null;
+        return c == BulletGlyph.SYMBOL_BULLET ? "Symbol" : null;
     }
 
     private void directedRun(StringBuilder sb, String text, RunStyle style, RunStyle base) {
