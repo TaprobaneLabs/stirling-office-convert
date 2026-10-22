@@ -20,6 +20,14 @@ final class NumberingPart {
                 Numbering.Level l = def.levels[lvl];
                 String format = l != null ? l.format() : "decimal";
                 String text = l != null ? l.text() : "%" + (lvl + 1) + ".";
+                RunStyle marker = l != null ? l.markerStyle() : null;
+                String glyphFont = null;
+                if ("bullet".equals(format)) {
+                    BulletGlyph glyph = BulletGlyph.of(text,
+                            marker != null && marker.font() != null ? ctx.name(marker.font()) : null);
+                    text = glyph.text();
+                    glyphFont = glyph.font();
+                }
                 float left = l != null ? l.indentLeft() : 36f * (lvl + 1);
                 float hanging = l != null ? l.hanging() : 18f;
                 sb.append("<w:lvl w:ilvl=\"").append(lvl).append("\">")
@@ -29,16 +37,15 @@ final class NumberingPart {
                         .append("<w:lvlJc w:val=\"left\"/>")
                         .append("<w:pPr><w:ind w:left=\"").append(Xml.twips(left)).append("\" w:hanging=\"")
                         .append(Xml.twips(hanging)).append("\"/></w:pPr>");
-                if (l != null && l.markerStyle() != null) {
-                    RunStyle m = l.markerStyle();
+                if (marker != null) {
+                    RunStyle m = marker;
                     RunStyle base = styles.normal;
                     ctx.embedded.use(ctx.name(m.font() != null ? m.font() : base.font()), m.bold(), m.italic());
                     sb.append("<w:rPr>");
-                    if (m.font() != null && ("bullet".equals(format) || !m.font().equals(base.font()))) {
-                        String f = Xml.esc(ctx.name(m.font()));
-                        sb.append("<w:rFonts w:ascii=\"").append(f).append("\" w:hAnsi=\"").append(f)
-                                .append("\" w:eastAsia=\"").append(f).append("\" w:cs=\"").append(f)
-                                .append("\" w:hint=\"default\"/>");
+                    if (glyphFont != null) {
+                        rFonts(sb, glyphFont);
+                    } else if (m.font() != null && ("bullet".equals(format) || !m.font().equals(base.font()))) {
+                        rFonts(sb, ctx.name(m.font()));
                     }
                     sb.append(m.bold() ? "<w:b/>" : "<w:b w:val=\"0\"/>");
                     sb.append(m.italic() ? "<w:i/>" : "<w:i w:val=\"0\"/>");
@@ -47,6 +54,10 @@ final class NumberingPart {
                     }
                     int hp = Xml.halfPoints(m.size());
                     sb.append("<w:sz w:val=\"").append(hp).append("\"/><w:szCs w:val=\"").append(hp).append("\"/>");
+                    sb.append("</w:rPr>");
+                } else if (glyphFont != null) {
+                    sb.append("<w:rPr>");
+                    rFonts(sb, glyphFont);
                     sb.append("</w:rPr>");
                 }
                 sb.append("</w:lvl>");
@@ -59,5 +70,12 @@ final class NumberingPart {
         }
         sb.append("</w:numbering>");
         return sb.toString();
+    }
+
+    private static void rFonts(StringBuilder sb, String font) {
+        String f = Xml.esc(font);
+        sb.append("<w:rFonts w:ascii=\"").append(f).append("\" w:hAnsi=\"").append(f)
+                .append("\" w:eastAsia=\"").append(f).append("\" w:cs=\"").append(f)
+                .append("\" w:hint=\"default\"/>");
     }
 }
