@@ -62,6 +62,18 @@ class PanelRowTest {
     }
 
     @Test
+    void oneLinePanelsInARowBecomeTextBoxes() throws Exception {
+        List<String> boxes = textBoxes(convert(Art.NONE, 1));
+        assertEquals(4, boxes.size(), "a text box per one-line panel");
+        for (int r = 0; r < TOPS.length; r++) {
+            for (int c = 0; c < LEFTS.length; c++) {
+                String only = label(r, c, 0);
+                assertTrue(boxes.stream().anyMatch(b -> b.contains(only)), "panel " + r + "," + c + " is a text box");
+            }
+        }
+    }
+
+    @Test
     void aPanelHoldingBarsStaysOutOfTextBoxes() throws Exception {
         assertNotInATextBox(convert(Art.BARS), "the panel with bars drawn in it");
     }
@@ -133,6 +145,10 @@ class PanelRowTest {
     }
 
     private String convert(Art art) throws IOException {
+        return convert(art, 3);
+    }
+
+    private String convert(Art art, int lines) throws IOException {
         Path pdf = dir.resolve("panels.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
@@ -155,7 +171,7 @@ class PanelRowTest {
                             drawArt(doc, cs, art, x, h - top - HEIGHT);
                         }
                         cs.setNonStrokingColor(1f);
-                        for (int l = 0; l < 3; l++) {
+                        for (int l = 0; l < lines; l++) {
                             cs.beginText();
                             cs.setFont(FONT, 10);
                             cs.newLineAtOffset(x + 8, h - top - 20 - l * 14);

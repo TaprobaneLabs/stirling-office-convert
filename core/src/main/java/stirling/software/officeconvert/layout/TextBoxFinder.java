@@ -125,7 +125,9 @@ final class TextBoxFinder {
                 }
             }
             float panelGap = beside || !holding.contains(cand) ? Float.MAX_VALUE : panelGap(cand, holding);
-            if (inside.size() < 2 || (!beside || gap < 6f) && panelGap == Float.MAX_VALUE
+            boolean inRow = panelGap != Float.MAX_VALUE;
+            // A sidebar takes two lines or more; a panel in a row may hold one, as a row of labelled pills does.
+            if (inside.size() < (inRow ? 1 : 2) || (!beside || gap < 6f) && !inRow
                     || f != null && touchesSameFill(f, fills)) {
                 continue;
             }
