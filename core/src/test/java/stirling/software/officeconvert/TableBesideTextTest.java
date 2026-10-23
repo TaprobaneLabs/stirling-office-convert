@@ -37,17 +37,31 @@ class TableBesideTextTest {
         "in interest and it will take you longer to pay off", "your balance. For an estimate of the time it would",
         "take to repay your balance, call the number below."};
 
+    private static final String[] NARROW = {"Questions about your account?", "Call customer service at the", "number on the back of your",
+        "card, or write to us at the", "address on your coupon."};
+    private static final String[] WIDE = {"Billing rights: keep this notice for future use. It tells you about your rights",
+        "and our responsibilities under the Fair Credit Billing Act. If you think there is",
+        "an error on your statement, write to us at the address for billing errors within",
+        "sixty days. In your letter, give us your name, account number and the dollar",
+        "amount of the suspected error, and describe what you believe is wrong and why."};
+
     @TempDir Path dir;
 
     @Test
     void aTableAndTheTextBesideItStandInTwoColumns() throws Exception {
-        assertTwoColumns(convert(0));
+        assertTwoColumns(convert(0, false));
     }
 
     @Test
     void aTableWithBlankRowsBelowItsTextStaysInItsColumn() throws Exception {
         // Blank rows put the table's middle below its last filled row: the band its rows open must still hold all of it.
-        assertTwoColumns(convert(16));
+        assertTwoColumns(convert(16, false));
+    }
+
+    @Test
+    void columnsStartingRightUnderTheTableLeaveItsBandAlone() throws Exception {
+        // The first line of two columns below reaches above the table's bottom rule: their band touches the table.
+        assertTwoColumns(convert(0, true));
     }
 
     private static void assertTwoColumns(String xml) {
@@ -62,8 +76,11 @@ class TableBesideTextTest {
         assertTrue(below > beside, "the text below both follows them");
     }
 
-    /** {@code blank}: ruled rows left empty under the table's filled ones. */
-    private String convert(int blank) throws IOException {
+    /**
+     * {@code blank}: ruled rows left empty under the table's filled ones. {@code columns}: the text below is two columns,
+     * whose first line starts 4 pt under the table, so it reaches above the table's bottom rule.
+     */
+    private String convert(int blank, boolean columns) throws IOException {
         Path pdf = dir.resolve("statement.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
@@ -92,9 +109,17 @@ class TableBesideTextTest {
                 for (int i = 0; i < BESIDE.length; i++) {
                     text(cs, 320, top - 12 - i * 13, 9, BESIDE[i]);
                 }
-                float below = top - rows * 16 - 30;
-                text(cs, 72, below, 10, "Questions about your account? Call customer service at the number on the back of your card.");
-                text(cs, 72, below - 14, 10, "Send billing inquiries and correspondence to the address shown on your payment coupon.");
+                if (columns) {
+                    float first = top - rows * 16 - 4;
+                    for (int i = 0; i < NARROW.length; i++) {
+                        text(cs, 72, first - i * 12, 9, NARROW[i]);
+                        text(cs, 230, first - i * 12, 9, WIDE[i]);
+                    }
+                } else {
+                    float below = top - rows * 16 - 30;
+                    text(cs, 72, below, 10, "Questions about your account? Call customer service at the number on the back of your card.");
+                    text(cs, 72, below - 14, 10, "Send billing inquiries and correspondence to the address shown on your payment coupon.");
+                }
             }
             doc.save(pdf.toFile());
         }

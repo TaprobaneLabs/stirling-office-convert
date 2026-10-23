@@ -577,11 +577,15 @@ public final class PageAnalyzer {
 
     private static final float STROKE_MARGIN = 1f;
 
-    /** Whether every band beside the table has one column: a table already in a column of its own keeps it. */
+    /**
+     * Whether the band that holds the table has one column: a table already in a column of its own keeps it. A band holds
+     * a block by its middle, as when blocks are set in columns, so columns that merely touch the table's edge don't count.
+     */
     private static boolean singleColumn(List<ColumnFinder.Band> bands, PageLayout.TableItem ti) {
+        float middle = (ti.top() + ti.bottom()) / 2f;
         for (ColumnFinder.Band band : bands) {
-            if (band.top() < ti.bottom() && band.bottom() > ti.top() && band.multiColumn()) {
-                return false;
+            if (inBand(band, middle, band == bands.getLast())) {
+                return !band.multiColumn();
             }
         }
         return true;
