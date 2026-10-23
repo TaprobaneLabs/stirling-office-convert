@@ -3,11 +3,14 @@ package stirling.software.officeconvert.extract;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 
+import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.PDInlineImage;
 
 /**
  * Whether an image paints one colour, as a panel or a banner drawn as an image does, rather than a picture. Such an
- * image compresses to almost nothing, so one that doesn't is a picture without being decoded.
+ * image compresses to almost nothing, so one that doesn't is a picture without being decoded. An image of a kind this
+ * can't measure counts as flat, so it's never taken for a picture.
  */
 public final class FlatImages {
 
@@ -27,15 +30,24 @@ public final class FlatImages {
         if (draw.stencilRgb() >= 0) {
             return true;
         }
-        if (!(draw.image() instanceof PDImageXObject x) || !ImageBudget.affordable(x)) {
+        PDImage image = draw.image();
+        long coded;
+        if (image instanceof PDImageXObject x) {
+            coded = x.getCOSObject().getLength();
+        } else if (image instanceof PDInlineImage inline) {
+            coded = inline.getData().length;
+        } else {
+            return true;
+        }
+        if (!ImageBudget.affordable(image)) {
             return false;
         }
-        long pixels = (long) x.getWidth() * x.getHeight();
-        if (pixels <= 0 || x.getCOSObject().getLength() > FLAT_BYTES * pixels + ALLOWANCE) {
+        long pixels = (long) image.getWidth() * image.getHeight();
+        if (pixels <= 0 || coded > FLAT_BYTES * pixels + ALLOWANCE) {
             return false;
         }
         try {
-            BufferedImage img = x.getImage(null, Math.max(1, Math.max(x.getWidth(), x.getHeight()) / SAMPLES));
+            BufferedImage img = image.getImage(null, Math.max(1, Math.max(image.getWidth(), image.getHeight()) / SAMPLES));
             int first = -1;
             for (int y = 0; y < img.getHeight(); y++) {
                 for (int i = 0; i < img.getWidth(); i++) {

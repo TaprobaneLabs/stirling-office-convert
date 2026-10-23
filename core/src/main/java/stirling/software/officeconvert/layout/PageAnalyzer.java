@@ -163,7 +163,7 @@ public final class PageAnalyzer {
                 : new ArrayList<>();
         tables.removeIf(t -> TableShaper.looksLikeList(t, TableShaper.assign(t, TableFinder.wordsInside(segments, t))));
         if (detectTables) {
-            addKeyValueTables(tables, segments, frame);
+            addKeyValueTables(tables, outside(segments, pictures), frame);
         }
         List<Box> tableBoxes = tables.stream().map(TableFinder::boxOf).toList();
         List<Rule> freeRules = new ArrayList<>(rules.stream()
@@ -332,7 +332,7 @@ public final class PageAnalyzer {
     /** Whether a frame runs along the box's edges: a drawn box its size, or rules along at least three of its sides. */
     private static boolean framed(Box b, List<Rule> rules, List<PageGraphics.VectorMark> marks) {
         for (PageGraphics.VectorMark m : marks) {
-            if (m.stroked() && Math.abs(m.x() - b.x()) <= FRAME_SLACK && Math.abs(m.right() - b.right()) <= FRAME_SLACK
+            if (m.stroked() && m.boxy() && Math.abs(m.x() - b.x()) <= FRAME_SLACK && Math.abs(m.right() - b.right()) <= FRAME_SLACK
                     && Math.abs(m.top() - b.top()) <= FRAME_SLACK && Math.abs(m.bottom() - b.bottom()) <= FRAME_SLACK) {
                 return true;
             }
@@ -414,6 +414,20 @@ public final class PageAnalyzer {
             tables.removeIf(t -> intersects(TableFinder.boxOf(t), box));
             tables.add(kv);
         }
+    }
+
+    /** The lines that don't stand in any of the boxes. */
+    private static List<Line> outside(List<Line> lines, List<Box> boxes) {
+        if (boxes.isEmpty()) {
+            return lines;
+        }
+        List<Line> out = new ArrayList<>();
+        for (Line l : lines) {
+            if (!Regions.insideAny(l.centre(), Regions.wordY(l), boxes, 0.5f)) {
+                out.add(l);
+            }
+        }
+        return out;
     }
 
     private static boolean intersects(Box a, Box b) {
