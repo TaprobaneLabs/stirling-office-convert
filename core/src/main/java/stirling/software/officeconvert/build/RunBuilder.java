@@ -843,13 +843,20 @@ final class RunBuilder {
         return score;
     }
 
+    /**
+     * Whether Word's widths of these lines are known, so their edge can be fitted to the PDF's breaks. A face Word lacks
+     * is set in its stand-in with the character spacing that makes up the difference, which Word applies as given, so its
+     * widths are known too; but a line it can't break, a paragraph's only one, keeps the wider slack an unfitted stand-in
+     * gets (a form's title in a narrow column broke at its hyphen when fitted).
+     */
     private boolean exact(List<Line> lines) {
+        boolean breaks = lines.size() > 1;
         for (Line l : lines) {
             for (Word w : l.words) {
                 for (Glyph g : w.glyphs) {
                     WidthFix fix = spacing.get(lookKey(g));
                     if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || Float.isNaN(substituteWidth(g))
-                            || fix != null && (fix.scale() != 100 || Math.abs(fix.spacing()) > EXACT_SPACING)) {
+                            || fix != null && (fix.scale() != 100 || !breaks && Math.abs(fix.spacing()) > EXACT_SPACING)) {
                         return false;
                     }
                 }
