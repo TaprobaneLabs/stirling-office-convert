@@ -3,6 +3,7 @@ package stirling.software.officeconvert;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipFile;
+import javax.imageio.ImageIO;
 
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -23,6 +25,7 @@ import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.util.Matrix;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -112,6 +115,40 @@ class FigureLabelsTest {
         return boxes;
     }
 
+    @Test
+    void aChartWithTurnedTextKeepsItsLevelLabelsAsText() throws Exception {
+        // A label set at an angle stays drawn in the picture; the level ones are text boxes as before.
+        String xml = docx(List.of(MIDDLE), true, Keys.TURNED);
+        assertLabelBoxes(xml, MIDDLE);
+        assertTrue(!xml.matches("(?s).*<w:txbxContent>(?:(?!</w:txbxContent>).)*Coastal zone.*"), "the turned label isn't a text box");
+        // The picture still draws it, in the corner of the chart's box below and left of the circle.
+        BufferedImage chart = picture(dir.resolve("chart.docx"), "North 40%");
+        int dark = 0;
+        int corner = chart.getWidth() / 5;
+        for (int y = chart.getHeight() - corner; y < chart.getHeight(); y++) {
+            for (int x = 0; x < corner; x++) {
+                int rgb = chart.getRGB(x, y);
+                dark += (rgb >> 16 & 0xFF) + (rgb >> 8 & 0xFF) + (rgb & 0xFF) < 300 ? 1 : 0;
+            }
+        }
+        assertTrue(dark > 20, "the turned label is drawn in the picture: " + dark + " dark pixels");
+    }
+
+    /** The image of the picture whose description holds {@code words}. */
+    private static BufferedImage picture(Path docx, String words) throws IOException {
+        try (ZipFile zip = new ZipFile(docx.toFile())) {
+            String xml = new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
+            String rels = new String(zip.getInputStream(zip.getEntry("word/_rels/document.xml.rels")).readAllBytes(),
+                    StandardCharsets.UTF_8);
+            Matcher m = Pattern.compile("descr=\"[^\"]*" + Pattern.quote(words) + "(?:(?!</wp:inline>|</wp:anchor>).)*?r:embed=\"([^\"]+)\"",
+                    Pattern.DOTALL).matcher(xml);
+            assertTrue(m.find(), "a picture described by " + words);
+            Matcher target = Pattern.compile("Id=\"" + Pattern.quote(m.group(1)) + "\"[^>]*Target=\"([^\"]+)\"").matcher(rels);
+            assertTrue(target.find(), "its media");
+            return ImageIO.read(zip.getInputStream(zip.getEntry("word/" + target.group(1))));
+        }
+    }
+
     /** Each label is a text box set within 2 pt of its PDF place across the page. */
     private static void assertLabelBoxes(String xml, Chart chart) {
         List<String> boxes = new ArrayList<>();
@@ -156,7 +193,7 @@ class FigureLabelsTest {
     }
 
     /** How a legend in the first chart's lower left corner marks each word: none, a drawn swatch, or an icon font's glyph. */
-    private enum Keys { NONE, SWATCHES, ICONS }
+    private enum Keys { NONE, SWATCHES, ICONS, TURNED }
 
     private Path pdf(List<Chart> charts, boolean textBelow, Keys keys) throws IOException {
         Path pdf = dir.resolve("chart.pdf");
@@ -184,7 +221,13 @@ class FigureLabelsTest {
                         text(cs, c.at()[i][0], c.at()[i][1], 10, c.labels()[i]);
                     }
                     cs.setNonStrokingColor(0f);
-                    if (keys != Keys.NONE && c == charts.getFirst()) {
+                    if (keys == Keys.TURNED && c == charts.getFirst()) {
+                        cs.beginText();
+                        cs.setFont(FONT, 9);
+                        cs.setTextMatrix(Matrix.getRotateInstance(Math.toRadians(50), c.cx() - c.r() + 8, c.cy() - c.r() + 8));
+                        cs.showText("Coastal zone");
+                        cs.endText();
+                    } else if (keys != Keys.NONE && c == charts.getFirst()) {
                         // In the corner of the chart's box, clear of the circle.
                         for (int i = 0; i < LEGEND.length; i++) {
                             float y = c.cy() - c.r() + 4 + 10 * (LEGEND.length - 1 - i);

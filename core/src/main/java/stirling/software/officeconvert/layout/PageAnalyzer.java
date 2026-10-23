@@ -508,16 +508,13 @@ public final class PageAnalyzer {
         return out;
     }
 
-    /** A figure's lines as boxes, or none (its text stays in its picture) when it has turned text or too many labels. */
+    /**
+     * A figure's lines as boxes, or none (its text stays in its picture) when it has too many labels. Its turned text
+     * isn't among them: its picture draws that (see {@code MediaPlacer.unlabelled}).
+     */
     private List<PageLayout.TextBoxItem> labelBoxes(PageData page, Box figure, List<Line> lines) {
         if (lines.isEmpty() || lines.size() > LABEL_LINES) {
             return List.of();
-        }
-        Box area = figure.grow(1f);
-        for (Glyph g : page.rotated()) {
-            if (area.contains(g.x, g.baseline)) {
-                return List.of();
-            }
         }
         int glyphs = 0;
         for (Line l : lines) {
