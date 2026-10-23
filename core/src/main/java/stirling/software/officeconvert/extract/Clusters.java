@@ -3,9 +3,11 @@ package stirling.software.officeconvert.extract;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 final class Clusters {
 
@@ -172,16 +174,17 @@ final class Clusters {
         order.sort(Comparator.comparingDouble((Glyph g) -> Math.round(g.baseline / Math.max(1f, g.size * 0.3f)))
                 .thenComparingDouble(g -> g.x));
         List<Glyph> rows = new ArrayList<>(order);
+        Set<FontInfo> logical = logicalFonts(glyphs);
         boolean changed = false;
         for (int i = 0; i < rows.size(); i++) {
             Glyph r = rows.get(i);
-            if (r != null && reph(r.text) && r.width <= 0.45f * r.size) {
+            if (r != null && reph(r.text) && r.width <= 0.45f * r.size && !logical.contains(r.font)) {
                 changed |= moveReph(rows, i);
             }
         }
         for (int i = 0; i < rows.size(); i++) {
             Glyph p = rows.get(i);
-            if (p != null && preBase(p.text)) {
+            if (p != null && preBase(p.text) && !logical.contains(p.font)) {
                 changed |= movePreBase(rows, i);
             }
         }
@@ -200,6 +203,55 @@ final class Clusters {
             }
         }
         return out;
+    }
+
+    /**
+     * Fonts whose text is in logical order already, as Microsoft Word writes its PDFs: a pre-base vowel sign comes after
+     * its consonant. In visual order a sign comes before its consonant, so one may start a word but never end one; in
+     * logical order one may end a word but never start one. A font counts as logical when some sign of it ends a word and
+     * none starts one. The program that made the PDF decides the order, so a font whose signs all stand inside words
+     * follows the page's other fonts when they're all logical; any other keeps being read as visual order. Neighbours are
+     * taken in the order the page draws its glyphs, which is the text's order either way: a title's letters may sit on
+     * slightly different baselines.
+     */
+    private static Set<FontInfo> logicalFonts(List<Glyph> glyphs) {
+        List<Glyph> rows = new ArrayList<>(glyphs);
+        rows.sort(Comparator.comparingInt((Glyph g) -> g.seq));
+        Set<FontInfo> ends = new HashSet<>();
+        Set<FontInfo> starts = new HashSet<>();
+        Set<FontInfo> seen = new HashSet<>();
+        for (int i = 0; i < rows.size(); i++) {
+            Glyph p = rows.get(i);
+            if (!preBase(p.text) || medial(p.text)) {
+                continue;
+            }
+            seen.add(p.font);
+            if (!(i > 0 && joins(rows.get(i - 1), p) && endsWithLetter(rows.get(i - 1).text, p.text))) {
+                starts.add(p.font);
+            }
+            if (!(i + 1 < rows.size() && joins(p, rows.get(i + 1)) && startsWithLetter(rows.get(i + 1).text, p.text))) {
+                ends.add(p.font);
+            }
+        }
+        if (!starts.isEmpty()) {
+            ends.removeAll(starts);
+            return ends;
+        }
+        return ends.isEmpty() ? ends : seen;
+    }
+
+    /** Whether {@code b} follows {@code a} in the same word. */
+    private static boolean joins(Glyph a, Glyph b) {
+        return !a.isSpace() && !b.isSpace() && sameRow(a, b) && b.x - a.right() < 0.3f * Math.max(a.size, b.size);
+    }
+
+    private static boolean endsWithLetter(String text, String like) {
+        if (text.isEmpty()) {
+            return false;
+        }
+        int cp = text.codePointBefore(text.length());
+        return nukta(text.charAt(text.length() - 1))
+                || Character.isLetter(cp) && Character.UnicodeScript.of(cp) == Character.UnicodeScript.of(like.codePointAt(0));
     }
 
     private static boolean moveReph(List<Glyph> rows, int i) {
