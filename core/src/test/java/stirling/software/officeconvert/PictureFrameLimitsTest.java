@@ -40,7 +40,7 @@ class PictureFrameLimitsTest {
     private static final float W = 260;
     private static final float H = 157;
 
-    private enum Over { KEY_VALUES, FLAT_INLINE_PANEL, FLAT_RAW_PANEL, RETRACED_RULES }
+    private enum Over { KEY_VALUES, FLAT_INLINE_PANEL, FLAT_RAW_PANEL, UNREADABLE_PANEL, RETRACED_RULES }
 
     @TempDir Path dir;
 
@@ -58,6 +58,13 @@ class PictureFrameLimitsTest {
     @Test
     void aTableOnAnUncompressedPanelOfOneColourStaysATable() throws Exception {
         String xml = convert(Over.FLAT_RAW_PANEL);
+        assertTrue(xml.matches("(?s).*<w:tbl>.*Annual benefits.*</w:tbl>.*"), "the panel's table is a table");
+    }
+
+    @Test
+    void aTableOnAPanelTooLargeToDecodeStaysATable() throws Exception {
+        // Its pixels can't be read, so it isn't taken for a picture.
+        String xml = convert(Over.UNREADABLE_PANEL);
         assertTrue(xml.matches("(?s).*<w:tbl>.*Annual benefits.*</w:tbl>.*"), "the panel's table is a table");
     }
 
@@ -112,6 +119,15 @@ class PictureFrameLimitsTest {
                     }
                     case FLAT_RAW_PANEL -> {
                         cs.drawImage(flatRaw(doc), X, BOTTOM, W, H);
+                        cs.addRect(X - 0.1f, BOTTOM - 0.1f, W + 0.2f, H + 0.2f);
+                        cs.stroke();
+                        table(cs);
+                    }
+                    case UNREADABLE_PANEL -> {
+                        // 40,000 pixels square: 4.8 GB decoded, past what the converter decodes.
+                        PDImageXObject huge = new PDImageXObject(doc, new ByteArrayInputStream(new byte[3]), null, 40_000,
+                                40_000, 8, PDDeviceRGB.INSTANCE);
+                        cs.drawImage(huge, X, BOTTOM, W, H);
                         cs.addRect(X - 0.1f, BOTTOM - 0.1f, W + 0.2f, H + 0.2f);
                         cs.stroke();
                         table(cs);

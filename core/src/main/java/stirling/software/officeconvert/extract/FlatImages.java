@@ -9,8 +9,8 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDInlineImage;
 
 /**
  * Whether an image paints one colour, as a panel or a banner drawn as an image does, rather than a picture, judged from a
- * sample of its pixels however it's stored. An image of a kind this can't measure counts as flat, so it's never taken
- * for a picture.
+ * sample of its pixels however it's stored. An image whose pixels can't be read (of another kind, too large to decode,
+ * or broken) counts as flat, so it's never taken for a picture.
  */
 public final class FlatImages {
 
@@ -30,7 +30,7 @@ public final class FlatImages {
             return true;
         }
         if (!ImageBudget.affordable(image) || (long) image.getWidth() * image.getHeight() <= 0) {
-            return false;
+            return true;
         }
         try {
             BufferedImage img = image.getImage(null, Math.max(1, Math.max(image.getWidth(), image.getHeight()) / SAMPLES));
@@ -51,7 +51,7 @@ public final class FlatImages {
             }
             return true;
         } catch (IOException | RuntimeException e) {
-            return false;
+            return true;
         }
     }
 
