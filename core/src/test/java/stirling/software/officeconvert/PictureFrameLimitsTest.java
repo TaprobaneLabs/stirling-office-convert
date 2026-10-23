@@ -26,7 +26,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Where a framed picture's hold on its rules and words ends (see {@code FramedPictureTest}): a key of labelled values in
- * the picture stays the picture's too, while a table on a framed panel of one colour stays a table.
+ * the picture stays the picture's too, while a table on a framed panel of one colour, or over a picture whose edges
+ * carry only rules over the same half of them, stays a table.
  */
 class PictureFrameLimitsTest {
 
@@ -36,7 +37,7 @@ class PictureFrameLimitsTest {
     private static final float W = 260;
     private static final float H = 157;
 
-    private enum Over { KEY_VALUES, FLAT_INLINE_PANEL }
+    private enum Over { KEY_VALUES, FLAT_INLINE_PANEL, RETRACED_RULES }
 
     @TempDir Path dir;
 
@@ -49,6 +50,12 @@ class PictureFrameLimitsTest {
     void aTableOnAPanelOfOneColourStaysATable() throws Exception {
         String xml = convert(Over.FLAT_INLINE_PANEL);
         assertTrue(xml.matches("(?s).*<w:tbl>.*Annual benefits.*</w:tbl>.*"), "the panel's table is a table");
+    }
+
+    @Test
+    void overlappingRulesOverHalfAnEdgeDontFrameAPicture() throws Exception {
+        String xml = convert(Over.RETRACED_RULES);
+        assertTrue(xml.matches("(?s).*<w:tbl>.*Annual benefits.*</w:tbl>.*"), "the table over the picture is a table");
     }
 
     private String convert(Over over) throws IOException {
@@ -77,6 +84,22 @@ class PictureFrameLimitsTest {
                             text(cs, X + 50, BOTTOM + 40 - i * 11, 7, key[i][1]);
                         }
                         text(cs, X + 40, BOTTOM + H - 30, 7, "SARGASSO SEA");
+                    }
+                    case RETRACED_RULES -> {
+                        cs.drawImage(LosslessFactory.createFromImage(doc, map(433, 262)), X, BOTTOM, W, H);
+                        // Along three edges, two rules over the same half of the edge, one a little longer.
+                        for (float end : new float[] {0.45f, 0.5f}) {
+                            cs.moveTo(X, BOTTOM + H);
+                            cs.lineTo(X + end * W, BOTTOM + H);
+                            cs.stroke();
+                            cs.moveTo(X, BOTTOM);
+                            cs.lineTo(X + end * W, BOTTOM);
+                            cs.stroke();
+                            cs.moveTo(X, BOTTOM);
+                            cs.lineTo(X, BOTTOM + end * H);
+                            cs.stroke();
+                        }
+                        table(cs);
                     }
                     case FLAT_INLINE_PANEL -> {
                         cs.drawImage(flatInline(doc), X, BOTTOM, W, H);

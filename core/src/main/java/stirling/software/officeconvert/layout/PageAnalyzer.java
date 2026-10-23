@@ -342,11 +342,21 @@ public final class PageAnalyzer {
         int ruled = 0;
         for (int s = 0; s < sides.length; s++) {
             boolean horizontal = s < 2;
-            float covered = 0;
+            // The union of the rules along the side, so a rule drawn twice counts once.
+            List<float[]> spans = new ArrayList<>();
             for (Rule r : rules) {
-                if (r.horizontal() == horizontal && Math.abs(r.pos() - sides[s][0]) <= FRAME_SLACK) {
-                    covered += Math.max(0, Math.min(r.end(), sides[s][2]) - Math.max(r.start(), sides[s][1]));
+                float from = Math.max(r.start(), sides[s][1]);
+                float to = Math.min(r.end(), sides[s][2]);
+                if (r.horizontal() == horizontal && Math.abs(r.pos() - sides[s][0]) <= FRAME_SLACK && to > from) {
+                    spans.add(new float[] {from, to});
                 }
+            }
+            spans.sort(Comparator.comparingDouble(span -> span[0]));
+            float covered = 0;
+            float reach = -Float.MAX_VALUE;
+            for (float[] span : spans) {
+                covered += Math.max(0, span[1] - Math.max(span[0], reach));
+                reach = Math.max(reach, span[1]);
             }
             ruled += covered >= FRAME_COVER * (sides[s][2] - sides[s][1]) ? 1 : 0;
         }
