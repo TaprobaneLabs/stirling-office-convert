@@ -89,7 +89,7 @@ final class TextBoxFinder {
     }
 
     Result find(List<Fill> fills, List<Container> containers, List<Line> flow, float frameLeft, float frameRight,
-            PanelArt panelArt) {
+            PanelArt panelArt, List<Box> pictures) {
         List<PageLayout.TextBoxItem> out = new ArrayList<>();
         List<Container> claimed = new ArrayList<>();
         float colWidth = frameRight - frameLeft;
@@ -100,7 +100,7 @@ final class TextBoxFinder {
             }
         }
         candidates.removeIf(c -> c.box().width() > colWidth * 0.85f || c.box().width() < 36 || c.box().height() < 18
-                || Backdrops.isBackdrop(c.box(), flow));
+                || Backdrops.isBackdrop(c.box(), flow) || framesPicture(c.box(), pictures));
         List<Container> holding = new ArrayList<>();
         for (Container cand : candidates) {
             if (panel(cand, flow, panelArt)) {
@@ -140,6 +140,18 @@ final class TextBoxFinder {
         }
         return new Result(out, claimed);
     }
+
+    /** A box drawn around a picture, holding its labels, is the picture's frame: most of the box is the picture. */
+    private static boolean framesPicture(Box box, List<Box> pictures) {
+        for (Box p : pictures) {
+            if (box.overlapArea(p) >= PICTURE_FRAME * box.area()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final float PICTURE_FRAME = 0.8f;
 
     private static boolean holds(Box box, Line l) {
         return l.x >= box.x() - 1 && l.right <= box.right() + 1 && l.top >= box.top() - 2 && l.bottom <= box.bottom() + 2;
