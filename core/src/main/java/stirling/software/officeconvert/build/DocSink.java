@@ -23,6 +23,14 @@ public interface DocSink {
 
     void footnote(int id, List<Paragraph> paragraphs);
 
+    /**
+     * Whether this output sets text where the page has it, in text boxes, so a figure's labels can stay text over a
+     * picture drawn without them. A plain-text output reads a picture's description instead, which holds them already.
+     */
+    default boolean placesText() {
+        return true;
+    }
+
     record HeaderFooterSet(
             List<Paragraph> header,
             List<Paragraph> footer,

@@ -190,7 +190,8 @@ final class TextBoxFinder {
      */
     private static boolean panel(Container c, List<Line> flow, PanelArt panelArt) {
         Box b = c.box();
-        if (b.height() > PANEL_PAGE_SHARE * panelArt.pageHeight()) {
+        // A panel is a box: a pie chart's wedge, with its label inside it, is a drawing.
+        if (c.mark() != null && !c.mark().boxy() || b.height() > PANEL_PAGE_SHARE * panelArt.pageHeight()) {
             return false;
         }
         int lines = 0;
