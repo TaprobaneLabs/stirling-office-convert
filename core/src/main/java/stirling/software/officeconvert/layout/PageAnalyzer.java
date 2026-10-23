@@ -520,18 +520,23 @@ public final class PageAnalyzer {
         for (Line l : flow) {
             items.add(new ColumnFinder.Item(l.x, l.top, l.right, l.bottom, l.baseline, true, l.chars));
         }
+        Map<PageLayout.Item, Integer> blockAt = new IdentityHashMap<>();
         for (PageLayout.Item b : blocks) {
             if (!b.behindText() && !PictureArranger.isMark(b)) {
                 boolean picture = b instanceof PageLayout.FigureItem || b instanceof PageLayout.ImageItem
                         || b instanceof PageLayout.PictureRow;
+                blockAt.put(b, items.size());
                 items.add(new ColumnFinder.Item(b.x(), b.top(), b.right(), b.bottom(), b.bottom(), false, 0, picture));
             }
         }
         List<ColumnFinder.Band> found = ColumnFinder.find(items, frame.textLeft(), frame.textRight(), page.height(), stats.bodySize);
         List<ColumnFinder.Item> rows = new ArrayList<>();
         for (PageLayout.Item b : blocks) {
-            if (b instanceof PageLayout.TableItem ti && !b.behindText() && singleColumn(found, ti)) {
+            if (b instanceof PageLayout.TableItem ti && blockAt.containsKey(b) && singleColumn(found, ti)) {
                 rows.addAll(tableRows(ti));
+                // A gutter beside the table reaches over all of it, as one beside a picture does, so the band holds the
+                // table even when its last rows are blank.
+                items.set(blockAt.get(b), new ColumnFinder.Item(b.x(), b.top(), b.right(), b.bottom(), b.bottom(), false, 0, true));
             }
         }
         if (!rows.isEmpty()) {

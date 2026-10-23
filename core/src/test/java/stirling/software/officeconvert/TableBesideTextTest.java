@@ -41,18 +41,29 @@ class TableBesideTextTest {
 
     @Test
     void aTableAndTheTextBesideItStandInTwoColumns() throws Exception {
-        String xml = convert();
+        assertTwoColumns(convert(0));
+    }
+
+    @Test
+    void aTableWithBlankRowsBelowItsTextStaysInItsColumn() throws Exception {
+        // Blank rows put the table's middle below its last filled row: the band its rows open must still hold all of it.
+        assertTwoColumns(convert(16));
+    }
+
+    private static void assertTwoColumns(String xml) {
         Matcher cols = Pattern.compile("<w:cols w:num=\"2\"").matcher(xml);
         assertTrue(cols.find(), "a two-column section");
         int table = xml.indexOf("Previous Balance");
         int beside = xml.indexOf("Late Payment Warning");
         int below = xml.indexOf("Questions about your account");
+        assertTrue(table < beside, "the table comes before the text beside it");
         String between = xml.substring(table, beside);
         assertTrue(between.contains("w:type=\"column\""), "the text beside the table starts the second column");
         assertTrue(below > beside, "the text below both follows them");
     }
 
-    private String convert() throws IOException {
+    /** {@code blank}: ruled rows left empty under the table's filled ones. */
+    private String convert(int blank) throws IOException {
         Path pdf = dir.resolve("statement.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
@@ -64,13 +75,14 @@ class TableBesideTextTest {
                 float top = h - 110;
                 cs.setStrokingColor(0.3f);
                 cs.setLineWidth(0.5f);
-                for (int r = 0; r <= ROWS.length; r++) {
+                int rows = ROWS.length + blank;
+                for (int r = 0; r <= rows; r++) {
                     cs.moveTo(72, top - r * 16);
                     cs.lineTo(290, top - r * 16);
                 }
                 for (float x : new float[] {72, 200, 290}) {
                     cs.moveTo(x, top);
-                    cs.lineTo(x, top - ROWS.length * 16);
+                    cs.lineTo(x, top - rows * 16);
                 }
                 cs.stroke();
                 for (int r = 0; r < ROWS.length; r++) {
@@ -80,7 +92,7 @@ class TableBesideTextTest {
                 for (int i = 0; i < BESIDE.length; i++) {
                     text(cs, 320, top - 12 - i * 13, 9, BESIDE[i]);
                 }
-                float below = top - ROWS.length * 16 - 30;
+                float below = top - rows * 16 - 30;
                 text(cs, 72, below, 10, "Questions about your account? Call customer service at the number on the back of your card.");
                 text(cs, 72, below - 14, 10, "Send billing inquiries and correspondence to the address shown on your payment coupon.");
             }
