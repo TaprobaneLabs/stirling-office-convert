@@ -8,6 +8,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 import stirling.software.officeconvert.extract.Glyph;
 import stirling.software.officeconvert.extract.PageData;
@@ -31,6 +32,7 @@ public final class PageAnalyzer {
     private final boolean detectTables;
     private final boolean forms;
     private final boolean tabLeaders;
+    private final boolean figureLabels;
     private int noteCounter;
 
     private record Notes(List<PageLayout.Note> notes, List<ParaDraft> continuation) {}
@@ -40,9 +42,18 @@ public final class PageAnalyzer {
     }
 
     public PageAnalyzer(DocStats stats, boolean detectTables, boolean forms, boolean tabLeaders) {
+        this(stats, detectTables, forms, tabLeaders, false);
+    }
+
+    /**
+     * {@code figureLabels}: a figure keeps its text as text, set over a picture drawn without it (documents), instead of
+     * as part of its picture.
+     */
+    public PageAnalyzer(DocStats stats, boolean detectTables, boolean forms, boolean tabLeaders, boolean figureLabels) {
         this.stats = stats;
         this.forms = forms;
         this.tabLeaders = tabLeaders;
+        this.figureLabels = figureLabels;
         this.paragraphs = new ParagraphBuilder(stats);
         this.placed = new PlacedText(paragraphs);
         this.textBoxFinder = new TextBoxFinder(paragraphs);
@@ -186,12 +197,25 @@ public final class PageAnalyzer {
         blocks.removeIf(b -> Regions.insideAny(new Box(b.x(), b.top(), b.right(), b.bottom()), wholeDrawings, 2f));
         diagrams(figures, backdrops, gfx, segments, blocks, page.width());
         List<Box> pictured = figures;
-        blocks.removeIf(b -> b instanceof PageLayout.TextBoxItem tb && boxes.boxes().contains(tb) && labels(tb)
-                && Regions.insideAny(tb.box(), pictured, 2f));
+        List<Line> boxedLabels = new ArrayList<>();
+        blocks.removeIf(b -> {
+            boolean label = b instanceof PageLayout.TextBoxItem tb && boxes.boxes().contains(tb) && labels(tb)
+                    && Regions.insideAny(tb.box(), pictured, 2f);
+            if (label) {
+                for (ParaDraft d : ((PageLayout.TextBoxItem) b).paras()) {
+                    boxedLabels.addAll(d.lines);
+                }
+            }
+            return label;
+        });
         List<Box> drawn = concat(figures, backdrops);
         addImages(page, gfx.images(), drawn, ocr, segments, blocks);
-        for (Box f : figures) {
-            blocks.add(new PageLayout.FigureItem(f, false));
+        List<List<PageLayout.TextBoxItem>> labelled = figureLabels && !ocr
+                ? labelsOf(page, figures, concat(segments, boxedLabels), tables, bullets)
+                : null;
+        for (int i = 0; i < figures.size(); i++) {
+            blocks.add(new PageLayout.FigureItem(figures.get(i), false, false, -1,
+                    labelled == null ? List.of() : labelled.get(i)));
         }
         for (Box b : backdrops) {
             blocks.add(new PageLayout.FigureItem(b, true));
@@ -354,6 +378,81 @@ public final class PageAnalyzer {
             boolean behind = fullPage ? !segments.isEmpty() : Backdrops.isBackdrop(b, segments);
             blocks.add(new PageLayout.ImageItem(img, behind));
         }
+    }
+
+    /** A figure keeps its labels as text when they're at most this many glyphs and lines. */
+    private static final int LABEL_GLYPHS = 2000;
+
+    private static final int LABEL_LINES = 100;
+
+    /**
+     * Each figure's text as boxes set where the PDF has it, one per line, for a picture drawn without that text; an
+     * empty list keeps a figure's text in its picture. A word belongs to the first figure it lies in, as in
+     * {@link #claimWords}, and the words of a table inside a figure stay the table's. Words made from drawn shapes
+     * ({@code drawn}: vector bullets, outlined lettering) stay out: a picture without its text still paints them. An icon
+     * font's glyphs are text, which the picture leaves out, so they stay in the labels.
+     */
+    private List<List<PageLayout.TextBoxItem>> labelsOf(PageData page, List<Box> figures, List<Line> lines,
+            List<TableDetection.Found> tables, List<Glyph> drawn) {
+        Set<Glyph> shapes = Collections.newSetFromMap(new IdentityHashMap<>());
+        shapes.addAll(drawn);
+        List<List<Line>> inside = new ArrayList<>();
+        for (int i = 0; i < figures.size(); i++) {
+            inside.add(new ArrayList<>());
+        }
+        for (Line seg : lines) {
+            Map<Integer, List<Word>> words = new TreeMap<>();
+            for (Word w : seg.words) {
+                float cx = Regions.wordX(w);
+                float cy = Regions.wordY(seg);
+                if (w.glyphs.stream().anyMatch(shapes::contains)
+                        || tables.stream().anyMatch(t -> TableFinder.contains(t, cx, cy))) {
+                    continue;
+                }
+                for (int i = 0; i < figures.size(); i++) {
+                    if (Regions.insideAny(cx, cy, List.of(figures.get(i)), 0.5f)) {
+                        words.computeIfAbsent(i, k -> new ArrayList<>()).add(w);
+                        break;
+                    }
+                }
+            }
+            for (Map.Entry<Integer, List<Word>> e : words.entrySet()) {
+                List<Word> ws = e.getValue();
+                inside.get(e.getKey()).add(ws.size() == seg.words.size() ? seg : LineGroups.fromWords(ws));
+            }
+        }
+        List<List<PageLayout.TextBoxItem>> out = new ArrayList<>();
+        for (int i = 0; i < figures.size(); i++) {
+            out.add(labelBoxes(page, figures.get(i), inside.get(i)));
+        }
+        return out;
+    }
+
+    /** A figure's lines as boxes, or none (its text stays in its picture) when it has turned text or too many labels. */
+    private List<PageLayout.TextBoxItem> labelBoxes(PageData page, Box figure, List<Line> lines) {
+        if (lines.isEmpty() || lines.size() > LABEL_LINES) {
+            return List.of();
+        }
+        Box area = figure.grow(1f);
+        for (Glyph g : page.rotated()) {
+            if (area.contains(g.x, g.baseline)) {
+                return List.of();
+            }
+        }
+        int glyphs = 0;
+        for (Line l : lines) {
+            for (Word w : l.words) {
+                glyphs += w.glyphs.size();
+            }
+        }
+        if (glyphs > LABEL_GLYPHS) {
+            return List.of();
+        }
+        List<PageLayout.TextBoxItem> boxes = new ArrayList<>();
+        for (Line l : lines) {
+            boxes.add(placed.box(List.of(l), page.width()));
+        }
+        return boxes;
     }
 
     private List<Line> claimWords(

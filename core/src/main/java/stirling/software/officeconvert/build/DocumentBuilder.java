@@ -638,7 +638,9 @@ public final class DocumentBuilder {
     }
 
     private void placeFloat(PageLayout.FloatItem fi, PageLayout layout, AffineTransform toDisplay) throws IOException {
-        Picture pic = placer.picture(fi.picture(), layout, toDisplay);
+        PageLayout.FigureItem labelled = labelled(fi.picture());
+        Picture pic = labelled != null ? placer.unlabelled(labelled, layout.page(), toDisplay)
+                : placer.picture(fi.picture(), layout, toDisplay);
         if (pic == null) {
             return;
         }
@@ -653,8 +655,28 @@ public final class DocumentBuilder {
             pic.fromParagraph = true;
             pic.y = fi.top() - PageFloats.anchorTop(p);
             p.inlines.addFirst(new Inline.Image(pic));
+            if (labelled != null) {
+                ride(labelled, p, PageFloats.anchorTop(p));
+            }
         } else {
             floats.add(pic);
+            if (labelled != null) {
+                for (PageLayout.TextBoxItem label : labelled.labels()) {
+                    floats.add(placer.textBox(label));
+                }
+            }
+        }
+    }
+
+    /** A figure whose labels are set as text over a picture drawn without them; null when its text is in its picture. */
+    private static PageLayout.FigureItem labelled(PageLayout.Item item) {
+        return item instanceof PageLayout.FigureItem fi && !fi.labels().isEmpty() && !fi.backdrop() && !fi.paper() ? fi : null;
+    }
+
+    /** Sets a figure's labels in the paragraph that holds or anchors its picture, so they move with it. */
+    private void ride(PageLayout.FigureItem fi, Paragraph p, float anchorTop) {
+        for (PageLayout.TextBoxItem label : fi.labels()) {
+            p.inlines.add(placer.textBox(label).riding(label.top() - anchorTop));
         }
     }
 
@@ -691,7 +713,9 @@ public final class DocumentBuilder {
         boolean follows = item.top() - from <= FOLLOWS * stats.pitchFor(stats.bodySize);
         List<PageLayout.Item> pictures = item instanceof PageLayout.PictureRow row ? row.pictures() : List.of(item);
         for (PageLayout.Item it : pictures) {
-            Picture pic = placer.picture(it, layout, toDisplay);
+            PageLayout.FigureItem labelled = labelled(it);
+            Picture pic = labelled != null ? placer.unlabelled(labelled, layout.page(), toDisplay)
+                    : placer.picture(it, layout, toDisplay);
             if (pic == null) {
                 continue;
             }
@@ -701,6 +725,12 @@ public final class DocumentBuilder {
             pic.x = it.x();
             pic.y = follows ? it.top() - from : it.top();
             anchor.inlines.add(new Inline.Image(pic));
+            if (labelled != null) {
+                for (PageLayout.TextBoxItem label : labelled.labels()) {
+                    Inline.TextBox box = placer.textBox(label);
+                    anchor.inlines.add(follows ? box.riding(label.top() - from) : box);
+                }
+            }
         }
         emit(anchor);
         // Pictures that follow the text take their room in the flow; ones placed on the page don't, so they don't make
@@ -1136,6 +1166,15 @@ public final class DocumentBuilder {
 
     private void emitPictureRow(PageLayout.PictureRow row, PageLayout layout, AffineTransform toDisplay, float colLeft,
             float colRight, float spaceBefore, boolean pageBreak) throws IOException {
+        boolean labelledRow = row.pictures().stream().anyMatch(it -> labelled(it) != null);
+        if (labelledRow && spaceBefore > 0) {
+            // As for a single labelled picture: the space above goes in a spacer, so the labels stay on their pictures.
+            Paragraph sp = paragraphs.spacer(spaceBefore);
+            sp.pageBreakBefore = pageBreak;
+            emit(sp);
+            spaceBefore = 0;
+            pageBreak = false;
+        }
         Paragraph p = new Paragraph();
         p.pageBreakBefore = pageBreak;
         p.markStyle = styles.normal.withSize(1);
@@ -1143,9 +1182,18 @@ public final class DocumentBuilder {
         p.spaceBefore = spaceBefore;
         p.indentLeft = Math.max(-colLeft, row.x() - colLeft);
         p.indentRight = Math.min(0, colRight - row.right()) - 2f;
+        // The row's pictures sit on one line, bottoms on its baseline: each one's top is the tallest's height less its own
+        // below the line's top.
+        float tallest = 0;
+        for (PageLayout.Item it : row.pictures()) {
+            tallest = Math.max(tallest, it.bottom() - it.top());
+        }
+        List<Inline.TextBox> labels = new ArrayList<>();
         boolean firstPic = true;
         for (PageLayout.Item it : row.pictures()) {
-            Picture pic = placer.picture(it, layout, toDisplay);
+            PageLayout.FigureItem labelled = labelled(it);
+            Picture pic = labelled != null ? placer.unlabelled(labelled, layout.page(), toDisplay)
+                    : placer.picture(it, layout, toDisplay);
             if (pic == null) {
                 continue;
             }
@@ -1155,15 +1203,33 @@ public final class DocumentBuilder {
             }
             p.inlines.add(new Inline.Image(pic));
             firstPic = false;
+            if (labelled != null) {
+                float top = tallest - (it.bottom() - it.top());
+                for (PageLayout.TextBoxItem label : labelled.labels()) {
+                    labels.add(placer.textBox(label).riding(top + label.top() - it.top()));
+                }
+            }
         }
+        p.inlines.addAll(labels);
         emit(p);
     }
 
     private void emitPicture(PageLayout.Item item, PageLayout layout, AffineTransform toDisplay, float colLeft,
             float colRight, float spaceBefore, boolean pageBreak) throws IOException {
-        Picture pic = placer.picture(item, layout, toDisplay);
+        PageLayout.FigureItem labelled = labelled(item);
+        Picture pic = labelled != null ? placer.unlabelled(labelled, layout.page(), toDisplay)
+                : placer.picture(item, layout, toDisplay);
         if (pic == null) {
             return;
+        }
+        if (labelled != null && spaceBefore > 0) {
+            // The labels ride on the picture's own line: the space above it goes in a spacer of its own, which the page's
+            // fit may shrink without moving the picture away from its labels.
+            Paragraph sp = paragraphs.spacer(spaceBefore);
+            sp.pageBreakBefore = pageBreak;
+            emit(sp);
+            spaceBefore = 0;
+            pageBreak = false;
         }
         Paragraph p = new Paragraph();
         p.pageBreakBefore = pageBreak;
@@ -1185,6 +1251,9 @@ public final class DocumentBuilder {
             p.indentRight = colRight - item.right();
         }
         p.inlines.add(new Inline.Image(pic));
+        if (labelled != null) {
+            ride(labelled, p, item.top());
+        }
         emit(p);
     }
 

@@ -142,6 +142,15 @@ final class MediaPlacer {
         return pic;
     }
 
+    /** A figure drawn without its text, for its labels to be set over it as text. */
+    Picture unlabelled(PageLayout.FigureItem fi, PageData page, java.awt.geom.AffineTransform toDisplay) throws IOException {
+        Picture pic = figurePicture(fi.box(), page, toDisplay, false);
+        if (pic != null) {
+            pic.description = FigureWords.text(page, fi.box());
+        }
+        return pic;
+    }
+
     Picture figurePicture(Box box, PageData page, java.awt.geom.AffineTransform toDisplay, boolean withText)
             throws IOException {
         PDPage pdPage = document.getPage(page.index());

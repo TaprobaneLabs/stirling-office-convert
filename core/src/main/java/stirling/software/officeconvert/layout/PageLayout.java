@@ -115,10 +115,18 @@ public record PageLayout(
         }
     }
 
-    public record FigureItem(Box box, boolean backdrop, boolean paper, int order) implements Item {
+    /**
+     * A region drawn as a picture. {@code labels}: the text inside it, as boxes set where the PDF has it, when the picture
+     * is drawn without its text; empty when the text is part of the picture.
+     */
+    public record FigureItem(Box box, boolean backdrop, boolean paper, int order, List<TextBoxItem> labels) implements Item {
 
         public FigureItem(Box box, boolean backdrop) {
             this(box, backdrop, false, -1);
+        }
+
+        public FigureItem(Box box, boolean backdrop, boolean paper, int order) {
+            this(box, backdrop, paper, order, List.of());
         }
 
         @Override

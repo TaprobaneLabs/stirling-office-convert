@@ -29,6 +29,11 @@ import stirling.software.officeconvert.sink.SpillBuffer;
 
 public final class TextWriter implements DocSink, Closeable {
 
+    @Override
+    public boolean placesText() {
+        return false;
+    }
+
     private static final Picture.MediaRef NO_MEDIA = new Picture.MediaRef("none", "image/png", 1, 1);
 
     private final OutputStream out;

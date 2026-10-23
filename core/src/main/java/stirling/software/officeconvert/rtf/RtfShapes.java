@@ -95,8 +95,8 @@ final class RtfShapes {
     void textBox(StringBuilder sb, Inline.TextBox t) throws IOException {
         int id = ids.next();
         String wrap = t.overlay() ? "\\shpwr3" : "\\shpwr2\\shpwrk0";
-        open(sb, t.x(), Math.max(0, t.y()), Math.max(1, t.width()), Math.max(1, t.height()), false, wrap, false, id,
-                Stacking.box(id) - Stacking.BACKDROP);
+        open(sb, t.x(), t.fromParagraph() ? t.y() : Math.max(0, t.y()), Math.max(1, t.width()), Math.max(1, t.height()),
+                t.fromParagraph(), wrap, false, id, Stacking.box(id) - Stacking.BACKDROP);
         prop(sb, "shapeType", t.rounded() ? "2" : "202");
         prop(sb, "lTxid", Long.toString((id + 1L) * 65536));
         prop(sb, "dxTextLeft", Long.toString(RtfText.emu(Math.max(0, t.insetLeft()))));
@@ -121,7 +121,7 @@ final class RtfShapes {
         prop(sb, "dxWrapDistLeft", Long.toString(gap));
         prop(sb, "dxWrapDistRight", Long.toString(gap));
         prop(sb, "posrelh", "1");
-        prop(sb, "posrelv", "1");
+        prop(sb, "posrelv", t.fromParagraph() ? "2" : "1");
         prop(sb, "fLayoutInCell", "1");
         prop(sb, "fAllowOverlap", "1");
         sb.append("{\\shptxt ");
