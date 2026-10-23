@@ -528,6 +528,16 @@ public final class PageAnalyzer {
             }
         }
         List<ColumnFinder.Band> found = ColumnFinder.find(items, frame.textLeft(), frame.textRight(), page.height(), stats.bodySize);
+        List<ColumnFinder.Item> rows = new ArrayList<>();
+        for (PageLayout.Item b : blocks) {
+            if (b instanceof PageLayout.TableItem ti && !b.behindText() && singleColumn(found, ti)) {
+                rows.addAll(tableRows(ti));
+            }
+        }
+        if (!rows.isEmpty()) {
+            items.addAll(rows);
+            found = ColumnFinder.find(items, frame.textLeft(), frame.textRight(), page.height(), stats.bodySize);
+        }
         boolean pinPictures = ocr || PictureArranger.pictureDominated(blocks, page);
         List<PageLayout.Band> bands = new ArrayList<>();
         for (ColumnFinder.Band band : found) {
@@ -561,6 +571,39 @@ public final class PageAnalyzer {
     }
 
     private static final float STROKE_MARGIN = 1f;
+
+    /** Whether every band beside the table has one column: a table already in a column of its own keeps it. */
+    private static boolean singleColumn(List<ColumnFinder.Band> bands, PageLayout.TableItem ti) {
+        for (ColumnFinder.Band band : bands) {
+            if (band.top() < ti.bottom() && band.bottom() > ti.top() && band.multiColumn()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * A table's rows as rows of text across its width, so a table and the text beside it can stand in columns of their own
+     * (a statement's account summary beside its payment box) instead of one under the other. A row spans the whole table,
+     * so no gutter opens between the table's own columns.
+     */
+    private static List<ColumnFinder.Item> tableRows(PageLayout.TableItem ti) {
+        TableDetection.Found t = ti.table();
+        float[] edges = ti.rowEdges();
+        int[] chars = new int[t.rows()];
+        for (TableDetection.FoundCell c : t.cells()) {
+            if (c.row() < chars.length) {
+                chars[c.row()] += c.text().strip().length();
+            }
+        }
+        List<ColumnFinder.Item> rows = new ArrayList<>();
+        for (int r = 0; r < t.rows() && r + 1 < edges.length; r++) {
+            if (chars[r] > 0) {
+                rows.add(new ColumnFinder.Item(t.left(), edges[r], t.right(), edges[r + 1], edges[r + 1], true, chars[r]));
+            }
+        }
+        return rows;
+    }
 
     private void diagrams(List<Box> figures, List<Box> backdrops, PageGraphics gfx, List<Line> segments,
             List<PageLayout.Item> blocks, float pageWidth) {
