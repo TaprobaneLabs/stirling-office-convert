@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,10 +14,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipFile;
 
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.Test;
@@ -77,18 +81,35 @@ class FigureLabelsTest {
 
     @Test
     void aLegendsSwatchesStayInItsPicture() throws Exception {
-        String xml = docx(List.of(MIDDLE), true, true);
+        String xml = docx(List.of(MIDDLE), true, Keys.SWATCHES);
         assertLabelBoxes(xml, MIDDLE);
         List<String> texts = new ArrayList<>();
-        Matcher box = Pattern.compile("<w:txbxContent>(.*?)</w:txbxContent>", Pattern.DOTALL).matcher(xml);
-        while (box.find()) {
-            texts.add(box.group(1).replaceAll("<[^>]+>", ""));
+        for (String box : textBoxes(xml)) {
+            texts.add(box.replaceAll("<[^>]+>", ""));
         }
         for (String key : LEGEND) {
             assertTrue(texts.stream().anyMatch(t -> t.contains(key)), key + " is a text box");
         }
         assertTrue(texts.stream().noneMatch(t -> t.contains("▪") || t.contains("•")),
                 "no label repeats a swatch the picture paints: " + texts);
+    }
+
+    @Test
+    void anIconFontsKeysStayWithTheirLabels() throws Exception {
+        // A picture drawn without its text leaves out an icon font's glyphs too, so the labels must carry them.
+        String xml = docx(List.of(MIDDLE), true, Keys.ICONS);
+        assertLabelBoxes(xml, MIDDLE);
+        assertTrue(textBoxes(xml).stream().filter(b -> b.contains("<pic:pic")).count() >= LEGEND.length,
+                "each key is a picture in a label");
+    }
+
+    private static List<String> textBoxes(String xml) {
+        List<String> boxes = new ArrayList<>();
+        Matcher box = Pattern.compile("<w:txbxContent>(.*?)</w:txbxContent>", Pattern.DOTALL).matcher(xml);
+        while (box.find()) {
+            boxes.add(box.group(1));
+        }
+        return boxes;
     }
 
     /** Each label is a text box set within 2 pt of its PDF place across the page. */
@@ -119,27 +140,30 @@ class FigureLabelsTest {
     }
 
     private String docx(List<Chart> charts, boolean textBelow) throws IOException {
-        return docx(charts, textBelow, false);
+        return docx(charts, textBelow, Keys.NONE);
     }
 
-    private String docx(List<Chart> charts, boolean textBelow, boolean legend) throws IOException {
+    private String docx(List<Chart> charts, boolean textBelow, Keys keys) throws IOException {
         Path docx = dir.resolve("chart.docx");
-        PdfToDocx.convert(pdf(charts, textBelow, legend), docx, PdfToDocx.Options.defaults());
+        PdfToDocx.convert(pdf(charts, textBelow, keys), docx, PdfToDocx.Options.defaults());
         try (ZipFile zip = new ZipFile(docx.toFile())) {
             return new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
         }
     }
 
     private Path pdf(List<Chart> charts, boolean textBelow) throws IOException {
-        return pdf(charts, textBelow, false);
+        return pdf(charts, textBelow, Keys.NONE);
     }
 
-    /** {@code legend}: the first chart has a legend in its lower left corner, each key a drawn swatch and a word. */
-    private Path pdf(List<Chart> charts, boolean textBelow, boolean legend) throws IOException {
+    /** How a legend in the first chart's lower left corner marks each word: none, a drawn swatch, or an icon font's glyph. */
+    private enum Keys { NONE, SWATCHES, ICONS }
+
+    private Path pdf(List<Chart> charts, boolean textBelow, Keys keys) throws IOException {
         Path pdf = dir.resolve("chart.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.A4);
             doc.addPage(page);
+            PDFont icons = keys == Keys.ICONS ? iconFont(doc) : null;
             try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
                 text(cs, 72, 760, 14, "Sales by region");
                 text(cs, 72, 740, 11, "The charts split the year's sales and freight between regions and routes.");
@@ -160,15 +184,19 @@ class FigureLabelsTest {
                         text(cs, c.at()[i][0], c.at()[i][1], 10, c.labels()[i]);
                     }
                     cs.setNonStrokingColor(0f);
-                    if (legend && c == charts.getFirst()) {
+                    if (keys != Keys.NONE && c == charts.getFirst()) {
                         // In the corner of the chart's box, clear of the circle.
                         for (int i = 0; i < LEGEND.length; i++) {
                             float y = c.cy() - c.r() + 4 + 10 * (LEGEND.length - 1 - i);
                             cs.setNonStrokingColor(colours[i][0], colours[i][1], colours[i][2]);
-                            cs.addRect(c.cx() - c.r() + 2, y, 5, 5);
-                            cs.fill();
+                            if (icons != null) {
+                                text(cs, icons, c.cx() - c.r() + 2, y, 8, "\u25A0");
+                            } else {
+                                cs.addRect(c.cx() - c.r() + 2, y, 5, 5);
+                                cs.fill();
+                            }
                             cs.setNonStrokingColor(0f);
-                            text(cs, c.cx() - c.r() + 10, y, 8, LEGEND[i]);
+                            text(cs, c.cx() - c.r() + 12, y, 8, LEGEND[i]);
                         }
                     }
                 }
@@ -199,9 +227,22 @@ class FigureLabelsTest {
         cs.closePath();
     }
 
+    /** PDFBox's own Liberation Sans, named as an icon font is, so its glyphs are read as icons. */
+    private static PDFont iconFont(PDDocument doc) throws IOException {
+        try (InputStream in = PDFont.class.getResourceAsStream("/org/apache/pdfbox/resources/ttf/LiberationSans-Regular.ttf")) {
+            PDType0Font font = PDType0Font.load(doc, in, false);
+            font.getCOSObject().setName(COSName.BASE_FONT, "FontAwesome");
+            return font;
+        }
+    }
+
     private static void text(PDPageContentStream cs, float x, float y, float size, String s) throws IOException {
+        text(cs, FONT, x, y, size, s);
+    }
+
+    private static void text(PDPageContentStream cs, PDFont font, float x, float y, float size, String s) throws IOException {
         cs.beginText();
-        cs.setFont(FONT, size);
+        cs.setFont(font, size);
         cs.newLineAtOffset(x, y);
         cs.showText(s);
         cs.endText();

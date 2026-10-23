@@ -389,7 +389,8 @@ public final class PageAnalyzer {
      * Each figure's text as boxes set where the PDF has it, one per line, for a picture drawn without that text; an
      * empty list keeps a figure's text in its picture. A word belongs to the first figure it lies in, as in
      * {@link #claimWords}, and the words of a table inside a figure stay the table's. Words made from drawn shapes
-     * ({@code drawn}: vector bullets, outlined lettering) stay out: a picture without its text still paints them.
+     * ({@code drawn}: vector bullets, outlined lettering) stay out: a picture without its text still paints them. An icon
+     * font's glyphs are text, which the picture leaves out, so they stay in the labels.
      */
     private List<List<PageLayout.TextBoxItem>> labelsOf(PageData page, List<Box> figures, List<Line> lines,
             List<TableDetection.Found> tables, List<Glyph> drawn) {
@@ -404,7 +405,7 @@ public final class PageAnalyzer {
             for (Word w : seg.words) {
                 float cx = Regions.wordX(w);
                 float cy = Regions.wordY(seg);
-                if (w.glyphs.stream().anyMatch(g -> shapes.contains(g) || g.icon != null)
+                if (w.glyphs.stream().anyMatch(shapes::contains)
                         || tables.stream().anyMatch(t -> TableFinder.contains(t, cx, cy))) {
                     continue;
                 }
