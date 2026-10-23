@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -19,7 +20,9 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.PDInlineImage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,7 +40,7 @@ class PictureFrameLimitsTest {
     private static final float W = 260;
     private static final float H = 157;
 
-    private enum Over { KEY_VALUES, FLAT_INLINE_PANEL, RETRACED_RULES }
+    private enum Over { KEY_VALUES, FLAT_INLINE_PANEL, FLAT_RAW_PANEL, RETRACED_RULES }
 
     @TempDir Path dir;
 
@@ -49,6 +52,12 @@ class PictureFrameLimitsTest {
     @Test
     void aTableOnAPanelOfOneColourStaysATable() throws Exception {
         String xml = convert(Over.FLAT_INLINE_PANEL);
+        assertTrue(xml.matches("(?s).*<w:tbl>.*Annual benefits.*</w:tbl>.*"), "the panel's table is a table");
+    }
+
+    @Test
+    void aTableOnAnUncompressedPanelOfOneColourStaysATable() throws Exception {
+        String xml = convert(Over.FLAT_RAW_PANEL);
         assertTrue(xml.matches("(?s).*<w:tbl>.*Annual benefits.*</w:tbl>.*"), "the panel's table is a table");
     }
 
@@ -101,6 +110,12 @@ class PictureFrameLimitsTest {
                         }
                         table(cs);
                     }
+                    case FLAT_RAW_PANEL -> {
+                        cs.drawImage(flatRaw(doc), X, BOTTOM, W, H);
+                        cs.addRect(X - 0.1f, BOTTOM - 0.1f, W + 0.2f, H + 0.2f);
+                        cs.stroke();
+                        table(cs);
+                    }
                     case FLAT_INLINE_PANEL -> {
                         cs.drawImage(flatInline(doc), X, BOTTOM, W, H);
                         cs.addRect(X - 0.1f, BOTTOM - 0.1f, W + 0.2f, H + 0.2f);
@@ -141,6 +156,19 @@ class PictureFrameLimitsTest {
             text(cs, left + 4, top - r * rowH - 13, 9, rows[r][0]);
             text(cs, mid + 4, top - r * rowH - 13, 9, rows[r][1]);
         }
+    }
+
+    /** A light blue panel drawn as an image of one colour stored without compression, 300 by 180 pixels. */
+    private static PDImageXObject flatRaw(PDDocument doc) throws IOException {
+        int w = 300;
+        int h = 180;
+        byte[] data = new byte[w * h * 3];
+        for (int i = 0; i < data.length; i += 3) {
+            data[i] = (byte) 214;
+            data[i + 1] = (byte) 230;
+            data[i + 2] = (byte) 242;
+        }
+        return new PDImageXObject(doc, new ByteArrayInputStream(data), null, w, h, 8, PDDeviceRGB.INSTANCE);
     }
 
     /** A light blue panel drawn as an inline image of one colour. */
