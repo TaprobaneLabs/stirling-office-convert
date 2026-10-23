@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import stirling.software.officeconvert.extract.PageGraphics.Fill;
+import stirling.software.officeconvert.extract.PageGraphics.Rule;
 import stirling.software.officeconvert.extract.PageGraphics;
 
 final class TextBoxFinder {
@@ -65,11 +66,11 @@ final class TextBoxFinder {
         return art >= PANEL_ART && connectors >= 2 && !FigureFinder.isProse(b, segments);
     }
 
-    /** What a page draws besides text, which a panel can't hold: its pictures and its drawings (marks and fills). */
+    /** What a page draws besides text, which a panel can't hold: its pictures and its drawings (marks, fills, rules). */
     record PanelArt(float pageHeight, List<Box> pictures, List<Box> drawings) {}
 
     static PanelArt panelArt(float pageHeight, List<PageGraphics.ImageDraw> images, List<PageGraphics.VectorMark> marks,
-            List<Fill> fills) {
+            List<Fill> fills, List<Rule> rules) {
         List<Box> pictures = new ArrayList<>();
         for (PageGraphics.ImageDraw img : images) {
             pictures.add(new Box(img.clipX(), img.clipTop(), img.clipRight(), img.clipBottom()));
@@ -80,6 +81,9 @@ final class TextBoxFinder {
         }
         for (Fill f : fills) {
             drawings.add(Regions.of(f));
+        }
+        for (Rule r : rules) {
+            drawings.add(Regions.of(r));
         }
         return new PanelArt(pageHeight, pictures, drawings);
     }
@@ -152,6 +156,8 @@ final class TextBoxFinder {
 
     private static final int PANEL_DRAWINGS = 3;
 
+    private static final float PANEL_EDGE = 2f;
+
     /**
      * Whether Word sets this text in the room the PDF gives it. A panel keeps its size, so text Word sets wider or taller
      * (Tamil, Bengali or Thai in Word's own fonts) would be cut off at its foot.
@@ -205,13 +211,15 @@ final class TextBoxFinder {
             return false;
         }
         for (Box a : panelArt.pictures()) {
-            if (!same(a, b) && a.overlapArea(b) > PANEL_ART_SHARE * b.area() && a.area() < 2 * b.area()) {
+            if (a.overlapArea(b) > PANEL_ART_SHARE * b.area() && a.area() < 2 * b.area()) {
                 return false;
             }
         }
+        // The box's own outline (a mark or rules along its edges) is no drawing in it.
+        Box within = b.grow(-PANEL_EDGE);
         int drawn = 0;
         for (Box a : panelArt.drawings()) {
-            if (!same(a, b) && a.area() < 0.5f * b.area() && a.overlapArea(b) > 0.5f * a.area()) {
+            if (!same(a, b) && a.area() < 0.5f * b.area() && a.overlapArea(within) > 0.5f * a.area()) {
                 drawn++;
             }
         }

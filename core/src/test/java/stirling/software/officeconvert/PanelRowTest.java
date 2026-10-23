@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -19,14 +20,15 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Rows of boxed panels with nothing running beside them, as on a fact sheet that sets its points in coloured boxes
  * between photos (NOAA's GeoXO sheet). Each panel becomes a text box of its size where the PDF has it, instead of the
- * row's panels joining into lines of tab-separated text that Word wraps across the page. A shaded box holding a picture,
- * or a tall shaded column of running text, stays as it was.
+ * row's panels joining into lines of tab-separated text that Word wraps across the page. A panel holding a small chart,
+ * or drawn as a photo of its size, stays with its figure.
  */
 class PanelRowTest {
 
@@ -40,7 +42,7 @@ class PanelRowTest {
 
     @Test
     void panelsInARowBecomeTextBoxes() throws Exception {
-        String xml = convert(false);
+        String xml = convert(Art.NONE);
         List<String> boxes = textBoxes(xml);
         assertEquals(4, boxes.size(), "a text box per panel");
         for (int r = 0; r < TOPS.length; r++) {
@@ -60,10 +62,60 @@ class PanelRowTest {
     }
 
     @Test
-    void aPanelHoldingAPictureStaysOutOfTextBoxes() throws Exception {
-        String xml = convert(true);
+    void aPanelHoldingBarsStaysOutOfTextBoxes() throws Exception {
+        assertNotInATextBox(convert(Art.BARS), "the panel with bars drawn in it");
+    }
+
+    @Test
+    void aPanelHoldingARuledChartStaysOutOfTextBoxes() throws Exception {
+        assertNotInATextBox(convert(Art.RULES), "the panel with a chart's axis and grid lines in it");
+    }
+
+    @Test
+    void aPanelThatIsAPhotoStaysOutOfTextBoxes() throws Exception {
+        assertNotInATextBox(convert(Art.PHOTO), "the panel drawn as a photo of its size");
+    }
+
+    private static void assertNotInATextBox(String xml, String what) {
         for (String box : textBoxes(xml)) {
-            assertFalse(box.contains(label(0, 0, 0)), "the panel with a drawing in it isn't a text box");
+            assertFalse(box.contains(label(0, 0, 0)), what + " isn't a text box");
+        }
+    }
+
+    /** What the first panel holds besides its text. */
+    private enum Art { NONE, BARS, RULES, PHOTO }
+
+    /** A small chart (bars, or axis and grid lines) or a photo filling the panel, its lower left corner at x, y. */
+    private static void drawArt(PDDocument doc, PDPageContentStream cs, Art art, float x, float y) throws IOException {
+        switch (art) {
+            case NONE -> { }
+            case BARS -> {
+                cs.setNonStrokingColor(1f, 0.8f, 0.2f);
+                for (int b = 0; b < 4; b++) {
+                    cs.addRect(x + 100 + b * 10, y + 8, 6, 12 + b * 8);
+                    cs.fill();
+                }
+            }
+            case RULES -> {
+                cs.setStrokingColor(1f);
+                cs.setLineWidth(0.75f);
+                for (int g = 0; g < 4; g++) {
+                    cs.moveTo(x + 100, y + 10 + g * 12);
+                    cs.lineTo(x + 140, y + 10 + g * 12);
+                }
+                cs.moveTo(x + 100, y + 10);
+                cs.lineTo(x + 100, y + 50);
+                cs.stroke();
+            }
+            case PHOTO -> {
+                BufferedImage photo = new BufferedImage(60, 32, BufferedImage.TYPE_INT_RGB);
+                for (int i = 0; i < 60; i++) {
+                    for (int j = 0; j < 32; j++) {
+                        photo.setRGB(i, j, (i * 4) << 16 | (j * 8) << 8 | 90);
+                    }
+                }
+                cs.drawImage(LosslessFactory.createFromImage(doc, photo), x, y, WIDTH, HEIGHT);
+            }
         }
     }
 
@@ -80,7 +132,7 @@ class PanelRowTest {
         return out;
     }
 
-    private String convert(boolean drawing) throws IOException {
+    private String convert(Art art) throws IOException {
         Path pdf = dir.resolve("panels.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
@@ -99,13 +151,8 @@ class PanelRowTest {
                         cs.setNonStrokingColor(0.1f, 0.35f, 0.7f);
                         cs.addRect(x, h - top - HEIGHT, WIDTH, HEIGHT);
                         cs.fill();
-                        if (drawing && r == 0 && c == 0) {
-                            // A small chart inside the first panel: bars drawn as rectangles.
-                            cs.setNonStrokingColor(1f, 0.8f, 0.2f);
-                            for (int b = 0; b < 4; b++) {
-                                cs.addRect(x + 100 + b * 10, h - top - HEIGHT + 8, 6, 12 + b * 8);
-                                cs.fill();
-                            }
+                        if (r == 0 && c == 0) {
+                            drawArt(doc, cs, art, x, h - top - HEIGHT);
                         }
                         cs.setNonStrokingColor(1f);
                         for (int l = 0; l < 3; l++) {
