@@ -587,13 +587,20 @@ public final class PageAnalyzer {
      * (a statement's account summary beside its payment box) instead of one under the other. A row spans the whole table,
      * so no gutter opens between the table's own columns.
      */
-    private static List<ColumnFinder.Item> tableRows(PageLayout.TableItem ti) {
+    static List<ColumnFinder.Item> tableRows(PageLayout.TableItem ti) {
         TableDetection.Found t = ti.table();
         float[] edges = ti.rowEdges();
+        // A cell's text is in its paragraphs: a row split from one with several lines (TableShaper.splitStacked) has none
+        // of its own.
         int[] chars = new int[t.rows()];
-        for (TableDetection.FoundCell c : t.cells()) {
-            if (c.row() < chars.length) {
-                chars[c.row()] += c.text().strip().length();
+        for (int i = 0; i < t.cells().size() && i < ti.cellParas().size(); i++) {
+            int row = t.cells().get(i).row();
+            if (row < chars.length) {
+                for (ParaDraft p : ti.cellParas().get(i)) {
+                    for (Line l : p.lines) {
+                        chars[row] += l.chars;
+                    }
+                }
             }
         }
         List<ColumnFinder.Item> rows = new ArrayList<>();
