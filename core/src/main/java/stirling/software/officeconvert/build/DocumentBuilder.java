@@ -426,6 +426,8 @@ public final class DocumentBuilder {
         PageLayout.Column col = band.columns().get(ci);
         float prevBottom = at.refBottom;
         boolean columnTop = ci > 0 && !flowOn;
+        // The column's first item in the text flow: pictures and boxes placed outside it may come first.
+        boolean opening = true;
         for (int ii = 0; ii < col.items().size(); ii++) {
             PageLayout.Item item = col.items().get(ii);
             if (placeOutOfFlow(item, layout, toDisplay)) {
@@ -440,10 +442,11 @@ public final class DocumentBuilder {
                 at.breakOwed &= !at.pageTop;
                 at.pageTop = false;
                 columnTop = false;
+                opening = false;
                 continue;
             }
             Slot slot = new Slot(at.pageTop ? base.marginTop : prevBottom, at.pageTop || columnTop, at.pageTop && at.breakOwed);
-            if (flowOn && ii == 0) {
+            if (flowOn && opening) {
                 flowingSpacer(item, at.pageTop ? base.marginTop : at.refBottom);
                 slot = new Slot(Float.MAX_VALUE, false, slot.pageBreak());
             }
@@ -456,6 +459,7 @@ public final class DocumentBuilder {
             at.breakOwed &= !at.pageTop;
             at.pageTop = false;
             columnTop = false;
+            opening = false;
         }
         return prevBottom;
     }
