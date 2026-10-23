@@ -96,7 +96,8 @@ public final class PageAnalyzer {
             usedMarks.add(c.mark());
         }
         PageFrame frame = stats.frame(page.width(), page.height());
-        TextBoxFinder.Result boxes = textBoxFinder.find(fills, containers, segments, frame.textLeft(), frame.textRight());
+        TextBoxFinder.Result boxes = textBoxFinder.find(fills, containers, segments, frame.textLeft(), frame.textRight(),
+                TextBoxFinder.panelArt(page.height(), gfx.images(), unused(art, usedMarks), fills));
         for (PageLayout.TextBoxItem tb : boxes.boxes()) {
             fills.removeIf(f -> Math.abs(f.x() - tb.box().x()) < 0.5f && Math.abs(f.top() - tb.box().top()) < 0.5f
                     && Math.abs(f.right() - tb.box().right()) < 0.5f);

@@ -65,7 +65,27 @@ final class TextBoxFinder {
         return art >= PANEL_ART && connectors >= 2 && !FigureFinder.isProse(b, segments);
     }
 
-    Result find(List<Fill> fills, List<Container> containers, List<Line> flow, float frameLeft, float frameRight) {
+    /** What a page draws besides text, which a panel can't hold: its pictures and its drawings (marks and fills). */
+    record PanelArt(float pageHeight, List<Box> pictures, List<Box> drawings) {}
+
+    static PanelArt panelArt(float pageHeight, List<PageGraphics.ImageDraw> images, List<PageGraphics.VectorMark> marks,
+            List<Fill> fills) {
+        List<Box> pictures = new ArrayList<>();
+        for (PageGraphics.ImageDraw img : images) {
+            pictures.add(new Box(img.clipX(), img.clipTop(), img.clipRight(), img.clipBottom()));
+        }
+        List<Box> drawings = new ArrayList<>();
+        for (PageGraphics.VectorMark m : marks) {
+            drawings.add(new Box(m.x(), m.top(), m.right(), m.bottom()));
+        }
+        for (Fill f : fills) {
+            drawings.add(Regions.of(f));
+        }
+        return new PanelArt(pageHeight, pictures, drawings);
+    }
+
+    Result find(List<Fill> fills, List<Container> containers, List<Line> flow, float frameLeft, float frameRight,
+            PanelArt panelArt) {
         List<PageLayout.TextBoxItem> out = new ArrayList<>();
         List<Container> claimed = new ArrayList<>();
         float colWidth = frameRight - frameLeft;
@@ -77,6 +97,12 @@ final class TextBoxFinder {
         }
         candidates.removeIf(c -> c.box().width() > colWidth * 0.85f || c.box().width() < 36 || c.box().height() < 18
                 || Backdrops.isBackdrop(c.box(), flow));
+        List<Container> holding = new ArrayList<>();
+        for (Container cand : candidates) {
+            if (panel(cand, flow, panelArt)) {
+                holding.add(cand);
+            }
+        }
         for (Container cand : candidates) {
             Box box = cand.box();
             Fill f = cand.mark() == null ? new Fill(box.x(), box.top(), box.right(), box.bottom(), cand.fill()) : null;
@@ -84,9 +110,7 @@ final class TextBoxFinder {
             boolean beside = false;
             float gap = Float.MAX_VALUE;
             for (Line l : flow) {
-                boolean in = l.x >= box.x() - 1 && l.right <= box.right() + 1
-                        && l.top >= box.top() - 2 && l.bottom <= box.bottom() + 2;
-                if (in) {
+                if (holds(box, l)) {
                     inside.add(l);
                     continue;
                 }
@@ -96,14 +120,127 @@ final class TextBoxFinder {
                     gap = Math.min(gap, l.right <= box.x() + 1 ? box.x() - l.right : l.x - box.right());
                 }
             }
-            if (inside.size() < 2 || !beside || gap < 6f || f != null && touchesSameFill(f, fills)) {
+            float panelGap = beside || !holding.contains(cand) ? Float.MAX_VALUE : panelGap(cand, holding);
+            if (inside.size() < 2 || (!beside || gap < 6f) && panelGap == Float.MAX_VALUE
+                    || f != null && touchesSameFill(f, fills)) {
                 continue;
+            }
+            if (!beside) {
+                gap = panelGap;
             }
             flow.removeAll(inside);
             out.add(item(cand, inside, gap));
             claimed.add(cand);
         }
         return new Result(out, claimed);
+    }
+
+    private static boolean holds(Box box, Line l) {
+        return l.x >= box.x() - 1 && l.right <= box.right() + 1 && l.top >= box.top() - 2 && l.bottom <= box.bottom() + 2;
+    }
+
+    /** Boxes set apart from each other in a row hold no text running beside them, only each other: a row of panels. */
+    private static final float PANEL_GAP = 4f;
+
+    /** A panel is a short box of text: at most this share of the page's height and this many lines. */
+    private static final float PANEL_PAGE_SHARE = 1f / 3f;
+
+    private static final int PANEL_LINES = 15;
+
+    /** A picture covering this share of a box, or this many drawn marks inside it, make it a figure, not a panel. */
+    private static final float PANEL_ART_SHARE = 0.02f;
+
+    private static final int PANEL_DRAWINGS = 3;
+
+    /**
+     * Whether Word sets this text in the room the PDF gives it. A panel keeps its size, so text Word sets wider or taller
+     * (Tamil, Bengali or Thai in Word's own fonts) would be cut off at its foot.
+     */
+    private static boolean setAsInPdf(String text) {
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            i += Character.charCount(cp);
+            switch (Character.UnicodeScript.of(cp)) {
+                case LATIN, GREEK, CYRILLIC, COMMON, INHERITED -> { }
+                default -> {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static boolean same(Box a, Box b) {
+        return Math.abs(a.x() - b.x()) < 1 && Math.abs(a.top() - b.top()) < 1 && Math.abs(a.right() - b.right()) < 1
+                && Math.abs(a.bottom() - b.bottom()) < 1;
+    }
+
+    /**
+     * A box that can be a panel: it holds a few whole lines of text Word sets as the PDF does and no picture or drawing (a
+     * framed chart or photo stays with its figure), and it's short and set apart from running text, so shading behind a
+     * column isn't one.
+     */
+    private static boolean panel(Container c, List<Line> flow, PanelArt panelArt) {
+        Box b = c.box();
+        if (b.height() > PANEL_PAGE_SHARE * panelArt.pageHeight()) {
+            return false;
+        }
+        int lines = 0;
+        for (Line l : flow) {
+            if (holds(b, l)) {
+                if (!setAsInPdf(l.text())) {
+                    return false;
+                }
+                lines++;
+                continue;
+            }
+            boolean across = l.x < b.right() && l.right > b.x();
+            // Running text the box only shades: a line it cuts through, or one going on right under it.
+            if (across && l.top < b.bottom() && l.bottom > b.top()
+                    || across && l.top >= b.bottom() && l.top - b.bottom() < 0.5f * (l.bottom - l.top)) {
+                return false;
+            }
+        }
+        if (lines == 0 || lines > PANEL_LINES) {
+            return false;
+        }
+        for (Box a : panelArt.pictures()) {
+            if (!same(a, b) && a.overlapArea(b) > PANEL_ART_SHARE * b.area() && a.area() < 2 * b.area()) {
+                return false;
+            }
+        }
+        int drawn = 0;
+        for (Box a : panelArt.drawings()) {
+            if (!same(a, b) && a.area() < 0.5f * b.area() && a.overlapArea(b) > 0.5f * a.area()) {
+                drawn++;
+            }
+        }
+        return drawn < PANEL_DRAWINGS;
+    }
+
+    /**
+     * The gap to the nearest other box holding text level with this one and set apart from it (a panel in a row of
+     * panels, say a page of boxed facts between photos), or MAX_VALUE when there is none. Such a box is placed where the
+     * PDF has it, as a text box of its size, instead of its text joining the next panel's lines across the row.
+     */
+    private static float panelGap(Container self, List<Container> holding) {
+        Box b = self.box();
+        float nearest = Float.MAX_VALUE;
+        for (Container c : holding) {
+            Box o = c.box();
+            if (c == self || o.top() >= b.bottom() - 1 || o.bottom() <= b.top() + 1) {
+                continue;
+            }
+            float shared = Math.min(o.bottom(), b.bottom()) - Math.max(o.top(), b.top());
+            if (shared < 0.5f * Math.min(o.height(), b.height())) {
+                continue;
+            }
+            float apart = o.x() >= b.right() ? o.x() - b.right() : b.x() >= o.right() ? b.x() - o.right() : -1;
+            if (apart >= PANEL_GAP) {
+                nearest = Math.min(nearest, apart);
+            }
+        }
+        return nearest;
     }
 
     private PageLayout.TextBoxItem item(Container cand, List<Line> inside, float gap) {
