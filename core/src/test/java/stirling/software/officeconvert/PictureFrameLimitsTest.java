@@ -40,7 +40,7 @@ class PictureFrameLimitsTest {
     private static final float W = 260;
     private static final float H = 157;
 
-    private enum Over { KEY_VALUES, FLAT_INLINE_PANEL, FLAT_RAW_PANEL, UNREADABLE_PANEL, RETRACED_RULES }
+    private enum Over { KEY_VALUES, FLAT_INLINE_PANEL, FLAT_RAW_PANEL, UNREADABLE_PANEL, CLIPPED_PANEL, RETRACED_RULES }
 
     @TempDir Path dir;
 
@@ -65,6 +65,13 @@ class PictureFrameLimitsTest {
     void aTableOnAPanelTooLargeToDecodeStaysATable() throws Exception {
         // Its pixels can't be read, so it isn't taken for a picture.
         String xml = convert(Over.UNREADABLE_PANEL);
+        assertTrue(xml.matches("(?s).*<w:tbl>.*Annual benefits.*</w:tbl>.*"), "the panel's table is a table");
+    }
+
+    @Test
+    void aTableOnTheOneColourPartOfAClippedImageStaysATable() throws Exception {
+        // The image holds a map beside a plain panel, and the page clips it to the panel.
+        String xml = convert(Over.CLIPPED_PANEL);
         assertTrue(xml.matches("(?s).*<w:tbl>.*Annual benefits.*</w:tbl>.*"), "the panel's table is a table");
     }
 
@@ -128,6 +135,16 @@ class PictureFrameLimitsTest {
                         PDImageXObject huge = new PDImageXObject(doc, new ByteArrayInputStream(new byte[3]), null, 40_000,
                                 40_000, 8, PDDeviceRGB.INSTANCE);
                         cs.drawImage(huge, X, BOTTOM, W, H);
+                        cs.addRect(X - 0.1f, BOTTOM - 0.1f, W + 0.2f, H + 0.2f);
+                        cs.stroke();
+                        table(cs);
+                    }
+                    case CLIPPED_PANEL -> {
+                        cs.saveGraphicsState();
+                        cs.addRect(X, BOTTOM, W, H);
+                        cs.clip();
+                        cs.drawImage(LosslessFactory.createFromImage(doc, mapBesidePanel(866, 262)), X - W, BOTTOM, 2 * W, H);
+                        cs.restoreGraphicsState();
                         cs.addRect(X - 0.1f, BOTTOM - 0.1f, W + 0.2f, H + 0.2f);
                         cs.stroke();
                         table(cs);
@@ -203,6 +220,17 @@ class PictureFrameLimitsTest {
         params.setInt(COSName.BPC, 8);
         params.setItem(COSName.CS, COSName.getPDFName("RGB"));
         return new PDInlineImage(params, data, null);
+    }
+
+    /** A map in the left half, a light blue panel in the right. */
+    private static BufferedImage mapBesidePanel(int w, int h) {
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = img.createGraphics();
+        g.drawImage(map(w / 2, h), 0, 0, null);
+        g.setColor(new Color(214, 230, 242));
+        g.fillRect(w / 2, 0, w - w / 2, h);
+        g.dispose();
+        return img;
     }
 
     /** Land and sea, as a map image is. */
