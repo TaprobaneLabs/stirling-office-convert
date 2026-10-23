@@ -69,8 +69,8 @@ final class OdtFrames {
         StringBuilder g = new StringBuilder("<style:graphic-properties ");
         g.append(t.overlay() ? "style:wrap=\"run-through\" style:run-through=\"foreground\""
                 : "style:wrap=\"parallel\" style:number-wrapped-paragraphs=\"no-limit\" style:wrap-contour=\"false\"");
-        g.append(" style:vertical-pos=\"from-top\" style:vertical-rel=\"page\" style:horizontal-pos=\"from-left\"")
-                .append(" style:horizontal-rel=\"page\" style:flow-with-text=\"false\"");
+        g.append(" style:vertical-pos=\"from-top\" style:vertical-rel=\"").append(t.fromParagraph() ? "paragraph" : "page")
+                .append("\" style:horizontal-pos=\"from-left\" style:horizontal-rel=\"page\" style:flow-with-text=\"false\"");
         float gap = WrapGap.clear(t.wrapGap());
         g.append(" fo:margin-left=\"").append(OdtXml.pt(gap)).append("\" fo:margin-right=\"").append(OdtXml.pt(gap))
                 .append("\" fo:margin-top=\"0pt\" fo:margin-bottom=\"0pt\"");
@@ -88,7 +88,7 @@ final class OdtFrames {
         boolean quarter = direction == 90 || direction == 270;
         float w = Math.max(1, quarter ? t.height() : t.width());
         float h = Math.max(1, quarter ? t.width() : t.height());
-        float top = Math.max(0, t.y());
+        float top = t.fromParagraph() ? t.y() : Math.max(0, t.y());
         sb.append("<draw:frame draw:style-name=\"").append(style).append("\" draw:name=\"Text Box ").append(++names)
                 .append("\" text:anchor-type=\"paragraph\"");
         if (direction == 0) {

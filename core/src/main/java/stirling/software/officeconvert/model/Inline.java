@@ -38,8 +38,16 @@ public sealed interface Inline {
             boolean overlay,
             int direction,
             int groundRgb,
-            boolean upright)
+            boolean upright,
+            boolean fromParagraph)
             implements Inline {
+
+        public TextBox(float x, float y, float width, float height, int fillRgb, float insetLeft, float insetRight,
+                float wrapGap, List<Paragraph> paragraphs, int lineRgb, float lineWidth, boolean rounded, boolean overlay,
+                int direction, int groundRgb, boolean upright) {
+            this(x, y, width, height, fillRgb, insetLeft, insetRight, wrapGap, paragraphs, lineRgb, lineWidth, rounded,
+                    overlay, direction, groundRgb, upright, false);
+        }
 
         public TextBox(float x, float y, float width, float height, int fillRgb, float insetLeft, float insetRight,
                 float wrapGap, List<Paragraph> paragraphs, int lineRgb, float lineWidth, boolean rounded, boolean overlay) {
@@ -52,6 +60,12 @@ public sealed interface Inline {
                 int direction) {
             this(x, y, width, height, fillRgb, insetLeft, insetRight, wrapGap, paragraphs, lineRgb, lineWidth, rounded,
                     overlay, direction, -1, false);
+        }
+
+        /** This box anchored to the paragraph that holds it, {@code offset} points below the paragraph's top. */
+        public TextBox riding(float offset) {
+            return new TextBox(x, offset, width, height, fillRgb, insetLeft, insetRight, wrapGap, paragraphs, lineRgb,
+                    lineWidth, rounded, overlay, direction, groundRgb, upright, true);
         }
     }
 

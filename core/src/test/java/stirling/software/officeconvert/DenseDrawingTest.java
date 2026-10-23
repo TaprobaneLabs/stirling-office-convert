@@ -1,7 +1,6 @@
 package stirling.software.officeconvert;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -39,14 +38,19 @@ class DenseDrawingTest {
         try (ZipFile zip = new ZipFile(docx.toFile())) {
             xml = new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
         }
-        assertEquals(1, count(xml, "<w:drawing>"), "the map is one picture");
+        assertEquals(1, count(xml, "<pic:pic>"), "the map is one picture");
         StringBuilder text = new StringBuilder();
         Matcher m = Pattern.compile("<w:t(?: [^>]*)?>([^<]*)</w:t>").matcher(xml);
         while (m.find()) {
             text.append(m.group(1)).append(' ');
         }
+        StringBuilder boxed = new StringBuilder();
+        Matcher box = Pattern.compile("<w:txbxContent>(.*?)</w:txbxContent>", Pattern.DOTALL).matcher(xml);
+        while (box.find()) {
+            boxed.append(box.group(1));
+        }
         for (String street : STREETS) {
-            assertFalse(text.toString().contains(street), street + " is drawn with the map, not set as text");
+            assertTrue(boxed.toString().contains(street), street + " is set as text over the map, not drawn with it");
         }
         assertTrue(text.toString().contains("District map"), "the heading above the map stays text");
         assertTrue(text.toString().contains("The boundary follows the river."), "the note below the map stays text");
