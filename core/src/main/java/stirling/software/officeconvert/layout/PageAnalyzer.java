@@ -520,14 +520,29 @@ public final class PageAnalyzer {
         for (Line l : flow) {
             items.add(new ColumnFinder.Item(l.x, l.top, l.right, l.bottom, l.baseline, true, l.chars));
         }
+        Map<PageLayout.Item, Integer> blockAt = new IdentityHashMap<>();
         for (PageLayout.Item b : blocks) {
             if (!b.behindText() && !PictureArranger.isMark(b)) {
                 boolean picture = b instanceof PageLayout.FigureItem || b instanceof PageLayout.ImageItem
                         || b instanceof PageLayout.PictureRow;
+                blockAt.put(b, items.size());
                 items.add(new ColumnFinder.Item(b.x(), b.top(), b.right(), b.bottom(), b.bottom(), false, 0, picture));
             }
         }
         List<ColumnFinder.Band> found = ColumnFinder.find(items, frame.textLeft(), frame.textRight(), page.height(), stats.bodySize);
+        List<ColumnFinder.Item> rows = new ArrayList<>();
+        for (PageLayout.Item b : blocks) {
+            if (b instanceof PageLayout.TableItem ti && blockAt.containsKey(b) && singleColumn(found, ti)) {
+                rows.addAll(tableRows(ti));
+                // A gutter beside the table reaches over all of it, as one beside a picture does, so the band holds the
+                // table even when its last rows are blank.
+                items.set(blockAt.get(b), new ColumnFinder.Item(b.x(), b.top(), b.right(), b.bottom(), b.bottom(), false, 0, true));
+            }
+        }
+        if (!rows.isEmpty()) {
+            items.addAll(rows);
+            found = ColumnFinder.find(items, frame.textLeft(), frame.textRight(), page.height(), stats.bodySize);
+        }
         boolean pinPictures = ocr || PictureArranger.pictureDominated(blocks, page);
         List<PageLayout.Band> bands = new ArrayList<>();
         for (ColumnFinder.Band band : found) {
@@ -561,6 +576,50 @@ public final class PageAnalyzer {
     }
 
     private static final float STROKE_MARGIN = 1f;
+
+    /**
+     * Whether the band that holds the table has one column: a table already in a column of its own keeps it. A band holds
+     * a block by its middle, as when blocks are set in columns, so columns that merely touch the table's edge don't count.
+     */
+    private static boolean singleColumn(List<ColumnFinder.Band> bands, PageLayout.TableItem ti) {
+        float middle = (ti.top() + ti.bottom()) / 2f;
+        for (ColumnFinder.Band band : bands) {
+            if (inBand(band, middle, band == bands.getLast())) {
+                return !band.multiColumn();
+            }
+        }
+        return true;
+    }
+
+    /**
+     * A table's rows as rows of text across its width, so a table and the text beside it can stand in columns of their own
+     * (a statement's account summary beside its payment box) instead of one under the other. A row spans the whole table,
+     * so no gutter opens between the table's own columns.
+     */
+    static List<ColumnFinder.Item> tableRows(PageLayout.TableItem ti) {
+        TableDetection.Found t = ti.table();
+        float[] edges = ti.rowEdges();
+        // A cell's text is in its paragraphs: a row split from one with several lines (TableShaper.splitStacked) has none
+        // of its own.
+        int[] chars = new int[t.rows()];
+        for (int i = 0; i < t.cells().size() && i < ti.cellParas().size(); i++) {
+            int row = t.cells().get(i).row();
+            if (row < chars.length) {
+                for (ParaDraft p : ti.cellParas().get(i)) {
+                    for (Line l : p.lines) {
+                        chars[row] += l.chars;
+                    }
+                }
+            }
+        }
+        List<ColumnFinder.Item> rows = new ArrayList<>();
+        for (int r = 0; r < t.rows() && r + 1 < edges.length; r++) {
+            if (chars[r] > 0) {
+                rows.add(new ColumnFinder.Item(t.left(), edges[r], t.right(), edges[r + 1], edges[r + 1], true, chars[r]));
+            }
+        }
+        return rows;
+    }
 
     private void diagrams(List<Box> figures, List<Box> backdrops, PageGraphics gfx, List<Line> segments,
             List<PageLayout.Item> blocks, float pageWidth) {
