@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+import stirling.software.officeconvert.extract.FlatImages;
 import stirling.software.officeconvert.extract.Glyph;
 import stirling.software.officeconvert.extract.PageData;
 import stirling.software.officeconvert.extract.PageGraphics.Fill;
@@ -107,8 +108,9 @@ public final class PageAnalyzer {
             usedMarks.add(c.mark());
         }
         PageFrame frame = stats.frame(page.width(), page.height());
+        List<Box> pictures = pictureAreas(page, gfx.images(), segments, rules, gfx.marks());
         TextBoxFinder.Result boxes = textBoxFinder.find(fills, containers, segments, frame.textLeft(), frame.textRight(),
-                TextBoxFinder.panelArt(page.height(), gfx.images(), unused(art, usedMarks), fills, rules));
+                TextBoxFinder.panelArt(page.height(), gfx.images(), unused(art, usedMarks), fills, rules), pictures);
         for (PageLayout.TextBoxItem tb : boxes.boxes()) {
             fills.removeIf(f -> Math.abs(f.x() - tb.box().x()) < 0.5f && Math.abs(f.top() - tb.box().top()) < 0.5f
                     && Math.abs(f.right() - tb.box().right()) < 0.5f);
@@ -157,7 +159,7 @@ public final class PageAnalyzer {
             rules.addAll(ScanRules.find(scanned));
         }
         List<TableDetection.Found> tables = detectTables
-                ? tableFinder.find(page, frame.textLeft(), frame.textRight(), segments, rules, fills, strong)
+                ? tableFinder.find(page, frame.textLeft(), frame.textRight(), segments, rules, fills, concat(strong, pictures))
                 : new ArrayList<>();
         tables.removeIf(t -> TableShaper.looksLikeList(t, TableShaper.assign(t, TableFinder.wordsInside(segments, t))));
         if (detectTables) {
@@ -304,6 +306,60 @@ public final class PageAnalyzer {
         out.removeIf(used::contains);
         return out;
     }
+
+    /**
+     * The areas of framed pictures the page draws as images, whose rules and words stay out of table detection, as a
+     * drawing's do, and whose drawn frames aren't text boxes: a map's frame and its inset key are the picture's, not a
+     * table or a sidebar over it. Only a picture with a frame along its edges counts, so words over an unframed one (a
+     * scale bar's, a locator map's) may still be a table's. An image of one colour is a panel's or a banner's background,
+     * not a picture. A page-sized image (a scan, a page's background) and one under running text (a backdrop) don't
+     * count either.
+     */
+    private static List<Box> pictureAreas(PageData page, List<ImageDraw> images, List<Line> segments, List<Rule> rules,
+            List<PageGraphics.VectorMark> marks) {
+        List<Box> out = new ArrayList<>();
+        for (ImageDraw img : images) {
+            Box b = new Box(img.clipX(), img.clipTop(), img.clipRight(), img.clipBottom());
+            if (b.width() >= PICTURE_SIDE && b.height() >= PICTURE_SIDE && b.area() <= PICTURE_PAGE_SHARE * page.width() * page.height()
+                    && !img.skewed() && framed(b, rules, marks) && !FigureFinder.isProse(b, segments)
+                    && !Backdrops.isBackdrop(b, segments) && !FlatImages.flat(img)) {
+                out.add(b);
+            }
+        }
+        return out;
+    }
+
+    /** Whether a frame runs along the box's edges: a drawn box its size, or rules along at least three of its sides. */
+    private static boolean framed(Box b, List<Rule> rules, List<PageGraphics.VectorMark> marks) {
+        for (PageGraphics.VectorMark m : marks) {
+            if (m.stroked() && Math.abs(m.x() - b.x()) <= FRAME_SLACK && Math.abs(m.right() - b.right()) <= FRAME_SLACK
+                    && Math.abs(m.top() - b.top()) <= FRAME_SLACK && Math.abs(m.bottom() - b.bottom()) <= FRAME_SLACK) {
+                return true;
+            }
+        }
+        float[][] sides = {{b.top(), b.x(), b.right()}, {b.bottom(), b.x(), b.right()}, {b.x(), b.top(), b.bottom()},
+            {b.right(), b.top(), b.bottom()}};
+        int ruled = 0;
+        for (int s = 0; s < sides.length; s++) {
+            boolean horizontal = s < 2;
+            float covered = 0;
+            for (Rule r : rules) {
+                if (r.horizontal() == horizontal && Math.abs(r.pos() - sides[s][0]) <= FRAME_SLACK) {
+                    covered += Math.max(0, Math.min(r.end(), sides[s][2]) - Math.max(r.start(), sides[s][1]));
+                }
+            }
+            ruled += covered >= FRAME_COVER * (sides[s][2] - sides[s][1]) ? 1 : 0;
+        }
+        return ruled >= 3;
+    }
+
+    private static final float FRAME_SLACK = 2f;
+
+    private static final float FRAME_COVER = 0.8f;
+
+    private static final float PICTURE_SIDE = 36f;
+
+    private static final float PICTURE_PAGE_SHARE = 0.5f;
 
     private static ImageDraw fullPageImage(PageData page, List<ImageDraw> images) {
         for (ImageDraw img : images) {
