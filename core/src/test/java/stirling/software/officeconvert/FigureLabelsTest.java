@@ -38,6 +38,8 @@ class FigureLabelsTest {
     private static final Chart MIDDLE = new Chart(300, 520, 120, new String[] {"North 40%", "South 35%", "West 25%"},
             new float[][] {{320, 560}, {210, 490}, {320, 450}});
 
+    private static final String[] LEGEND = {"Pacific", "Atlantic"};
+
     @TempDir Path dir;
 
     @Test
@@ -73,6 +75,22 @@ class FigureLabelsTest {
         assertLabelBoxes(xml, right);
     }
 
+    @Test
+    void aLegendsSwatchesStayInItsPicture() throws Exception {
+        String xml = docx(List.of(MIDDLE), true, true);
+        assertLabelBoxes(xml, MIDDLE);
+        List<String> texts = new ArrayList<>();
+        Matcher box = Pattern.compile("<w:txbxContent>(.*?)</w:txbxContent>", Pattern.DOTALL).matcher(xml);
+        while (box.find()) {
+            texts.add(box.group(1).replaceAll("<[^>]+>", ""));
+        }
+        for (String key : LEGEND) {
+            assertTrue(texts.stream().anyMatch(t -> t.contains(key)), key + " is a text box");
+        }
+        assertTrue(texts.stream().noneMatch(t -> t.contains("▪") || t.contains("•")),
+                "no label repeats a swatch the picture paints: " + texts);
+    }
+
     /** Each label is a text box set within 2 pt of its PDF place across the page. */
     private static void assertLabelBoxes(String xml, Chart chart) {
         List<String> boxes = new ArrayList<>();
@@ -101,14 +119,23 @@ class FigureLabelsTest {
     }
 
     private String docx(List<Chart> charts, boolean textBelow) throws IOException {
+        return docx(charts, textBelow, false);
+    }
+
+    private String docx(List<Chart> charts, boolean textBelow, boolean legend) throws IOException {
         Path docx = dir.resolve("chart.docx");
-        PdfToDocx.convert(pdf(charts, textBelow), docx, PdfToDocx.Options.defaults());
+        PdfToDocx.convert(pdf(charts, textBelow, legend), docx, PdfToDocx.Options.defaults());
         try (ZipFile zip = new ZipFile(docx.toFile())) {
             return new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
         }
     }
 
     private Path pdf(List<Chart> charts, boolean textBelow) throws IOException {
+        return pdf(charts, textBelow, false);
+    }
+
+    /** {@code legend}: the first chart has a legend in its lower left corner, each key a drawn swatch and a word. */
+    private Path pdf(List<Chart> charts, boolean textBelow, boolean legend) throws IOException {
         Path pdf = dir.resolve("chart.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.A4);
@@ -133,6 +160,17 @@ class FigureLabelsTest {
                         text(cs, c.at()[i][0], c.at()[i][1], 10, c.labels()[i]);
                     }
                     cs.setNonStrokingColor(0f);
+                    if (legend && c == charts.getFirst()) {
+                        // In the corner of the chart's box, clear of the circle.
+                        for (int i = 0; i < LEGEND.length; i++) {
+                            float y = c.cy() - c.r() + 4 + 10 * (LEGEND.length - 1 - i);
+                            cs.setNonStrokingColor(colours[i][0], colours[i][1], colours[i][2]);
+                            cs.addRect(c.cx() - c.r() + 2, y, 5, 5);
+                            cs.fill();
+                            cs.setNonStrokingColor(0f);
+                            text(cs, c.cx() - c.r() + 10, y, 8, LEGEND[i]);
+                        }
+                    }
                 }
                 if (textBelow) {
                     text(cs, 72, 360, 11, "Figures are for the calendar year and exclude returns.");

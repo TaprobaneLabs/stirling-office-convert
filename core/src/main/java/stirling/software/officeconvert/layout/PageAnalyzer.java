@@ -211,7 +211,7 @@ public final class PageAnalyzer {
         List<Box> drawn = concat(figures, backdrops);
         addImages(page, gfx.images(), drawn, ocr, segments, blocks);
         List<List<PageLayout.TextBoxItem>> labelled = figureLabels && !ocr
-                ? labelsOf(page, figures, concat(segments, boxedLabels), tables)
+                ? labelsOf(page, figures, concat(segments, boxedLabels), tables, bullets)
                 : null;
         for (int i = 0; i < figures.size(); i++) {
             blocks.add(new PageLayout.FigureItem(figures.get(i), false, false, -1,
@@ -388,10 +388,13 @@ public final class PageAnalyzer {
     /**
      * Each figure's text as boxes set where the PDF has it, one per line, for a picture drawn without that text; an
      * empty list keeps a figure's text in its picture. A word belongs to the first figure it lies in, as in
-     * {@link #claimWords}, and the words of a table inside a figure stay the table's.
+     * {@link #claimWords}, and the words of a table inside a figure stay the table's. Words made from drawn shapes
+     * ({@code drawn}: vector bullets, outlined lettering) stay out: a picture without its text still paints them.
      */
     private List<List<PageLayout.TextBoxItem>> labelsOf(PageData page, List<Box> figures, List<Line> lines,
-            List<TableDetection.Found> tables) {
+            List<TableDetection.Found> tables, List<Glyph> drawn) {
+        Set<Glyph> shapes = Collections.newSetFromMap(new IdentityHashMap<>());
+        shapes.addAll(drawn);
         List<List<Line>> inside = new ArrayList<>();
         for (int i = 0; i < figures.size(); i++) {
             inside.add(new ArrayList<>());
@@ -401,7 +404,8 @@ public final class PageAnalyzer {
             for (Word w : seg.words) {
                 float cx = Regions.wordX(w);
                 float cy = Regions.wordY(seg);
-                if (tables.stream().anyMatch(t -> TableFinder.contains(t, cx, cy))) {
+                if (w.glyphs.stream().anyMatch(g -> shapes.contains(g) || g.icon != null)
+                        || tables.stream().anyMatch(t -> TableFinder.contains(t, cx, cy))) {
                     continue;
                 }
                 for (int i = 0; i < figures.size(); i++) {
