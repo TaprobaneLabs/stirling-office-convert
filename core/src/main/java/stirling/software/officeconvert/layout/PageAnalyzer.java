@@ -651,7 +651,7 @@ public final class PageAnalyzer {
             List<PageLayout.Column> columns = new ArrayList<>();
             for (int i = 0; i < band.columns().size(); i++) {
                 columns.add(column(band.columns().get(i), colLines.get(i), colBlocks.get(i), pinPictures, margin.textLeft(),
-                        new Box(0, 0, page.width(), page.height())));
+                        new Box(0, 0, page.width(), page.height()), last ? Float.MAX_VALUE : band.bottom(), flow));
             }
             bands.add(new PageLayout.Band(band.top(), band.bottom(), columns));
         }
@@ -918,13 +918,18 @@ public final class PageAnalyzer {
         return y >= band.top() && y < band.bottom() || last && y >= band.bottom();
     }
 
+    /**
+     * {@code bandBottom}: where the next band starts ({@code Float.MAX_VALUE} for the page's last); {@code pageLines}: the
+     * page's lines in every band, which a picture hanging below its band may not overlap.
+     */
     private PageLayout.Column column(
             float[] c, List<Line> colLines, List<PageLayout.Item> colBlocks, boolean pinPictures, float marginEdge,
-            Box sheet) {
+            Box sheet, float bandBottom, List<Line> pageLines) {
         List<Line> lines = LineGroups.joinRows(colLines);
         List<PageLayout.Item> colItems = new ArrayList<>();
         List<ParagraphBuilder.Obstacle> obstacles = new ArrayList<>();
-        PictureArranger.arrange(colBlocks, lines, colItems, obstacles, pinPictures, marginEdge, sheet, c);
+        PictureArranger.arrange(colBlocks, lines, colItems, obstacles, pinPictures, marginEdge, sheet, c, bandBottom,
+                pageLines);
         List<ParaDraft> paras = paragraphs.build(lines, c[0], c[1], obstacles);
         Set<ParaDraft> beside = SideBySide.fragments(paras);
         for (ParaDraft p : paras) {
