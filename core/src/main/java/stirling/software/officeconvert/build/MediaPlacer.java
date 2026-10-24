@@ -142,9 +142,16 @@ final class MediaPlacer {
         return pic;
     }
 
-    /** A figure drawn without its text, for its labels to be set over it as text. */
+    /**
+     * A figure drawn without its text, for its labels to be set over it as text. Turned text in it isn't among its labels,
+     * so the picture draws it.
+     */
     Picture unlabelled(PageLayout.FigureItem fi, PageData page, java.awt.geom.AffineTransform toDisplay) throws IOException {
-        Picture pic = figurePicture(fi.box(), page, toDisplay, false);
+        Box area = fi.box().grow(1f);
+        boolean turned = page.rotated().stream().anyMatch(g -> area.contains(g.x, g.baseline));
+        PDPage pdPage = document.getPage(page.index());
+        MediaEncoder.Encoded enc = media.figure(pdPage, page.index(), toDisplay, fi.box(), false, turned ? page.direction() : -1);
+        Picture pic = enc == null ? null : stored(enc, fi.box());
         if (pic != null) {
             pic.description = FigureWords.text(page, fi.box());
         }

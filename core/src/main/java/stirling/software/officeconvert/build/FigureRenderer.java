@@ -41,6 +41,8 @@ final class FigureRenderer extends PDFRenderer {
 
     private final boolean text;
     private final boolean paper;
+    /** Without text, the page's reading direction: glyphs set in another (turned text) are drawn all the same. */
+    private final int turnedFrom;
     private Rectangle2D span;
 
     FigureRenderer(PDDocument document, boolean text) {
@@ -48,9 +50,44 @@ final class FigureRenderer extends PDFRenderer {
     }
 
     FigureRenderer(PDDocument document, boolean text, boolean paper) {
+        this(document, text, paper, -1);
+    }
+
+    /** A renderer that draws a figure's turned text only: glyphs not set in {@code direction}, the page's. */
+    static FigureRenderer turnedOnly(PDDocument document, int direction) {
+        return new FigureRenderer(document, false, false, direction);
+    }
+
+    private FigureRenderer(PDDocument document, boolean text, boolean paper, int turnedFrom) {
         super(document);
         this.text = text && !paper;
         this.paper = paper;
+        this.turnedFrom = turnedFrom;
+    }
+
+    /** A glyph's direction as PDFBox's {@code TextPosition.getDir} reads it from its rendering matrix: 0, 90, 180 or 270. */
+    static int direction(Matrix m) {
+        float a = m.getValue(0, 0);
+        float b = m.getValue(0, 1);
+        float c = m.getValue(1, 0);
+        float d = m.getValue(1, 1);
+        if (a > 0 && Math.abs(b) < d && Math.abs(c) < a && d > 0) {
+            return 0;
+        }
+        if (a < 0 && Math.abs(b) < Math.abs(d) && Math.abs(c) < Math.abs(a) && d < 0) {
+            return 180;
+        }
+        if (Math.abs(a) < Math.abs(c) && b > 0 && c < 0 && Math.abs(d) < b) {
+            return 90;
+        }
+        if (Math.abs(a) < c && b < 0 && c > 0 && Math.abs(d) < Math.abs(b)) {
+            return 270;
+        }
+        return 0;
+    }
+
+    private boolean draws(Matrix textRenderingMatrix) {
+        return text || turnedFrom >= 0 && direction(textRenderingMatrix) != turnedFrom;
     }
 
     void paperSpan(Rectangle2D region) {
@@ -186,7 +223,7 @@ final class FigureRenderer extends PDFRenderer {
                     throws IOException {
                 PDTextState state = getGraphicsState().getTextState();
                 RenderingMode mode = state.getRenderingMode();
-                if (text) {
+                if (draws(textRenderingMatrix)) {
                     super.showFontGlyph(textRenderingMatrix, font, code, displacement);
                 } else if (mode.isClip()) {
                     state.setRenderingMode(RenderingMode.NEITHER_CLIP);
@@ -201,7 +238,7 @@ final class FigureRenderer extends PDFRenderer {
             @Override
             protected void showType3Glyph(Matrix textRenderingMatrix, PDType3Font font, int code, Vector displacement)
                     throws IOException {
-                if (text) {
+                if (draws(textRenderingMatrix)) {
                     super.showType3Glyph(textRenderingMatrix, font, code, displacement);
                 }
             }

@@ -62,6 +62,7 @@ final class MediaEncoder {
     private final boolean lossless;
     private PDFRenderer renderer;
     private PDFRenderer textFreeRenderer;
+    private final java.util.Map<Integer, PDFRenderer> turnedRenderers = new java.util.HashMap<>();
     private FigureRenderer paperRenderer;
     private int lastFigurePage = -1;
     private BufferedImage pageRender;
@@ -166,9 +167,15 @@ final class MediaEncoder {
     }
 
     Encoded figure(PDPage page, int pageIndex, AffineTransform toDisplay, Box box, boolean withText) {
+        return figure(page, pageIndex, toDisplay, box, withText, -1);
+    }
+
+    /** {@code turnedFrom}: without text, the page's reading direction, so text turned from it is drawn all the same. */
+    Encoded figure(PDPage page, int pageIndex, AffineTransform toDisplay, Box box, boolean withText, int turnedFrom) {
         try {
             if (!withText) {
-                return png(render(textFree(), page, pageIndex, toDisplay, box, scaleFor(box)));
+                PDFRenderer r = turnedFrom < 0 ? textFree() : turnedOnly(turnedFrom);
+                return png(render(r, page, pageIndex, toDisplay, box, scaleFor(box)));
             }
             if (pageIndex == lastFigurePage) {
                 if (pageRender == null) {
@@ -262,6 +269,14 @@ final class MediaEncoder {
             paperRenderer.setSubsamplingAllowed(true);
         }
         return paperRenderer;
+    }
+
+    private PDFRenderer turnedOnly(int direction) {
+        return turnedRenderers.computeIfAbsent(direction, d -> {
+            FigureRenderer r = FigureRenderer.turnedOnly(document, d);
+            r.setSubsamplingAllowed(true);
+            return r;
+        });
     }
 
     private PDFRenderer textFree() {
