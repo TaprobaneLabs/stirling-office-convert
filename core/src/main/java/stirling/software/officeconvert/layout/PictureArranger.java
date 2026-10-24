@@ -40,7 +40,9 @@ final class PictureArranger {
             boolean overlayAll,
             float marginEdge,
             Box sheet,
-            float[] column) {
+            float[] column,
+            float bandBottom,
+            List<Line> pageLines) {
         List<PageLayout.Item> inFlow = new ArrayList<>();
         for (PageLayout.Item b : blocks) {
             if (b instanceof PageLayout.TextBoxItem tb) {
@@ -49,7 +51,7 @@ final class PictureArranger {
             } else if (!isPicture(b)) {
                 out.add(b);
             } else if (overlayAll || b.right() <= marginEdge + 2 || bleeds(b, sheet) || isMark(b) && !onPicture(b, blocks, lines)
-                    || overlapsPicture(b, blocks, lines)) {
+                    || overlapsPicture(b, blocks, lines) || hangsBelow(b, bandBottom, pageLines)) {
                 out.add(new PageLayout.FloatItem(b, 0f, true));
             } else {
                 place(b, lines, solids(blocks), out, obstacles, inFlow);
@@ -60,6 +62,27 @@ final class PictureArranger {
                     && (row.x() < column[0] - OUTSIDE_COLUMN || row.right() > column[1] + OUTSIDE_COLUMN);
             out.add(outside ? new PageLayout.FloatItem(row, 0f, true) : row);
         }
+    }
+
+    /** How far a picture may reach below its band before it hangs into the next one, in points. */
+    private static final float HANG = 2f;
+
+    /**
+     * Whether a picture reaches below its band, into the next, clear of every line on the page. In the text flow it would
+     * hold its column open to its foot, and Word starts the next band only below that: CDC's kidney disease fact sheet has
+     * a drawing at the foot of one column beside a callout that starts the next band, and the callout went to a page of its
+     * own. Set on the page instead, it takes no room in the column.
+     */
+    private static boolean hangsBelow(PageLayout.Item b, float bandBottom, List<Line> pageLines) {
+        if (b.bottom() <= bandBottom + HANG) {
+            return false;
+        }
+        for (Line l : pageLines) {
+            if (l.x < b.right() && l.right > b.x() && l.top < b.bottom() && l.bottom > b.top()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean overlapsPicture(PageLayout.Item b, List<PageLayout.Item> blocks, List<Line> lines) {
