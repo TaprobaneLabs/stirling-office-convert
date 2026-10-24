@@ -662,6 +662,31 @@ public final class DocumentBuilder {
 
     private static final float ROW_FOOT = 2f;
 
+    /**
+     * The top of the first row of wrapping text boxes in the column from {@code top} down (tops within ROW_FOOT of each
+     * other) that leaves the column no room beside it, or {@code Float.MAX_VALUE}.
+     */
+    private static float filledFrom(PageLayout.Column col, float top) {
+        List<PageLayout.TextBoxItem> below = new ArrayList<>();
+        for (PageLayout.Item it : col.items()) {
+            if (it instanceof PageLayout.TextBoxItem tb && !tb.overlay() && tb.box().top() >= top - 0.5f) {
+                below.add(tb);
+            }
+        }
+        below.sort(Comparator.comparingDouble(tb -> tb.box().top()));
+        for (int i = 0; i < below.size(); ) {
+            float rowTop = below.get(i).box().top();
+            List<PageLayout.TextBoxItem> row = new ArrayList<>();
+            while (i < below.size() && below.get(i).box().top() <= rowTop + ROW_FOOT) {
+                row.add(below.get(i++));
+            }
+            if (leaveNoRoom(row, col.left(), col.right())) {
+                return rowTop;
+            }
+        }
+        return Float.MAX_VALUE;
+    }
+
     /** Whether the boxes, with their wrapping gaps, cover the room from {@code left} to {@code right} but for gaps narrower than {@link #FILLED_ROOM}. */
     private static boolean leaveNoRoom(List<PageLayout.TextBoxItem> boxes, float left, float right) {
         List<PageLayout.TextBoxItem> across = new ArrayList<>(boxes);
@@ -736,7 +761,7 @@ public final class DocumentBuilder {
                 columnGrowth += grown;
                 bottom += grown;
                 if (!under.isEmpty()) {
-                    bottom = underRow(under, bottom);
+                    bottom = underRow(under, bottom, filledFrom(col, bottom));
                 }
             }
         } else {
@@ -1188,10 +1213,19 @@ public final class DocumentBuilder {
         return next instanceof PageLayout.ParaItem np ? floats.takeUnder(d, bottom, paragraphs.wordTop(np.para())) : List.of();
     }
 
-    private float underRow(List<Inline.Shape> shapes, float top) throws IOException {
+    /**
+     * A line carrying the shapes drawn under a paragraph, as tall as they reach, but ending short of {@code filled}, where a
+     * row of text boxes leaves the column no room: Word moves a line such boxes leave no room for below them, and the
+     * boxes' height came twice. USGS Fact Sheet 2024-3021's contact box, whose drawn outline rides the paragraph above it,
+     * went to a page of its own with all after it.
+     */
+    private float underRow(List<Inline.Shape> shapes, float top, float filled) throws IOException {
         float bottom = top;
         for (Inline.Shape s : shapes) {
             bottom = Math.max(bottom, s.y() + s.height());
+        }
+        if (filled - 1f < bottom) {
+            bottom = Math.max(top, filled - 1f);
         }
         Paragraph row = hairline(Math.max(1f, bottom - top));
         row.sourceTop = top;
