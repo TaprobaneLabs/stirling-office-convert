@@ -39,7 +39,7 @@ class CaptionUnderBoxesTest {
 
     @Test
     void theCaptionKeepsNoSpaceReachingOverTheBoxes() throws Exception {
-        String xml = convert();
+        String xml = convert(8.5f);
         assertTrue(xml.contains("Last Page"), "the caption is there");
         float above = 0;
         NodeList body = DocumentBuilderFactory.newInstance().newDocumentBuilder()
@@ -62,6 +62,32 @@ class CaptionUnderBoxesTest {
         assertTrue(above < 20, "the caption's room above reaches back " + above + " pt, over the boxes");
     }
 
+    @Test
+    void theRoomUnderTheBoxesCantSitBesideThem() throws Exception {
+        // Set lower, the caption keeps the room between it and the boxes in a spacer. Unindented, the spacer fitted beside
+        // the boxes, where the column has room, and the caption went straight under them; set from the caption's indent,
+        // the spacer has no room beside them either.
+        String xml = convert(30);
+        NodeList body = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                .parse(new InputSource(new StringReader(xml))).getElementsByTagName("w:body").item(0).getChildNodes();
+        Element before = null;
+        for (int i = 0; i < body.getLength(); i++) {
+            if (body.item(i) instanceof Element p && p.getTagName().equals("w:p")) {
+                if (ownText(p).contains("Last Page")) {
+                    break;
+                }
+                before = p;
+            }
+        }
+        assertTrue(before != null && ownText(before).isBlank(), "a spacer keeps the room above the caption");
+        Element spacing = (Element) before.getElementsByTagName("w:spacing").item(0);
+        float room = Integer.parseInt(spacing.getAttribute("w:line")) / 20f;
+        assertTrue(room > 10 && room < 30, "the spacer stands for the room under the boxes: " + room + " pt");
+        Element ind = (Element) before.getElementsByTagName("w:ind").item(0);
+        float indent = ind == null || ind.getAttribute("w:left").isEmpty() ? 0 : Integer.parseInt(ind.getAttribute("w:left")) / 20f;
+        assertTrue(indent > 300, "the spacer starts where the caption does, under the boxes: indented " + indent + " pt");
+    }
+
     /** A paragraph's text, leaving out the text boxes anchored in it. */
     private static String ownText(Element p) {
         StringBuilder sb = new StringBuilder();
@@ -79,7 +105,8 @@ class CaptionUnderBoxesTest {
         return sb.toString();
     }
 
-    private String convert() throws IOException {
+    /** The page, with the captions' baseline {@code below} the lower row's foot. */
+    private String convert(float below) throws IOException {
         Path pdf = dir.resolve("notice.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDRectangle landscape = new PDRectangle(PDRectangle.LETTER.getHeight(), PDRectangle.LETTER.getWidth());
@@ -103,8 +130,8 @@ class CaptionUnderBoxesTest {
                         }
                     }
                 }
-                text(cs, SANS, 385, h - ROW_FOOT - 8.5f, 12, "Page 3");
-                text(cs, SANS, 566, h - ROW_FOOT - 8.5f, 12, "Last Page");
+                text(cs, SANS, 385, h - ROW_FOOT - below, 12, "Page 3");
+                text(cs, SANS, 566, h - ROW_FOOT - below, 12, "Last Page");
             }
             doc.save(pdf.toFile());
         }

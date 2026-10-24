@@ -127,7 +127,15 @@ public final class DocumentBuilder {
         float refBottom;
     }
 
-    private record Slot(float ref, boolean top, boolean pageBreak) {}
+    /** Where an item's room is counted from, and the indent a spacer standing for that room starts at. */
+    private record Slot(float ref, boolean top, boolean pageBreak, float spacerIndent) {
+        Slot(float ref, boolean top, boolean pageBreak) {
+            this(ref, top, pageBreak, 0f);
+        }
+    }
+
+    /** Where the room above an item starts below boxes it has no room beside, and the indent its spacer needs. */
+    private record Below(float ref, float spacerIndent) {}
 
     public void page(PageLayout layout, AffineTransform toDisplay) throws IOException {
         PageData page = layout.page();
@@ -451,13 +459,14 @@ public final class DocumentBuilder {
             boolean joins = at.pageTop && carry != null;
             if (flowOn && opening) {
                 float from = at.pageTop ? base.marginTop : at.refBottom;
-                flowingSpacer(item, slot.pageBreak() || joins ? from : belowFillingBoxes(item, col, from));
+                Below below = slot.pageBreak() || joins ? new Below(from, 0f) : belowFillingBoxes(item, col, from);
+                flowingSpacer(item, below.ref(), below.spacerIndent());
                 slot = new Slot(Float.MAX_VALUE, false, slot.pageBreak());
             } else if (!slot.pageBreak() && !joins) {
-                float ref = belowFillingBoxes(item, col, slot.ref());
-                if (ref != slot.ref()) {
-                    // The room left goes in a spacer, a line Word moves below the box whole.
-                    slot = new Slot(ref, true, false);
+                Below below = belowFillingBoxes(item, col, slot.ref());
+                if (below.ref() != slot.ref()) {
+                    // The room left goes in a spacer, a line Word moves below the boxes whole.
+                    slot = new Slot(below.ref(), true, false, below.spacerIndent());
                 }
             }
             if (item instanceof PageLayout.ParaItem pi && at.pageTop && carry != null && Continuation.continues(carry.draft(), pi.para())) {
@@ -609,9 +618,10 @@ public final class DocumentBuilder {
      * a spacer's included, below them, and gives a paragraph its space above again there, so room counted from above them
      * held their height twice: USGS Fact Sheet 2023-3022's cover sent its introduction to a page of its own, and CMS's
      * Medicare Summary Notices the captions under their sample pages. The room above such a box goes in a spacer of its
-     * own, ending just short of the box.
+     * own, ending just short of the box. A spacer for the room below boxes that leave room elsewhere in the column starts at
+     * the item's indent, where they leave none: unindented, it fitted beside them, and the item went straight under them.
      */
-    private float belowFillingBoxes(PageLayout.Item item, PageLayout.Column col, float ref) throws IOException {
+    private Below belowFillingBoxes(PageLayout.Item item, PageLayout.Column col, float ref) throws IOException {
         float itemTop = item instanceof PageLayout.ParaItem pi ? paragraphs.wordTop(pi.para()) : item.top();
         // A box ending above the item's first baseline is one its text sits under, though the words' tops reach into it.
         float textTop = item instanceof PageLayout.ParaItem pi && !pi.para().lines.isEmpty()
@@ -623,6 +633,7 @@ public final class DocumentBuilder {
                 above.add(tb);
             }
         }
+        float spacerIndent = 0f;
         // Word fits a line at one height at a time, so boxes count together only in a row: ending within ROW_FOOT of each other.
         above.sort(Comparator.comparingDouble(tb -> tb.box().bottom()));
         for (int i = 0; i < above.size(); ) {
@@ -641,8 +652,9 @@ public final class DocumentBuilder {
                 emit(paragraphs.spacer(rowTop - ref - 1f));
             }
             ref = rowFoot;
+            spacerIndent = leaveNoRoom(row, col.left(), col.right()) ? 0f : Math.max(0f, item.x() - col.left());
         }
-        return ref;
+        return new Below(ref, spacerIndent);
     }
 
     private static final float ROW_FOOT = 2f;
@@ -661,12 +673,14 @@ public final class DocumentBuilder {
         return right - reached < FILLED_ROOM;
     }
 
-    private void flowingSpacer(PageLayout.Item item, float from) throws IOException {
+    private void flowingSpacer(PageLayout.Item item, float from, float indent) throws IOException {
         float itemTop = item instanceof PageLayout.ParaItem pi ? paragraphs.wordTop(pi.para()) : item.top();
         float gap = itemTop - from;
         if (gap > 0.6f) {
             flushCarry();
-            emit(paragraphs.spacer(gap));
+            Paragraph sp = paragraphs.spacer(gap);
+            sp.indentLeft = indent;
+            emit(sp);
         }
     }
 
@@ -697,7 +711,7 @@ public final class DocumentBuilder {
         }
         if (slot.top()) {
             boolean opens = table != null && pageBreak && offset <= 1f && !table.floating() && opener(table) != null;
-            pageBreak = opens || topSpacer(offset, pageBreak);
+            pageBreak = opens || topSpacer(offset, pageBreak, slot.spacerIndent());
             spaceBefore = 0;
         }
         float bottom;
@@ -915,13 +929,14 @@ public final class DocumentBuilder {
         return ref == Float.MAX_VALUE ? 0 : Math.max(0, -offset);
     }
 
-    private boolean topSpacer(float offset, boolean pageBreak) throws IOException {
+    private boolean topSpacer(float offset, boolean pageBreak, float indent) throws IOException {
         if (offset <= 0.6f) {
             return pageBreak;
         }
         flushCarry();
         Paragraph sp = paragraphs.spacer(offset);
         sp.pageBreakBefore = pageBreak;
+        sp.indentLeft = indent;
         emit(sp);
         return false;
     }
