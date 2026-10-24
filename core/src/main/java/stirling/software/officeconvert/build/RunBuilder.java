@@ -482,6 +482,16 @@ final class RunBuilder {
 
     private static final float SMALL_CAP_SIZE = 0.8f;
 
+    /**
+     * Whether Word's width of a glyph is known: from the metrics of the face Word sets it in, or, for a face the PDF embeds
+     * that Word has too, from the PDF itself, brought to the scale and half-point size Word sets it in, as
+     * {@link #drawnWidth} measures it. Samoan's ʻokina in Times New Roman and a ū in Arial Narrow, which the metrics lack,
+     * had kept USGS 2023-3022's captions from being fitted to their lines.
+     */
+    private static boolean wordKnows(Glyph g) {
+        return !Float.isNaN(substituteWidth(g)) || g.font.exact() && g.width > 0;
+    }
+
     private static float substituteWidth(Glyph g) {
         String text = g.text;
         if (!text.isEmpty() && isCjk(text.charAt(0)) && text.chars().allMatch(c -> isCjk((char) c))) {
@@ -772,12 +782,20 @@ final class RunBuilder {
     private float spaceAfter(Glyph before) {
         float space = SubstituteMetrics.width(" ", before.font.family(), before.bold, before.italic, wordSize(before))
                 * scaleOf(before) / 100f;
+        if (Float.isNaN(space) && before.font.exact()) {
+            // The PDF's space of a face Word has, at the scale and the half-point size Word sets it in
+            return before.spaceWidth / before.hscale * scaleOf(before) / 100f * wordSize(before) / before.size;
+        }
         return Float.isNaN(space) ? before.spaceWidth : space;
     }
 
     private float drawnWidth(Glyph g) {
         float exact = g.vertAlign != 0 || unmeasured(g) || modeled(g) != null ? Float.NaN
                 : substituteWidth(g) * scaleOf(g) / 100f * wordSize(g) / g.size;
+        if (Float.isNaN(exact) && g.vertAlign == 0 && !unmeasured(g) && modeled(g) == null && wordKnows(g)) {
+            // The PDF's width of a face Word has, at the scale and the half-point size Word sets it in
+            exact = g.width / g.hscale * scaleOf(g) / 100f * wordSize(g) / g.size;
+        }
         WidthFix fix = spacing.get(lookKey(g));
         if (Float.isNaN(exact)) {
             return g.width;
@@ -855,7 +873,7 @@ final class RunBuilder {
             for (Word w : l.words) {
                 for (Glyph g : w.glyphs) {
                     WidthFix fix = spacing.get(lookKey(g));
-                    if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || Float.isNaN(substituteWidth(g))
+                    if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || !wordKnows(g)
                             || fix != null && (fix.scale() != 100 || !breaks && Math.abs(fix.spacing()) > EXACT_SPACING)) {
                         return false;
                     }
