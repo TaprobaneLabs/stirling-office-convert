@@ -127,7 +127,15 @@ public final class DocumentBuilder {
         float refBottom;
     }
 
-    private record Slot(float ref, boolean top, boolean pageBreak) {}
+    /** Where an item's room is counted from, and the indent a spacer standing for that room starts at. */
+    private record Slot(float ref, boolean top, boolean pageBreak, float spacerIndent) {
+        Slot(float ref, boolean top, boolean pageBreak) {
+            this(ref, top, pageBreak, 0f);
+        }
+    }
+
+    /** Where the room above an item starts below boxes it has no room beside, and the indent its spacer needs. */
+    private record Below(float ref, float spacerIndent) {}
 
     public void page(PageLayout layout, AffineTransform toDisplay) throws IOException {
         PageData page = layout.page();
@@ -451,13 +459,14 @@ public final class DocumentBuilder {
             boolean joins = at.pageTop && carry != null;
             if (flowOn && opening) {
                 float from = at.pageTop ? base.marginTop : at.refBottom;
-                flowingSpacer(item, slot.pageBreak() || joins ? from : belowFillingBoxes(item, col, from));
+                Below below = slot.pageBreak() || joins ? new Below(from, 0f) : belowFillingBoxes(item, col, from);
+                flowingSpacer(item, below.ref(), below.spacerIndent());
                 slot = new Slot(Float.MAX_VALUE, false, slot.pageBreak());
             } else if (!slot.pageBreak() && !joins) {
-                float ref = belowFillingBoxes(item, col, slot.ref());
-                if (ref != slot.ref()) {
-                    // The room left goes in a spacer, a line Word moves below the box whole.
-                    slot = new Slot(ref, true, false);
+                Below below = belowFillingBoxes(item, col, slot.ref());
+                if (below.ref() != slot.ref()) {
+                    // The room left goes in a spacer, a line Word moves below the boxes whole.
+                    slot = new Slot(below.ref(), true, false, below.spacerIndent());
                 }
             }
             if (item instanceof PageLayout.ParaItem pi && at.pageTop && carry != null && Continuation.continues(carry.draft(), pi.para())) {
@@ -600,49 +609,81 @@ public final class DocumentBuilder {
         return to;
     }
 
-    /** A text box leaves its column no room beside it when less than this is left on either side, its wrapping gap counted. */
+    /** Text boxes leave an item no room beside them when no gap this wide is left in its room, their wrapping gaps counted. */
     private static final float FILLED_ROOM = 18f;
 
     /**
-     * Where the room above an item in the flow starts: below the text boxes between {@code ref} and the item that leave their
-     * column no room beside them. Word moves the lines such a box leaves no room for, a spacer's included, below the box, so
-     * room counted from above it held the box's height twice: USGS Fact Sheet 2023-3022's cover sent its introduction to a
-     * page of its own. The room above such a box goes in a spacer of its own, ending just short of the box.
+     * Where the room above an item in the flow starts: below the text boxes between {@code ref} and the item's text that
+     * leave it no room beside them, from its indent to its column's edge. Word moves the lines such boxes leave no room for,
+     * a spacer's included, below them, and gives a paragraph its space above again there, so room counted from above them
+     * held their height twice: USGS Fact Sheet 2023-3022's cover sent its introduction to a page of its own, and CMS's
+     * Medicare Summary Notices the captions under their sample pages. The room above such a box goes in a spacer of its
+     * own, ending just short of the box. A spacer for the room below boxes that leave room elsewhere in the column starts at
+     * the item's indent, where they leave none: unindented, it fitted beside them, and the item went straight under them.
      */
-    private float belowFillingBoxes(PageLayout.Item item, PageLayout.Column col, float ref) throws IOException {
+    private Below belowFillingBoxes(PageLayout.Item item, PageLayout.Column col, float ref) throws IOException {
         float itemTop = item instanceof PageLayout.ParaItem pi ? paragraphs.wordTop(pi.para()) : item.top();
-        List<Box> filling = new ArrayList<>();
+        // A box ending above the item's first baseline is one its text sits under, though the words' tops reach into it.
+        float textTop = item instanceof PageLayout.ParaItem pi && !pi.para().lines.isEmpty()
+                ? Math.max(itemTop + 1, pi.para().lines.getFirst().baseline) : itemTop + 1;
+        // A paragraph's room starts at its indent, not at its words: a caption set flush right starts at the column's edge.
+        float roomLeft = item instanceof PageLayout.ParaItem pi
+                ? col.left() + Math.max(0f, Math.min(pi.para().left, pi.para().left + pi.para().first)) : item.x();
+        List<PageLayout.TextBoxItem> above = new ArrayList<>();
         for (PageLayout.Item it : col.items()) {
-            if (it instanceof PageLayout.TextBoxItem tb && !tb.overlay() && fills(tb, col) && tb.box().bottom() > ref
-                    && tb.box().bottom() <= itemTop + 1) {
-                filling.add(tb.box());
+            if (it instanceof PageLayout.TextBoxItem tb && !tb.overlay() && tb.box().bottom() > ref
+                    && tb.box().bottom() <= textTop && tb.box().right() + tb.gap() > roomLeft) {
+                above.add(tb);
             }
         }
-        filling.sort(Comparator.comparingDouble(Box::top));
-        for (Box b : filling) {
-            if (b.bottom() <= ref) {
+        float spacerIndent = 0f;
+        // Word fits a line at one height at a time, so boxes count together only in a row: ending within ROW_FOOT of each other.
+        above.sort(Comparator.comparingDouble(tb -> tb.box().bottom()));
+        for (int i = 0; i < above.size(); ) {
+            float foot = above.get(i).box().bottom();
+            List<PageLayout.TextBoxItem> row = new ArrayList<>();
+            while (i < above.size() && above.get(i).box().bottom() <= foot + ROW_FOOT) {
+                row.add(above.get(i++));
+            }
+            float rowTop = (float) row.stream().mapToDouble(tb -> tb.box().top()).min().orElse(foot);
+            float rowFoot = (float) row.stream().mapToDouble(tb -> tb.box().bottom()).max().orElse(foot);
+            if (rowFoot <= ref || !leaveNoRoom(row, roomLeft, col.right())) {
                 continue;
             }
-            if (b.top() - ref > 1.6f) {
+            if (rowTop - ref > 1.6f) {
                 flushCarry();
-                emit(paragraphs.spacer(b.top() - ref - 1f));
+                emit(paragraphs.spacer(rowTop - ref - 1f));
             }
-            ref = b.bottom();
+            ref = rowFoot;
+            spacerIndent = leaveNoRoom(row, col.left(), col.right()) ? 0f : roomLeft - col.left();
         }
-        return ref;
+        return new Below(ref, spacerIndent);
     }
 
-    private static boolean fills(PageLayout.TextBoxItem tb, PageLayout.Column col) {
-        Box b = tb.box();
-        return b.x() - tb.gap() - col.left() < FILLED_ROOM && col.right() - b.right() - tb.gap() < FILLED_ROOM;
+    private static final float ROW_FOOT = 2f;
+
+    /** Whether the boxes, with their wrapping gaps, cover the room from {@code left} to {@code right} but for gaps narrower than {@link #FILLED_ROOM}. */
+    private static boolean leaveNoRoom(List<PageLayout.TextBoxItem> boxes, float left, float right) {
+        List<PageLayout.TextBoxItem> across = new ArrayList<>(boxes);
+        across.sort(Comparator.comparingDouble(tb -> tb.box().x() - tb.gap()));
+        float reached = left;
+        for (PageLayout.TextBoxItem tb : across) {
+            if (tb.box().x() - tb.gap() - reached >= FILLED_ROOM) {
+                return false;
+            }
+            reached = Math.max(reached, tb.box().right() + tb.gap());
+        }
+        return right - reached < FILLED_ROOM;
     }
 
-    private void flowingSpacer(PageLayout.Item item, float from) throws IOException {
+    private void flowingSpacer(PageLayout.Item item, float from, float indent) throws IOException {
         float itemTop = item instanceof PageLayout.ParaItem pi ? paragraphs.wordTop(pi.para()) : item.top();
         float gap = itemTop - from;
         if (gap > 0.6f) {
             flushCarry();
-            emit(paragraphs.spacer(gap));
+            Paragraph sp = paragraphs.spacer(gap);
+            sp.indentLeft = indent;
+            emit(sp);
         }
     }
 
@@ -673,7 +714,7 @@ public final class DocumentBuilder {
         }
         if (slot.top()) {
             boolean opens = table != null && pageBreak && offset <= 1f && !table.floating() && opener(table) != null;
-            pageBreak = opens || topSpacer(offset, pageBreak);
+            pageBreak = opens || topSpacer(offset, pageBreak, slot.spacerIndent());
             spaceBefore = 0;
         }
         float bottom;
@@ -891,13 +932,14 @@ public final class DocumentBuilder {
         return ref == Float.MAX_VALUE ? 0 : Math.max(0, -offset);
     }
 
-    private boolean topSpacer(float offset, boolean pageBreak) throws IOException {
+    private boolean topSpacer(float offset, boolean pageBreak, float indent) throws IOException {
         if (offset <= 0.6f) {
             return pageBreak;
         }
         flushCarry();
         Paragraph sp = paragraphs.spacer(offset);
         sp.pageBreakBefore = pageBreak;
+        sp.indentLeft = indent;
         emit(sp);
         return false;
     }
