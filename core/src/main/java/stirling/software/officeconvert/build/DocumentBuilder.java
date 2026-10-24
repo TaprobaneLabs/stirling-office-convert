@@ -663,6 +663,38 @@ public final class DocumentBuilder {
     private static final float ROW_FOOT = 2f;
 
     /**
+     * Whether a paragraph's space above, from {@code from} down to its words at {@code to}, reaches up beside a float Word
+     * wraps text around, one ending in that space and leaving room beside it. Word fits a paragraph's first line, space
+     * above and all, beside such a float, so the line kept only the words that fit beside it: USGS Fact Sheet 2023-3022's
+     * photo caption set its first two words to the photo's right and ran a line longer, onto a page of its own with the
+     * ISSN. Set in a spacer of its own, the space goes beside the float and the line under it.
+     */
+    private static boolean spaceBesideFloat(ParaDraft d, PageLayout.Column col, PageLayout layout, float from, float to) {
+        float roomLeft = col.left() + Math.max(0f, Math.min(d.left, d.left + d.first));
+        for (PageLayout.Band band : layout.bands()) {
+            for (PageLayout.Column c : band.columns()) {
+                for (PageLayout.Item it : c.items()) {
+                    float gap;
+                    if (it instanceof PageLayout.FloatItem fi && !fi.overlay()) {
+                        gap = fi.gap();
+                    } else if (it instanceof PageLayout.TextBoxItem tb && !tb.overlay()) {
+                        gap = tb.gap();
+                    } else {
+                        continue;
+                    }
+                    boolean ends = it.top() < from && it.bottom() > from && it.bottom() <= to;
+                    boolean across = it.x() - gap < col.right() && it.right() + gap > roomLeft;
+                    boolean room = it.x() - gap - col.left() >= FILLED_ROOM || col.right() - it.right() - gap >= FILLED_ROOM;
+                    if (ends && across && room) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * The top of the first row of wrapping text boxes in the column from {@code top} down (tops within ROW_FOOT of each
      * other) that leaves the column no room beside it, or {@code Float.MAX_VALUE}.
      */
@@ -750,6 +782,11 @@ public final class DocumentBuilder {
             ParaDraft d = pi.para();
             homePage.put(d, pageLayout);
             bottom = paragraphs.wordBottom(d);
+            if (!pageBreak && spaceBefore > 1f && spaceBesideFloat(d, col, layout, sourceTop - spaceBefore, sourceTop)) {
+                flushCarry();
+                emit(paragraphs.spacer(spaceBefore));
+                spaceBefore = 0f;
+            }
             if (lastOnPage && Continuation.looksUnfinished(d, stats.bodySize)) {
                 carry = new Carry(d, col.left(), col.right(), spaceBefore, pageBreak, slot.top() ? Float.NaN : slot.ref(),
                         !layout.notes().isEmpty());

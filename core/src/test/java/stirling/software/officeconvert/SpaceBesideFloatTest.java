@@ -1,0 +1,143 @@
+package stirling.software.officeconvert;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.zip.ZipFile;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+
+/**
+ * A paragraph just under a photo with text beside it keeps the room above it in a spacer, not as its own space above. Word
+ * fits a paragraph's first line, space above and all, beside a float that space reaches, so the line kept only the words
+ * that fit beside the photo: USGS Fact Sheet 2023-3022's caption under its photo set two words to the photo's right and
+ * ran a line longer.
+ */
+class SpaceBesideFloatTest {
+
+    private static final PDType1Font FONT = new PDType1Font(Standard14Fonts.FontName.TIMES_ROMAN);
+    private static final float PHOTO_TOP = 450;
+    private static final float PHOTO_BOTTOM = 650;
+
+    @TempDir Path dir;
+
+    @Test
+    void theCaptionsRoomAboveIsASpacerBesideThePhoto() throws Exception {
+        String xml = convert();
+        NodeList body = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                .parse(new InputSource(new StringReader(xml))).getElementsByTagName("w:body").item(0).getChildNodes();
+        Element before = null;
+        Element caption = null;
+        for (int i = 0; i < body.getLength(); i++) {
+            if (body.item(i) instanceof Element p && p.getTagName().equals("w:p")) {
+                if (ownText(p).contains("Workers install")) {
+                    caption = p;
+                    break;
+                }
+                before = p;
+            }
+        }
+        assertTrue(caption != null, "the caption is there");
+        assertTrue(xml.contains("<pic:pic") && xml.contains("wrapSquare"), "the photo is a picture text wraps around");
+        Element spacing = (Element) caption.getElementsByTagName("w:spacing").item(0);
+        float space = spacing == null || spacing.getAttribute("w:before").isEmpty() ? 0
+                : Integer.parseInt(spacing.getAttribute("w:before")) / 20f;
+        assertTrue(space < 10, "the caption's own space above doesn't reach up beside the photo: " + space + " pt");
+        assertTrue(before != null && ownText(before).isBlank(), "a spacer keeps the room above the caption");
+    }
+
+    /** A paragraph's text, leaving out the text boxes anchored in it. */
+    private static String ownText(Element p) {
+        StringBuilder sb = new StringBuilder();
+        NodeList ts = p.getElementsByTagName("w:t");
+        for (int i = 0; i < ts.getLength(); i++) {
+            Node n = ts.item(i);
+            boolean inBox = false;
+            for (Node up = n.getParentNode(); up != null && up != p; up = up.getParentNode()) {
+                inBox |= up.getNodeName().equals("w:txbxContent");
+            }
+            if (!inBox) {
+                sb.append(n.getTextContent());
+            }
+        }
+        return sb.toString();
+    }
+
+    private String convert() throws IOException {
+        Path pdf = dir.resolve("sheet.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LETTER);
+            doc.addPage(page);
+            float h = PDRectangle.LETTER.getHeight();
+            PDImageXObject photo = LosslessFactory.createFromImage(doc, photo(330, 250));
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                for (int i = 0; i < 28; i++) {
+                    text(cs, 36, h - 72 - 13 * i, "Body text line " + (i + 1) + " runs from the left margin across the page to the right");
+                }
+                cs.drawImage(photo, 36, h - PHOTO_BOTTOM, 330, PHOTO_BOTTOM - PHOTO_TOP);
+                String[] beside = {"By Natalia I. Deligne,", "Drew T. Downs and", "Wendy K. Stovall", "", "Edited by Phil Frederick",
+                    "Layout by Kimber Petersen"};
+                for (int i = 0; i < beside.length; i++) {
+                    if (!beside[i].isEmpty()) {
+                        text(cs, 400, h - PHOTO_TOP - 12 - 13 * i, beside[i]);
+                    }
+                }
+                String[] caption = {
+                    "Workers install monitoring equipment on the island in August 2022, working with the weather service",
+                    "and the territory's homeland security office to watch the volcano for signs of new activity. Photograph",
+                    "by Elinor Lutu-McMoore, National Oceanic and Atmospheric Administration.",
+                };
+                for (int i = 0; i < caption.length; i++) {
+                    text(cs, 36, h - PHOTO_BOTTOM - 15 - 13 * i, caption[i]);
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        Path docx = dir.resolve("sheet.docx");
+        PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
+        try (ZipFile zip = new ZipFile(docx.toFile())) {
+            return new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static BufferedImage photo(int w, int h) {
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = img.createGraphics();
+        for (int y = 0; y < h; y += 10) {
+            g.setColor(new Color(60 + y % 120, 120, 200 - y % 90));
+            g.fillRect(0, y, w, 10);
+        }
+        g.setColor(new Color(30, 120, 40));
+        g.fillOval(40, 60, 120, 140);
+        g.dispose();
+        return img;
+    }
+
+    private static void text(PDPageContentStream cs, float x, float y, String s) throws IOException {
+        cs.beginText();
+        cs.setFont(FONT, 10);
+        cs.newLineAtOffset(x, y);
+        cs.showText(s);
+        cs.endText();
+    }
+}
