@@ -340,7 +340,7 @@ final class GlyphCollector extends PDFStreamEngine {
 
     @Override
     protected void showGlyph(Matrix trm, PDFont font, int code, Vector displacement) throws IOException {
-        if (!font.isVertical() && clip.hides(trm, displacement.getX())) {
+        if (!font.isVertical() && clip.hides(trm, displacement.getX(), font)) {
             // Clipped away whole: the page never shows it
             return;
         }

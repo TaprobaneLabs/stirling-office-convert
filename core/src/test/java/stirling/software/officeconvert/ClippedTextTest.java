@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.zip.ZipFile;
@@ -12,6 +13,8 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.Test;
@@ -35,6 +38,46 @@ class ClippedTextTest {
         assertTrue(xml.contains("Lava flows"), "the figure's label inside the clip is");
         assertTrue(xml.contains("Edge label"), "a label the clip's edge crosses is");
         assertTrue(xml.contains("the summit craters."), "the paragraph under the hidden label keeps its words");
+    }
+
+    /**
+     * A combining mark has no advance and draws to the left of its origin, over the letter before it: with its origin just
+     * past the clip's edge, the clip still shows it.
+     */
+    @Test
+    void anAccentTheClipShowsIsKept() throws Exception {
+        Path pdf = dir.resolve("accent.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LETTER);
+            doc.addPage(page);
+            PDFont sans;
+            try (InputStream in = PDFont.class.getResourceAsStream("/org/apache/pdfbox/resources/ttf/LiberationSans-Regular.ttf")) {
+                sans = PDType0Font.load(doc, in, false);
+            }
+            float size = 40;
+            // The accent's origin, where "Cafe" ends: 3 pt past the clip's right edge, its ink to the left, inside
+            float end = 303;
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.saveGraphicsState();
+                cs.addRect(72, 470, 228, 230);
+                cs.clip();
+                cs.beginText();
+                cs.setFont(sans, size);
+                cs.newLineAtOffset(end - sans.getStringWidth("Cafe") / 1000 * size, 600);
+                cs.showText("Cafe\u0301");
+                cs.endText();
+                cs.restoreGraphicsState();
+                text(cs, 72, 430, "A line of body text under the clipped figure, to give the page a paragraph.");
+            }
+            doc.save(pdf.toFile());
+        }
+        Path docx = dir.resolve("accent.docx");
+        PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
+        String xml;
+        try (ZipFile zip = new ZipFile(docx.toFile())) {
+            xml = new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
+        }
+        assertTrue(xml.contains("Caf\u00e9") || xml.contains("Cafe\u0301"), "the accent the clip shows is kept");
     }
 
     private String convert() throws IOException {

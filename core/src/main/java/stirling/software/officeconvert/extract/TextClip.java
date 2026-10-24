@@ -5,12 +5,17 @@ import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 import org.apache.pdfbox.contentstream.PDFStreamEngine;
 import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.contentstream.operator.OperatorProcessor;
 import org.apache.pdfbox.cos.COSBase;
+import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSNumber;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType3Font;
 import org.apache.pdfbox.pdmodel.graphics.state.PDGraphicsState;
 import org.apache.pdfbox.util.Matrix;
 
@@ -27,12 +32,20 @@ final class TextClip {
     /** A glyph's box, in ems from its baseline: below for descenders, above for ascenders and accents. */
     private static final float BELOW = 0.3f;
     private static final float ABOVE = 1.1f;
+    /**
+     * Where a glyph may draw, in ems from its origin, when its font's bounding box doesn't say: a combining mark has no
+     * advance and draws over the glyph before it, to its left.
+     */
+    private static final float[] ANY_INK = {-1f, -0.5f, 1f, 1.5f};
+    /** The farthest a font's bounding box is taken to reach from a glyph's origin, in ems. */
+    private static final float MAX_INK = 3f;
 
     private final PDFStreamEngine engine;
     private final ClipPath path = new ClipPath();
     private List<Path2D> lastClip;
     private int lastClipCount;
     private Rectangle2D lastBounds;
+    private final Map<COSDictionary, float[]> inks = new WeakHashMap<>();
 
     private TextClip(PDFStreamEngine engine) {
         this.engine = engine;
@@ -71,21 +84,27 @@ final class TextClip {
     }
 
     /**
-     * Whether the clip hides a glyph whole: its box, {@code advance} ems along its baseline from the origin of
-     * {@code rendering} (the text rendering matrix, in the page's user space, one unit an em), lies outside the bounds of
-     * the current clipping path.
+     * Whether the clip hides a glyph whole: its box lies outside the bounds of the current clipping path. The box runs
+     * {@code advance} ems along the baseline from the origin of {@code rendering} (the text rendering matrix, in the
+     * page's user space, one unit an em), widened to where the font's bounding box says its glyphs may draw: a combining
+     * mark has no advance and draws to the left of its origin, so the clip may show it though its origin lies outside.
      */
-    boolean hides(Matrix rendering, float advance) {
+    boolean hides(Matrix rendering, float advance, PDFont font) {
         Rectangle2D clip = bounds(engine.getGraphicsState());
         if (clip == null || !Float.isFinite(advance)) {
             return false;
         }
         float u = Math.max(advance, 0);
+        float[] ink = ink(font);
+        float x0 = Math.min(0, ink[0]);
+        float x1 = Math.max(u, ink[2]);
+        float y0 = Math.min(-BELOW, ink[1]);
+        float y1 = Math.max(ABOVE, ink[3]);
         double minX = Double.MAX_VALUE;
         double minY = Double.MAX_VALUE;
         double maxX = -Double.MAX_VALUE;
         double maxY = -Double.MAX_VALUE;
-        for (float[] corner : new float[][] {{0, -BELOW}, {u, -BELOW}, {0, ABOVE}, {u, ABOVE}}) {
+        for (float[] corner : new float[][] {{x0, y0}, {x1, y0}, {x0, y1}, {x1, y1}}) {
             Point2D.Float p = rendering.transformPoint(corner[0], corner[1]);
             minX = Math.min(minX, p.x);
             minY = Math.min(minY, p.y);
@@ -94,6 +113,34 @@ final class TextClip {
         }
         return maxX < clip.getMinX() - SLACK || minX > clip.getMaxX() + SLACK
                 || maxY < clip.getMinY() - SLACK || minY > clip.getMaxY() + SLACK;
+    }
+
+    /** The font's bounding box in ems, held to {@link #MAX_INK} each way, or {@link #ANY_INK} when it has none. */
+    private float[] ink(PDFont font) {
+        return inks.computeIfAbsent(font.getCOSObject(), k -> {
+            if (font instanceof PDType3Font) {
+                return ANY_INK;
+            }
+            try {
+                var box = font.getBoundingBox();
+                float[] e = {box.getLowerLeftX() / 1000f, box.getLowerLeftY() / 1000f, box.getUpperRightX() / 1000f,
+                    box.getUpperRightY() / 1000f};
+                for (float v : e) {
+                    if (!Float.isFinite(v)) {
+                        return ANY_INK;
+                    }
+                }
+                if (!(e[2] - e[0] > 0.05f) || !(e[3] - e[1] > 0.05f)) {
+                    return ANY_INK;
+                }
+                for (int i = 0; i < e.length; i++) {
+                    e[i] = Math.clamp(e[i], -MAX_INK, MAX_INK);
+                }
+                return e;
+            } catch (IOException | RuntimeException e) {
+                return ANY_INK;
+            }
+        });
     }
 
     /** The bounds of the current clipping path (the intersection of its paths' bounds), or null when there is none. */
