@@ -41,6 +41,11 @@ class HangingPictureTest {
         int inline = xml.lastIndexOf("<wp:inline", pic);
         int anchor = xml.lastIndexOf("<wp:anchor", pic);
         assertTrue(anchor > inline, "the picture is anchored on the page, not in the column's text");
+        int start = Math.max(xml.lastIndexOf("<w:p>", pic), xml.lastIndexOf("<w:p ", pic));
+        String holder = xml.substring(start, xml.indexOf("</w:p>", pic));
+        assertTrue(holder.contains("dialysis") || holder.contains("transplant") || holder.contains("Kidney"),
+                "the picture rides on the column's last paragraph");
+        assertTrue(!holder.contains("w:type=\"column\""), "not on the column break, which LibreOffice moves to the next column");
     }
 
     private String convert() throws IOException {

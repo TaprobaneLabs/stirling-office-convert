@@ -1122,6 +1122,11 @@ public final class DocumentBuilder {
 
     private void columnBreak() throws IOException {
         flushCarry();
+        if (floats.waiting() && pending instanceof Paragraph prev && pendingPage == pageCount) {
+            // Pictures set on the page at a column's foot ride on its last paragraph, not on the break: LibreOffice let the
+            // next column's text run over the boxes at its top when a picture was anchored with the break
+            floats.anchorAbove(prev, prev.inlines.size(), Float.MAX_VALUE);
+        }
         Paragraph carrier = hairline(1);
         carrier.inlines.add(new Inline.ColumnBreak());
         emit(carrier);
