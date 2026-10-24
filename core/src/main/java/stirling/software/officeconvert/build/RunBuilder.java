@@ -482,6 +482,15 @@ final class RunBuilder {
 
     private static final float SMALL_CAP_SIZE = 0.8f;
 
+    /**
+     * Whether Word's width of a glyph is known: from the metrics of the face Word sets it in, or, for a face the PDF embeds
+     * that Word has too, from the PDF itself, as {@link #drawnWidth} measures it. Samoan's ʻokina in Times New Roman and a
+     * ū in Arial Narrow, which the metrics lack, had kept USGS 2023-3022's captions from being fitted to their lines.
+     */
+    private static boolean wordKnows(Glyph g) {
+        return !Float.isNaN(substituteWidth(g)) || g.font.exact() && g.width > 0;
+    }
+
     private static float substituteWidth(Glyph g) {
         String text = g.text;
         if (!text.isEmpty() && isCjk(text.charAt(0)) && text.chars().allMatch(c -> isCjk((char) c))) {
@@ -855,7 +864,7 @@ final class RunBuilder {
             for (Word w : l.words) {
                 for (Glyph g : w.glyphs) {
                     WidthFix fix = spacing.get(lookKey(g));
-                    if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || Float.isNaN(substituteWidth(g))
+                    if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || !wordKnows(g)
                             || fix != null && (fix.scale() != 100 || !breaks && Math.abs(fix.spacing()) > EXACT_SPACING)) {
                         return false;
                     }
