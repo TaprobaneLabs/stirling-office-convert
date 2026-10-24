@@ -626,10 +626,13 @@ public final class DocumentBuilder {
         // A box ending above the item's first baseline is one its text sits under, though the words' tops reach into it.
         float textTop = item instanceof PageLayout.ParaItem pi && !pi.para().lines.isEmpty()
                 ? Math.max(itemTop + 1, pi.para().lines.getFirst().baseline) : itemTop + 1;
+        // A paragraph's room starts at its indent, not at its words: a caption set flush right starts at the column's edge.
+        float roomLeft = item instanceof PageLayout.ParaItem pi
+                ? col.left() + Math.max(0f, Math.min(pi.para().left, pi.para().left + pi.para().first)) : item.x();
         List<PageLayout.TextBoxItem> above = new ArrayList<>();
         for (PageLayout.Item it : col.items()) {
             if (it instanceof PageLayout.TextBoxItem tb && !tb.overlay() && tb.box().bottom() > ref
-                    && tb.box().bottom() <= textTop && tb.box().right() + tb.gap() > item.x()) {
+                    && tb.box().bottom() <= textTop && tb.box().right() + tb.gap() > roomLeft) {
                 above.add(tb);
             }
         }
@@ -644,7 +647,7 @@ public final class DocumentBuilder {
             }
             float rowTop = (float) row.stream().mapToDouble(tb -> tb.box().top()).min().orElse(foot);
             float rowFoot = (float) row.stream().mapToDouble(tb -> tb.box().bottom()).max().orElse(foot);
-            if (rowFoot <= ref || !leaveNoRoom(row, item.x(), col.right())) {
+            if (rowFoot <= ref || !leaveNoRoom(row, roomLeft, col.right())) {
                 continue;
             }
             if (rowTop - ref > 1.6f) {
@@ -652,7 +655,7 @@ public final class DocumentBuilder {
                 emit(paragraphs.spacer(rowTop - ref - 1f));
             }
             ref = rowFoot;
-            spacerIndent = leaveNoRoom(row, col.left(), col.right()) ? 0f : Math.max(0f, item.x() - col.left());
+            spacerIndent = leaveNoRoom(row, col.left(), col.right()) ? 0f : roomLeft - col.left();
         }
         return new Below(ref, spacerIndent);
     }

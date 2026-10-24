@@ -88,6 +88,30 @@ class CaptionUnderBoxesTest {
         assertTrue(indent > 300, "the spacer starts where the caption does, under the boxes: indented " + indent + " pt");
     }
 
+    @Test
+    void aRightAlignedCaptionCanSitBesideTheBoxes() throws Exception {
+        // Set flush right, a caption's paragraph starts at the column's edge, not at its words, and has room left of the
+        // boxes: it keeps the space above it from the text before, as it had.
+        String xml = convert(8.5f, true);
+        NodeList body = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                .parse(new InputSource(new StringReader(xml))).getElementsByTagName("w:body").item(0).getChildNodes();
+        float above = 0;
+        for (int i = 0; i < body.getLength(); i++) {
+            if (body.item(i) instanceof Element p && p.getTagName().equals("w:p")) {
+                Element spacing = (Element) p.getElementsByTagName("w:spacing").item(0);
+                String text = ownText(p);
+                if (text.contains("Sample pages")) {
+                    above += spacing == null || spacing.getAttribute("w:before").isEmpty() ? 0
+                            : Integer.parseInt(spacing.getAttribute("w:before")) / 20f;
+                    break;
+                }
+                above = text.isBlank() && spacing != null && "exact".equals(spacing.getAttribute("w:lineRule"))
+                        ? above + Integer.parseInt(spacing.getAttribute("w:line")) / 20f : 0;
+            }
+        }
+        assertTrue(above > 50, "the right-aligned caption keeps the room above it: " + above + " pt");
+    }
+
     /** A paragraph's text, leaving out the text boxes anchored in it. */
     private static String ownText(Element p) {
         StringBuilder sb = new StringBuilder();
@@ -105,8 +129,15 @@ class CaptionUnderBoxesTest {
         return sb.toString();
     }
 
-    /** The page, with the captions' baseline {@code below} the lower row's foot. */
     private String convert(float below) throws IOException {
+        return convert(below, false);
+    }
+
+    /**
+     * The page, with the captions' baseline {@code below} the lower row's foot; with {@code flushRight}, the right-hand
+     * boxes only and one caption set flush with the column's right edge.
+     */
+    private String convert(float below, boolean flushRight) throws IOException {
         Path pdf = dir.resolve("notice.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDRectangle landscape = new PDRectangle(PDRectangle.LETTER.getHeight(), PDRectangle.LETTER.getWidth());
@@ -120,7 +151,7 @@ class CaptionUnderBoxesTest {
                 }
                 float[][] rows = {{98, 318}, {335, ROW_FOOT}};
                 for (float[] row : rows) {
-                    for (float x : new float[] {382, 562}) {
+                    for (float x : flushRight ? new float[] {562} : new float[] {382, 562}) {
                         cs.setNonStrokingColor(new Color(225, 225, 225));
                         cs.addRect(x, h - row[1], 172, row[1] - row[0]);
                         cs.fill();
@@ -130,8 +161,13 @@ class CaptionUnderBoxesTest {
                         }
                     }
                 }
-                text(cs, SANS, 385, h - ROW_FOOT - below, 12, "Page 3");
-                text(cs, SANS, 566, h - ROW_FOOT - below, 12, "Last Page");
+                if (flushRight) {
+                    String caption = "Sample pages";
+                    text(cs, SANS, 734 - SANS.getStringWidth(caption) / 1000 * 12, h - ROW_FOOT - below, 12, caption);
+                } else {
+                    text(cs, SANS, 385, h - ROW_FOOT - below, 12, "Page 3");
+                    text(cs, SANS, 566, h - ROW_FOOT - below, 12, "Last Page");
+                }
             }
             doc.save(pdf.toFile());
         }
