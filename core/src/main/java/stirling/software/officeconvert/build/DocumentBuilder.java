@@ -600,41 +600,65 @@ public final class DocumentBuilder {
         return to;
     }
 
-    /** A text box leaves its column no room beside it when less than this is left on either side, its wrapping gap counted. */
+    /** Text boxes leave an item no room beside them when no gap this wide is left in its room, their wrapping gaps counted. */
     private static final float FILLED_ROOM = 18f;
 
     /**
-     * Where the room above an item in the flow starts: below the text boxes between {@code ref} and the item that leave their
-     * column no room beside them. Word moves the lines such a box leaves no room for, a spacer's included, below the box, so
-     * room counted from above it held the box's height twice: USGS Fact Sheet 2023-3022's cover sent its introduction to a
-     * page of its own. The room above such a box goes in a spacer of its own, ending just short of the box.
+     * Where the room above an item in the flow starts: below the text boxes between {@code ref} and the item's text that
+     * leave it no room beside them, from its indent to its column's edge. Word moves the lines such boxes leave no room for,
+     * a spacer's included, below them, and gives a paragraph its space above again there, so room counted from above them
+     * held their height twice: USGS Fact Sheet 2023-3022's cover sent its introduction to a page of its own, and CMS's
+     * Medicare Summary Notices the captions under their sample pages. The room above such a box goes in a spacer of its
+     * own, ending just short of the box.
      */
     private float belowFillingBoxes(PageLayout.Item item, PageLayout.Column col, float ref) throws IOException {
         float itemTop = item instanceof PageLayout.ParaItem pi ? paragraphs.wordTop(pi.para()) : item.top();
-        List<Box> filling = new ArrayList<>();
+        // A box ending above the item's first baseline is one its text sits under, though the words' tops reach into it.
+        float textTop = item instanceof PageLayout.ParaItem pi && !pi.para().lines.isEmpty()
+                ? Math.max(itemTop + 1, pi.para().lines.getFirst().baseline) : itemTop + 1;
+        List<PageLayout.TextBoxItem> above = new ArrayList<>();
         for (PageLayout.Item it : col.items()) {
-            if (it instanceof PageLayout.TextBoxItem tb && !tb.overlay() && fills(tb, col) && tb.box().bottom() > ref
-                    && tb.box().bottom() <= itemTop + 1) {
-                filling.add(tb.box());
+            if (it instanceof PageLayout.TextBoxItem tb && !tb.overlay() && tb.box().bottom() > ref
+                    && tb.box().bottom() <= textTop && tb.box().right() + tb.gap() > item.x()) {
+                above.add(tb);
             }
         }
-        filling.sort(Comparator.comparingDouble(Box::top));
-        for (Box b : filling) {
-            if (b.bottom() <= ref) {
+        // Word fits a line at one height at a time, so boxes count together only in a row: ending within ROW_FOOT of each other.
+        above.sort(Comparator.comparingDouble(tb -> tb.box().bottom()));
+        for (int i = 0; i < above.size(); ) {
+            float foot = above.get(i).box().bottom();
+            List<PageLayout.TextBoxItem> row = new ArrayList<>();
+            while (i < above.size() && above.get(i).box().bottom() <= foot + ROW_FOOT) {
+                row.add(above.get(i++));
+            }
+            float rowTop = (float) row.stream().mapToDouble(tb -> tb.box().top()).min().orElse(foot);
+            float rowFoot = (float) row.stream().mapToDouble(tb -> tb.box().bottom()).max().orElse(foot);
+            if (rowFoot <= ref || !leaveNoRoom(row, item.x(), col.right())) {
                 continue;
             }
-            if (b.top() - ref > 1.6f) {
+            if (rowTop - ref > 1.6f) {
                 flushCarry();
-                emit(paragraphs.spacer(b.top() - ref - 1f));
+                emit(paragraphs.spacer(rowTop - ref - 1f));
             }
-            ref = b.bottom();
+            ref = rowFoot;
         }
         return ref;
     }
 
-    private static boolean fills(PageLayout.TextBoxItem tb, PageLayout.Column col) {
-        Box b = tb.box();
-        return b.x() - tb.gap() - col.left() < FILLED_ROOM && col.right() - b.right() - tb.gap() < FILLED_ROOM;
+    private static final float ROW_FOOT = 2f;
+
+    /** Whether the boxes, with their wrapping gaps, cover the room from {@code left} to {@code right} but for gaps narrower than {@link #FILLED_ROOM}. */
+    private static boolean leaveNoRoom(List<PageLayout.TextBoxItem> boxes, float left, float right) {
+        List<PageLayout.TextBoxItem> across = new ArrayList<>(boxes);
+        across.sort(Comparator.comparingDouble(tb -> tb.box().x() - tb.gap()));
+        float reached = left;
+        for (PageLayout.TextBoxItem tb : across) {
+            if (tb.box().x() - tb.gap() - reached >= FILLED_ROOM) {
+                return false;
+            }
+            reached = Math.max(reached, tb.box().right() + tb.gap());
+        }
+        return right - reached < FILLED_ROOM;
     }
 
     private void flowingSpacer(PageLayout.Item item, float from) throws IOException {
