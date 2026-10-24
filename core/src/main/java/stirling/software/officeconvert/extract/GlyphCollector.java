@@ -399,6 +399,7 @@ final class GlyphCollector extends PDFStreamEngine {
             hi = Math.max(hi, g.right());
         }
         if (joiners(text)) {
+            lo -= JOINER_LEAD;
             hi = lo + 0.01f;
         }
         if (drawn.toString().equals(text) && s.hiddenWidth == 0) {
@@ -464,6 +465,9 @@ final class GlyphCollector extends PDFStreamEngine {
             return;
         }
         float x = tp.getXDirAdj();
+        if (joiners(unicode)) {
+            x -= JOINER_LEAD;
+        }
         float[] ink = combiningMarks(unicode) ? ink(tp) : null;
         if (ink != null) {
             x += ink[0];
@@ -502,6 +506,14 @@ final class GlyphCollector extends PDFStreamEngine {
                         tm.getTranslateX(),
                         tm.getTranslateY()));
     }
+
+    /**
+     * How far left of where it's drawn a zero-width character (a joiner, or a break point a span's ActualText makes one)
+     * stands, so it comes before the character drawn where it is. USGS fact sheets draw that character up to 0.008 pt to
+     * its left, which put it first, and the gap from the zero-width character to the one after read as a space:
+     * "doi.org/1 0.1029".
+     */
+    private static final float JOINER_LEAD = 0.05f;
 
     private static boolean joiners(String s) {
         for (int i = 0; i < s.length(); i++) {
