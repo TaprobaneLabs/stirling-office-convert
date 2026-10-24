@@ -28,13 +28,19 @@ final class KeyValueTables {
         }
     }
 
-    static List<TableDetection.Found> find(List<Line> segments, float frameLeft, float frameRight) {
+    /**
+     * Labelled rows read as tables. A table's value column runs on to {@code frameRight} over empty room, and stops short
+     * of a text box beside its rows, with the room the box keeps for the text wrapping around it: a table under a box, or
+     * in that room, is one Word moves down the page, with all that follows it.
+     */
+    static List<TableDetection.Found> find(List<Line> segments, float frameLeft, float frameRight,
+            List<PageLayout.TextBoxItem> boxes) {
         List<Line> lines = new ArrayList<>(segments);
         lines.sort(Comparator.comparingDouble((Line l) -> Math.round(l.baseline / 2f)).thenComparingDouble(l -> l.x));
         List<TableDetection.Found> out = new ArrayList<>();
         for (float valueX : valueColumns(lines, frameLeft)) {
             for (List<Row> run : runs(lines, valueX)) {
-                TableDetection.Found t = accept(run, valueX, frameLeft, frameRight);
+                TableDetection.Found t = accept(run, valueX, frameLeft, frameRight, boxes);
                 if (t != null && out.stream().noneMatch(o -> overlaps(o, t))) {
                     out.add(t);
                 }
@@ -130,7 +136,8 @@ final class KeyValueTables {
         return split == l.words.size() ? null : split == 0 ? l : l.slice(split, l.words.size());
     }
 
-    private static TableDetection.Found accept(List<Row> rows, float valueX, float frameLeft, float frameRight) {
+    private static TableDetection.Found accept(List<Row> rows, float valueX, float frameLeft, float frameRight,
+            List<PageLayout.TextBoxItem> boxes) {
         List<Row> run = new ArrayList<>(rows);
         while (!run.isEmpty() && run.getFirst().value.isEmpty()) {
             run.removeFirst();
@@ -177,7 +184,16 @@ final class KeyValueTables {
         if (withValue * 10 < run.size() * 9 || !labelsLookLikeLabels || !narrowLabels || valueX - labelRight < 4) {
             return null;
         }
-        float[] edges = {labelLeft - 2, valueX - 4, Math.max(frameRight, valueRight + 2)};
+        float runTop = run.getFirst().top - 1;
+        float runBottom = run.getLast().bottom + 1;
+        float right = frameRight;
+        for (PageLayout.TextBoxItem tb : boxes) {
+            Box b = tb.box();
+            if (!tb.overlay() && b.x() >= valueRight && b.top() < runBottom && b.bottom() > runTop) {
+                right = Math.min(right, b.x() - tb.gap());
+            }
+        }
+        float[] edges = {labelLeft - 2, valueX - 4, Math.max(right, valueRight + 2)};
         List<FoundCell> cells = new ArrayList<>();
         for (int i = 0; i < run.size(); i++) {
             float top = run.get(i).top - 1;
@@ -187,8 +203,7 @@ final class KeyValueTables {
                         null, TableDetection.HAlign.GENERAL, TableDetection.VAlign.TOP, ""));
             }
         }
-        return new TableDetection.Found(run.size(), 2, edges, false, 0, 0f, cells, edges[0], run.getFirst().top - 1,
-                edges[2], run.getLast().bottom + 1);
+        return new TableDetection.Found(run.size(), 2, edges, false, 0, 0f, cells, edges[0], runTop, edges[2], runBottom);
     }
 
     private static boolean overlaps(TableDetection.Found a, TableDetection.Found b) {

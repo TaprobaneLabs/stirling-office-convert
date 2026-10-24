@@ -573,6 +573,23 @@ public final class DocumentBuilder {
         return false;
     }
 
+    /**
+     * Where the room a table set on the page keeps clear of flowing text ends: at the first text box beside it on its right,
+     * else at its column's edge. The box keeps its own room; text above or below it, beside the table, stays where the PDF
+     * has it, where room to the column's edge had moved it, and all that followed, below the table and the boxes.
+     */
+    private static float clearTo(PageLayout.Item item, PageLayout.Column col) {
+        float to = col.right();
+        for (PageLayout.Item it : col.items()) {
+            boolean wraps = it instanceof PageLayout.TextBoxItem tb && !tb.overlay();
+            boolean level = it.top() < item.bottom() - 1 && it.bottom() > item.top() + 1;
+            if (wraps && level && it.x() >= item.right() - 1) {
+                to = Math.min(to, it.x());
+            }
+        }
+        return to;
+    }
+
     private void flowingSpacer(PageLayout.Item item, float from) throws IOException {
         float itemTop = item instanceof PageLayout.ParaItem pi ? paragraphs.wordTop(pi.para()) : item.top();
         float gap = itemTop - from;
@@ -596,7 +613,7 @@ public final class DocumentBuilder {
             }
             table.floatX = col.left() + table.indent;
             table.floatY = item.top();
-            table.floatRoom = Math.max(0, col.right() - item.right()) + 2f;
+            table.floatRoom = Math.max(0, clearTo(item, col) - item.right()) + 2f;
         }
         if (table != null && pageBreak && pending instanceof Table prev && !prev.floating() && !table.floating()
                 && TableContinuation.continues(prev, table)) {

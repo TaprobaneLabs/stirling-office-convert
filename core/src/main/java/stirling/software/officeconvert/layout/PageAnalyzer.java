@@ -163,7 +163,7 @@ public final class PageAnalyzer {
                 : new ArrayList<>();
         tables.removeIf(t -> TableShaper.looksLikeList(t, TableShaper.assign(t, TableFinder.wordsInside(segments, t))));
         if (detectTables) {
-            addKeyValueTables(tables, outside(segments, pictures), frame);
+            addKeyValueTables(tables, outside(segments, pictures), frame, boxes.boxes());
         }
         List<Box> tableBoxes = tables.stream().map(TableFinder::boxOf).toList();
         List<Rule> freeRules = new ArrayList<>(rules.stream()
@@ -415,8 +415,9 @@ public final class PageAnalyzer {
         return false;
     }
 
-    private static void addKeyValueTables(List<TableDetection.Found> tables, List<Line> segments, PageFrame frame) {
-        for (TableDetection.Found kv : KeyValueTables.find(segments, frame.textLeft(), frame.textRight())) {
+    private static void addKeyValueTables(List<TableDetection.Found> tables, List<Line> segments, PageFrame frame,
+            List<PageLayout.TextBoxItem> boxes) {
+        for (TableDetection.Found kv : KeyValueTables.find(segments, frame.textLeft(), frame.textRight(), boxes)) {
             Box box = TableFinder.boxOf(kv);
             if (tables.stream().anyMatch(t -> t.ruled() && Regions.overlapsMostly(TableFinder.boxOf(t), List.of(box)))) {
                 continue;
