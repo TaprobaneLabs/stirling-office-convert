@@ -782,14 +782,17 @@ public final class DocumentBuilder {
             ParaDraft d = pi.para();
             homePage.put(d, pageLayout);
             bottom = paragraphs.wordBottom(d);
+            // Where a carried paragraph's space above is measured from when it joins its rest on the next page
+            float ref = slot.top() ? Float.NaN : slot.ref();
             if (!pageBreak && spaceBefore > 1f && spaceBesideFloat(d, col, layout, sourceTop - spaceBefore, sourceTop)) {
                 flushCarry();
                 emit(paragraphs.spacer(spaceBefore));
                 spaceBefore = 0f;
+                // The spacer holds that space now: measured from its foot, the joined paragraph doesn't take it back
+                ref = sourceTop;
             }
             if (lastOnPage && Continuation.looksUnfinished(d, stats.bodySize)) {
-                carry = new Carry(d, col.left(), col.right(), spaceBefore, pageBreak, slot.top() ? Float.NaN : slot.ref(),
-                        !layout.notes().isEmpty());
+                carry = new Carry(d, col.left(), col.right(), spaceBefore, pageBreak, ref, !layout.notes().isEmpty());
             } else {
                 List<Inline.Shape> under = shapesUnder(d, bottom, nextInFlow(col, item));
                 Paragraph p = flowParagraph(d, col.left(), col.right(), spaceBefore, pageBreak);

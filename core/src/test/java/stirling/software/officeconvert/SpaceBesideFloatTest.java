@@ -43,14 +43,38 @@ class SpaceBesideFloatTest {
 
     @Test
     void theCaptionsRoomAboveIsASpacerBesideThePhoto() throws Exception {
-        String xml = convert();
+        assertSpacerAbove(convert(false), "Workers install");
+    }
+
+    /** A caption that runs on to the next page joins its rest there without taking its room above back. */
+    @Test
+    void aCaptionCarriedToTheNextPageKeepsItsRoomInTheSpacer() throws Exception {
+        String xml = convert(true);
+        assertTrue(xml.contains("emergency managers"), "the caption's rest is there");
+        assertSpacerAbove(xml, "Workers install");
+        Element joined = paragraph(xml, "Workers install");
+        assertTrue(ownText(joined).contains("emergency managers"), "the caption joins its rest from the next page");
+    }
+
+    private static Element paragraph(String xml, String words) throws Exception {
+        NodeList ps = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                .parse(new InputSource(new StringReader(xml))).getElementsByTagName("w:p");
+        for (int i = 0; i < ps.getLength(); i++) {
+            if (ownText((Element) ps.item(i)).contains(words)) {
+                return (Element) ps.item(i);
+            }
+        }
+        throw new AssertionError("no paragraph holds " + words);
+    }
+
+    private static void assertSpacerAbove(String xml, String words) throws Exception {
         NodeList body = DocumentBuilderFactory.newInstance().newDocumentBuilder()
                 .parse(new InputSource(new StringReader(xml))).getElementsByTagName("w:body").item(0).getChildNodes();
         Element before = null;
         Element caption = null;
         for (int i = 0; i < body.getLength(); i++) {
             if (body.item(i) instanceof Element p && p.getTagName().equals("w:p")) {
-                if (ownText(p).contains("Workers install")) {
+                if (ownText(p).contains(words)) {
                     caption = p;
                     break;
                 }
@@ -83,7 +107,11 @@ class SpaceBesideFloatTest {
         return sb.toString();
     }
 
-    private String convert() throws IOException {
+    /**
+     * A sheet with a photo, text beside it and a caption under it. {@code continued}: the caption is one unfinished line,
+     * the page's last, and goes on at the top of a second page.
+     */
+    private String convert(boolean continued) throws IOException {
         Path pdf = dir.resolve("sheet.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
@@ -102,13 +130,25 @@ class SpaceBesideFloatTest {
                         text(cs, 400, h - PHOTO_TOP - 12 - 13 * i, beside[i]);
                     }
                 }
-                String[] caption = {
-                    "Workers install monitoring equipment on the island in August 2022, working with the weather service",
-                    "and the territory's homeland security office to watch the volcano for signs of new activity. Photograph",
-                    "by Elinor Lutu-McMoore, National Oceanic and Atmospheric Administration.",
-                };
+                String[] caption = continued
+                    ? new String[] {"Workers install monitoring equipment on the island in August 2022, working with the weather service and the"}
+                    : new String[] {
+                        "Workers install monitoring equipment on the island in August 2022, working with the weather service",
+                        "and the territory's homeland security office to watch the volcano for signs of new activity. Photograph",
+                        "by Elinor Lutu-McMoore, National Oceanic and Atmospheric Administration.",
+                    };
                 for (int i = 0; i < caption.length; i++) {
                     text(cs, 36, h - PHOTO_BOTTOM - 15 - 13 * i, caption[i]);
+                }
+            }
+            if (continued) {
+                PDPage next = new PDPage(PDRectangle.LETTER);
+                doc.addPage(next);
+                try (PDPageContentStream cs = new PDPageContentStream(doc, next)) {
+                    text(cs, 36, h - 72, "territory's emergency managers, who keep the sirens and radios on every island working.");
+                    for (int i = 0; i < 6; i++) {
+                        text(cs, 36, h - 100 - 13 * i, "Body text line " + (i + 1) + " on the second page runs across to the right");
+                    }
                 }
             }
             doc.save(pdf.toFile());
