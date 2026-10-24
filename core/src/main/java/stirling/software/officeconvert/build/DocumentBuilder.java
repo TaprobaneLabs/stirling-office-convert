@@ -4,6 +4,7 @@ import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -446,9 +447,18 @@ public final class DocumentBuilder {
                 continue;
             }
             Slot slot = new Slot(at.pageTop ? base.marginTop : prevBottom, at.pageTop || columnTop, at.pageTop && at.breakOwed);
+            // A paragraph carried from the last page joins it here, with nothing set between them.
+            boolean joins = at.pageTop && carry != null;
             if (flowOn && opening) {
-                flowingSpacer(item, at.pageTop ? base.marginTop : at.refBottom);
+                float from = at.pageTop ? base.marginTop : at.refBottom;
+                flowingSpacer(item, slot.pageBreak() || joins ? from : belowFillingBoxes(item, col, from));
                 slot = new Slot(Float.MAX_VALUE, false, slot.pageBreak());
+            } else if (!slot.pageBreak() && !joins) {
+                float ref = belowFillingBoxes(item, col, slot.ref());
+                if (ref != slot.ref()) {
+                    // The room left goes in a spacer, a line Word moves below the box whole.
+                    slot = new Slot(ref, true, false);
+                }
             }
             if (item instanceof PageLayout.ParaItem pi && at.pageTop && carry != null && Continuation.continues(carry.draft(), pi.para())) {
                 mergeCarry(pi.para());
@@ -588,6 +598,43 @@ public final class DocumentBuilder {
             }
         }
         return to;
+    }
+
+    /** A text box leaves its column no room beside it when less than this is left on either side, its wrapping gap counted. */
+    private static final float FILLED_ROOM = 18f;
+
+    /**
+     * Where the room above an item in the flow starts: below the text boxes between {@code ref} and the item that leave their
+     * column no room beside them. Word moves the lines such a box leaves no room for, a spacer's included, below the box, so
+     * room counted from above it held the box's height twice: USGS Fact Sheet 2023-3022's cover sent its introduction to a
+     * page of its own. The room above such a box goes in a spacer of its own, ending just short of the box.
+     */
+    private float belowFillingBoxes(PageLayout.Item item, PageLayout.Column col, float ref) throws IOException {
+        float itemTop = item instanceof PageLayout.ParaItem pi ? paragraphs.wordTop(pi.para()) : item.top();
+        List<Box> filling = new ArrayList<>();
+        for (PageLayout.Item it : col.items()) {
+            if (it instanceof PageLayout.TextBoxItem tb && !tb.overlay() && fills(tb, col) && tb.box().bottom() > ref
+                    && tb.box().bottom() <= itemTop + 1) {
+                filling.add(tb.box());
+            }
+        }
+        filling.sort(Comparator.comparingDouble(Box::top));
+        for (Box b : filling) {
+            if (b.bottom() <= ref) {
+                continue;
+            }
+            if (b.top() - ref > 1.6f) {
+                flushCarry();
+                emit(paragraphs.spacer(b.top() - ref - 1f));
+            }
+            ref = b.bottom();
+        }
+        return ref;
+    }
+
+    private static boolean fills(PageLayout.TextBoxItem tb, PageLayout.Column col) {
+        Box b = tb.box();
+        return b.x() - tb.gap() - col.left() < FILLED_ROOM && col.right() - b.right() - tb.gap() < FILLED_ROOM;
     }
 
     private void flowingSpacer(PageLayout.Item item, float from) throws IOException {
