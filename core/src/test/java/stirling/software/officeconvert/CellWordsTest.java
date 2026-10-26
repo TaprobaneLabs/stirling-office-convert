@@ -22,10 +22,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * A table's words go to the column they sit in, though a section title in the column before runs into it. In Regulation
- * Z's model statement "Interest Charged" starts in the post-date column and runs into the descriptions, so that column's
- * cells reached past the descriptions' first words: "Store" went to the post dates, which then needed 80 pt in a 51 pt
- * column, and the table ran past the page's edge, where Word cut the amounts off.
+ * A table's words go to the column they sit in, though a section title in the column before runs into it, and the title
+ * spans the empty cells it runs over. In Regulation Z's model statement "Interest Charged" starts in the post-date column
+ * and runs into the descriptions, so that column's cells reached past the descriptions' first words: "Store" went to the
+ * post dates, which then needed 80 pt in a 51 pt column, and the table ran past the page's edge, where Word cut the
+ * amounts off. With the words in their columns, the title alone widened the post dates, and every column after them
+ * moved right.
  */
 class CellWordsTest {
 
@@ -47,6 +49,23 @@ class CellWordsTest {
         }
         assertTrue(cells.stream().anyMatch(c -> c.contains("Store #6")), "the description is whole: " + cells);
         assertTrue(cells.stream().anyMatch(c -> c.contains("Interest Charged")), "the section title is whole: " + cells);
+    }
+
+    @Test
+    void theTitleSpansTheEmptyCellAfterItAndTheTableKeepsItsWidth() throws Exception {
+        String xml = convert();
+        int at = xml.indexOf("Interest Charged");
+        int cell = xml.lastIndexOf("<w:tc>", at);
+        assertTrue(xml.substring(cell, at).contains("<w:gridSpan "), "the title's cell spans the empty cell after it");
+        Matcher grid = Pattern.compile("<w:tblGrid>(.*?)</w:tblGrid>").matcher(xml);
+        assertTrue(grid.find(), "the transactions are a table");
+        float width = 0;
+        Matcher col = Pattern.compile("w:w=\"(\\d+)\"").matcher(grid.group(1));
+        while (col.find()) {
+            width += Integer.parseInt(col.group(1)) / 20f;
+        }
+        float pdfWidth = AMOUNT_RIGHT + 4 - COLUMNS[0];
+        assertTrue(width < pdfWidth + 10, "the table is about as wide as the PDF's (" + pdfWidth + " pt), not " + width);
     }
 
     /** The text of each table cell, its paragraphs' runs joined. */
@@ -95,6 +114,11 @@ class CellWordsTest {
                     right(cs, PLAIN, base, row[4]);
                 }
                 base += 10.8f;
+                // The section's title on a grey bar across the table, as the statement sets it
+                cs.setNonStrokingColor(new java.awt.Color(200, 200, 200));
+                cs.addRect(COLUMNS[0], H - base - 2.5f, AMOUNT_RIGHT + 4 - COLUMNS[0], 10.5f);
+                cs.fill();
+                cs.setNonStrokingColor(java.awt.Color.BLACK);
                 text(cs, BOLD, 271.9f, base, 8, "Interest Charged");
                 String[][] interest = {{"Interest Charge on Purchases", "$4.58"}, {"Interest Charge on Cash Advances", "$6.31"}};
                 for (String[] row : interest) {
