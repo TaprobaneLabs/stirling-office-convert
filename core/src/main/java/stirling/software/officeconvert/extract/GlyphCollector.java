@@ -589,7 +589,9 @@ final class GlyphCollector extends PDFStreamEngine {
                 return;
             }
             if (!g.isSpace()) {
-                g.runsOffPage = true;
+                // Only a line that reaches the edge with the hidden text following on: NIST SP 800-218 draws stray marks
+                // off the page on the baseline of sentences that end 140 pt short of it
+                g.runsOffPage |= g.right() >= pageWidth - CUT_GAP * size && x - g.right() <= CUT_GAP * size;
                 return;
             }
         }
@@ -600,6 +602,9 @@ final class GlyphCollector extends PDFStreamEngine {
 
     /** How far from a cut-off glyph's baseline, in its size, the line's last drawn glyph sits. */
     private static final float CUT_BASELINE = 0.3f;
+
+    /** How close, in the cut-off glyph's size, a cut line's last drawn glyph comes to the page's edge and to that glyph. */
+    private static final float CUT_GAP = 1.5f;
 
     private boolean onPage(TextPosition tp, float size, float width) {
         float x = tp.getXDirAdj();
