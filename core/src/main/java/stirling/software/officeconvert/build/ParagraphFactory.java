@@ -146,7 +146,7 @@ final class ParagraphFactory {
             }
         }
 
-        if (runsOffPage(d)) {
+        if (!p.bidi && runsOffPage(d)) {
             // Lines the page cuts off end with breaks where it does; room past the edge keeps Word from wrapping them where
             // its widths come out wider than the PDF's
             p.indentRight = Math.min(p.indentRight, d.right - OFF_PAGE_ROOM);

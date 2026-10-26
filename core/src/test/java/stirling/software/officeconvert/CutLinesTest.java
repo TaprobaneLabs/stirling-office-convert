@@ -31,7 +31,7 @@ class CutLinesTest {
 
     private static final PDType1Font FONT = new PDType1Font(Standard14Fonts.FontName.TIMES_ROMAN);
     private static final float H = PDRectangle.LETTER.getHeight();
-    /** Each line runs on past the page's right edge; the words past it are never seen. */
+    /** The first four lines run on past the page's right edge, where their last words are never seen; the others don't. */
     private static final String[] LINES = {
         "Native to the large rivers of the middle of the continent, the fish were first brought east as a sportfish, and anglers "
                 + "OFFPAGEONE carried them further",
@@ -41,7 +41,12 @@ class CutLinesTest {
                 + "OFFPAGETHREE surprised many",
         "Bay tributaries. Because of the need to balance these interests, any plan for the whole bay will take work from "
                 + "OFFPAGEFOUR every state",
+        "Below the spread the introduction carries on inside the page, so this line ends a little short of the page's edge, and",
+        "notwithstanding the last one, which is short.",
     };
+    /** A lone line that starts right of the middle and runs on past the page's edge. */
+    private static final String LONE = "Location data on the map come from state agencies and the river commissions "
+            + "OFFPAGEFIVE and more";
 
     @TempDir Path dir;
 
@@ -49,12 +54,26 @@ class CutLinesTest {
     void eachLineEndsWhereThePageCutsIt() throws Exception {
         Element para = paragraph(convert(), "Native to the large rivers");
         assertEquals(LINES.length - 1, para.getElementsByTagName("w:br").getLength(),
-                "a break after each line the page cuts off: " + para.getTextContent());
+                "a break after every line, so the room past the edge pulls no words up: " + para.getTextContent());
+        assertTrue(para.getTextContent().contains("notwithstanding the last one"), "one paragraph: " + para.getTextContent());
         assertFalse(para.getTextContent().contains("OFFPAGE"), "words past the page's edge stay out");
         Element ind = (Element) para.getElementsByTagName("w:ind").item(0);
         int right = ind == null || ind.getAttribute("w:right").isEmpty() ? 0 : Integer.parseInt(ind.getAttribute("w:right"));
         assertTrue(right <= -20 * 36, "Word's room reaches well past the page's edge, so wider widths don't wrap a line: "
                 + right + " twips");
+    }
+
+    @Test
+    void aCutLineStartingMidPageStaysWhereItStarts() throws Exception {
+        Element para = paragraph(convert(), "Location data on the map");
+        Element pPr = (Element) para.getElementsByTagName("w:pPr").item(0);
+        Element jc = (Element) pPr.getElementsByTagName("w:jc").item(0);
+        String align = jc == null ? "left" : jc.getAttribute("w:val");
+        assertTrue(align.equals("left") || align.equals("start"), "set flush left, not moved within the room: " + align);
+        assertEquals(0, pPr.getElementsByTagName("w:bidi").getLength(), "not taken for right-to-left text");
+        Element ind = (Element) pPr.getElementsByTagName("w:ind").item(0);
+        int left = ind == null || ind.getAttribute("w:left").isEmpty() ? 0 : Integer.parseInt(ind.getAttribute("w:left"));
+        assertTrue(left >= 20 * 200, "starts where the PDF's line does: " + left + " twips");
     }
 
     private String convert() throws IOException {
@@ -70,6 +89,7 @@ class CutLinesTest {
                 for (int i = 0; i < 6; i++) {
                     text(cs, 72, 200 + 14 * i, 10, "A note under the introduction, line " + (i + 1) + ", well inside the page.");
                 }
+                text(cs, 330, 340, 9, LONE);
             }
             doc.save(pdf.toFile());
         }

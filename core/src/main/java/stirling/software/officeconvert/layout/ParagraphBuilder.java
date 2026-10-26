@@ -57,25 +57,48 @@ public final class ParagraphBuilder {
             if (block(p)) {
                 p.hardBreaks.clear();
             }
-            // A line the page cuts off ends there: its text runs on off the page, not into the next line
+            // A line the page cuts off ends there: its text runs on off the page, not into the next line. The paragraph's
+            // room reaches past the edge, so its other lines keep their ends too
             boolean cut = false;
-            for (int i = 0; i < p.lines.size(); i++) {
-                if (p.lines.get(i).runsOffPage()) {
-                    cut = true;
-                    if (i + 1 < p.lines.size()) {
-                        p.hardBreaks.set(i + 1);
-                    }
-                }
+            for (Line l : p.lines) {
+                cut |= l.runsOffPage() && !rtl(l);
+            }
+            if (cut) {
+                p.hardBreaks.set(1, p.lines.size());
             }
             measure.measure(room, p);
-            if (cut && p.align == Align.JUSTIFY) {
-                // Lines that end at the page's edge aren't justified: Word would spread them over the room past it
-                p.align = Align.LEFT;
-                p.justifySlack = Float.NaN;
+            if (cut && (p.align != Align.LEFT || p.rtl)) {
+                startAtLeft(room, p);
             }
         }
         ParagraphMeasure.alignRtlStarts(room, out);
         return out;
+    }
+
+    /**
+     * Sets a paragraph holding a line the page cuts off flush left, where its lines start. Such a line reaches the page's
+     * edge, so the measure can take it for justified, set right or centred, and in the room past the edge Word would then
+     * spread or move it.
+     */
+    private static void startAtLeft(LineRoom room, ParaDraft p) {
+        List<Line> lines = p.lines;
+        float body = room.rel(lines.getFirst());
+        if (lines.size() > 1) {
+            body = Float.MAX_VALUE;
+            for (int i = 1; i < lines.size(); i++) {
+                body = Math.min(body, room.rel(lines.get(i)));
+            }
+        }
+        float widest = -Float.MAX_VALUE;
+        for (Line l : lines) {
+            widest = Math.max(widest, l.right);
+        }
+        p.align = Align.LEFT;
+        p.rtl = false;
+        p.justifySlack = Float.NaN;
+        p.left = body;
+        p.first = room.rel(lines.getFirst()) - body;
+        p.right = Math.min(p.right, p.colRight - widest);
     }
 
     private boolean breaksBefore(LineRoom room, ParaDraft para, Line cur, float ownPitch) {
