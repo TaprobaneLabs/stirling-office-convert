@@ -59,16 +59,25 @@ final class ParagraphFactory {
     }
 
     Paragraph detached(ParaDraft d, float colLeft, float colRight, float spaceBefore) {
-        return paragraph(d, colLeft, colRight, spaceBefore, false, false, true);
+        return paragraph(d, colLeft, colRight, spaceBefore, false, false, true, false);
+    }
+
+    /**
+     * A paragraph in a text box whose text runs from {@code textLeft} to {@code textRight} in the output, fitted to its PDF
+     * lines there: unfitted, Word wrapped a panel's lines where its own room ended, and the box's text moved along its
+     * lines and ran on below it (CDC's sheet on violence against American Indian and Alaska Native people, its sidebar).
+     */
+    Paragraph boxed(ParaDraft d, float textLeft, float textRight, float spaceBefore) {
+        return paragraph(d, textLeft, textRight, spaceBefore, false, false, true, true);
     }
 
     private Paragraph paragraph(
             ParaDraft d, float colLeft, float colRight, float spaceBefore, boolean pageBreak, boolean flow) {
-        return paragraph(d, colLeft, colRight, spaceBefore, pageBreak, flow, false);
+        return paragraph(d, colLeft, colRight, spaceBefore, pageBreak, flow, false, false);
     }
 
     private Paragraph paragraph(ParaDraft d, float colLeft, float colRight, float spaceBefore, boolean pageBreak,
-            boolean flow, boolean markers) {
+            boolean flow, boolean markers, boolean box) {
         if (flow) {
             classify(d);
         }
@@ -124,7 +133,8 @@ final class ParagraphFactory {
         if (markerTab) {
             hangFromMarker(p, d, colLeft);
         }
-        RunBuilder.Fit fit = fitTarget(d, p, flow, skip, markerTab, colLeft, colRight);
+        RunBuilder.Fit fit = box ? boxTarget(d, p, skip, markerTab, colLeft, colRight)
+                : fitTarget(d, p, flow, skip, markerTab, colLeft, colRight);
         runs.fill(p, d.lines, skip, colLeft, colRight, hostSize, d.hardBreaks, d.pageBreaks, markerTab, fit);
         boolean fitted = !Float.isNaN(runs.fitted());
         if (fitted) {
@@ -206,6 +216,28 @@ final class ParagraphFactory {
             return new RunBuilder.Fit(edge, d.justifySlack, true, singleColumn, first, rest);
         }
         if (Float.isNaN(edge) || d.align != Align.LEFT || skip > 0) {
+            return null;
+        }
+        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest);
+    }
+
+    /**
+     * The fit of a paragraph in a text box: its lines start at its indents from the box's text edge and end before the
+     * other, as on a page without flowing columns, and a justified one keeps its fit only when the fit keeps every line.
+     */
+    private static RunBuilder.Fit boxTarget(ParaDraft d, Paragraph p, int skip, boolean markerTab, float textLeft,
+            float textRight) {
+        if (p.bidi || markerTab || skip > 0) {
+            return null;
+        }
+        // A page's right margin leaves the fit's slack past its column; a box's text edge leaves none
+        float edge = textRight - d.right - SectionPlanner.RIGHT_SLACK;
+        float rest = textLeft + p.indentLeft;
+        float first = rest + p.indentFirst;
+        if (d.align == Align.JUSTIFY && !Float.isNaN(d.justifySlack)) {
+            return new RunBuilder.Fit(edge, d.justifySlack, true, true, first, rest);
+        }
+        if (d.align != Align.LEFT) {
             return null;
         }
         return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest);
