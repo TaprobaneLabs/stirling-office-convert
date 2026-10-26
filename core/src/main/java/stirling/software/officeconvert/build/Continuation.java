@@ -32,12 +32,14 @@ final class Continuation {
         if (Math.abs(a.size - b.size) > 0.3f || a.font.mono() != b.font.mono() || a.bold != b.bold) {
             return false;
         }
-        float bodyLeft = prev.colLeft + prev.left;
-        float nextBody = next.colLeft + next.left;
+        // Where the output starts them: beside a float a paragraph's indent may be measured from the column, and the joined
+        // paragraph's lines on the next page take the first one's
+        float bodyLeft = prev.colLeft + prev.roomShift + prev.left;
+        float nextBody = next.colLeft + next.roomShift + next.left;
         boolean indentedStart = next.first > 0.5f * b.size;
         float room = prev.colRight - Math.max(0, prev.right);
         boolean wrapped = prev.endsHyphenated || a.right + 0.25f * a.size + b.words.getFirst().width() > room - 1;
-        return wrapped && !indentedStart && Math.abs((next.colLeft + next.left + next.first) - bodyLeft) < 0.6f * b.size + 2
+        return wrapped && !indentedStart && Math.abs((nextBody + next.first) - bodyLeft) < 0.6f * b.size + 2
                 && Math.abs(nextBody - bodyLeft) < b.size + 2;
     }
 

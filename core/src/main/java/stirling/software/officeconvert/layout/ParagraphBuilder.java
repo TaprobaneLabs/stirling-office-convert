@@ -18,7 +18,8 @@ import stirling.software.officeconvert.model.Paragraph.Align;
 
 public final class ParagraphBuilder {
 
-    public record Obstacle(Box box, float gapLeft, float gapRight) {}
+    /** {@code wraps}: the output wraps text around it (a picture, a text box); an overlay it doesn't. */
+    public record Obstacle(Box box, float gapLeft, float gapRight, boolean wraps) {}
 
     private final DocStats stats;
     private final ParagraphMeasure measure;
@@ -70,6 +71,7 @@ public final class ParagraphBuilder {
             if (cut && (p.align != Align.LEFT || p.rtl)) {
                 startAtLeft(room, p);
             }
+            p.roomShift = roomShift(room, p);
         }
         ParagraphMeasure.alignRtlStarts(room, out);
         return out;
@@ -99,6 +101,48 @@ public final class ParagraphBuilder {
         p.left = body;
         p.first = room.rel(lines.getFirst()) - body;
         p.right = Math.min(p.right, p.colRight - widest);
+    }
+
+    /**
+     * How far past a float's wrap edge every line of a paragraph written from the column starts, at least. LibreOffice
+     * measures all the indents of a paragraph from a float's edge when one of its lines starts inside the float, on the edge
+     * of a text box too, and from the column when they all start past it, a twip being enough.
+     */
+    private static final float PAST_EDGE = 0.25f;
+
+    /**
+     * How far right of the column a paragraph's indents are measured from, when one obstacle on the left narrows each of
+     * its lines alike; else 0, and they're measured from the room beside the obstacle ({@link ParaDraft#left}).
+     *
+     * <p>Word starts a line beside a float at the float's edge or at the line's indent from the column, whichever is
+     * further, so an indent measured from the room is lost there. LibreOffice adds the indents to the float's edge when a
+     * line of the paragraph starts inside the float and measures them from the column when none does. A paragraph indented
+     * past the edge is written from the column with all its lines past the edge, which both set where the PDF does; one
+     * that starts at the edge keeps its indents from the room, which both set right too. Beside an overlay, which nothing
+     * wraps around, the indents are always measured from the column.
+     */
+    private static float roomShift(LineRoom room, ParaDraft p) {
+        if (p.rtl || p.lines.isEmpty()) {
+            return 0f;
+        }
+        Line first = p.lines.getFirst();
+        float left = room.left(first);
+        boolean wraps = room.leftWraps(first);
+        for (Line l : p.lines) {
+            if (!room.narrowed(l) || room.leftWraps(l) != wraps || Math.abs(room.left(l) - left) > 1f) {
+                return 0f;
+            }
+        }
+        float shift = Math.max(0f, left - room.colLeft);
+        if (!wraps || shift == 0f) {
+            return shift;
+        }
+        if (p.left < 1f) {
+            return 0f;
+        }
+        // A hanging first line that starts at the edge moves just past it, with the rest
+        float nearest = p.left + Math.min(0f, p.first);
+        return shift + Math.max(0f, PAST_EDGE - nearest);
     }
 
     private boolean breaksBefore(LineRoom room, ParaDraft para, Line cur, float ownPitch) {
