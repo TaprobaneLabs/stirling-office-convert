@@ -435,6 +435,7 @@ final class Clusters {
         c.hscale = g.hscale;
         c.tracking = g.tracking;
         c.icon = g.icon;
+        c.runsOffPage = g.runsOffPage;
         return c;
     }
 }
