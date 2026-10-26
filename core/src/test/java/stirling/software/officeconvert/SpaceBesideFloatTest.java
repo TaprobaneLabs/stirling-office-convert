@@ -56,6 +56,16 @@ class SpaceBesideFloatTest {
         assertTrue(ownText(joined).contains("emergency managers"), "the caption joins its rest from the next page");
     }
 
+    /**
+     * Floats lying wholly inside a caption's room above count too. USGS Fact Sheet 2024-3033 sets panels of text beside a
+     * map between its introduction and the map's caption; the caption's space above held them all, and Word set its first
+     * line right of the panels, the rest under them.
+     */
+    @Test
+    void aCaptionUnderPanelsBesideAMapKeepsItsRoomInASpacer() throws Exception {
+        assertSpacerAbove(convertPanels(), "Map showing", false);
+    }
+
     private static Element paragraph(String xml, String words) throws Exception {
         NodeList ps = DocumentBuilderFactory.newInstance().newDocumentBuilder()
                 .parse(new InputSource(new StringReader(xml))).getElementsByTagName("w:p");
@@ -68,6 +78,11 @@ class SpaceBesideFloatTest {
     }
 
     private static void assertSpacerAbove(String xml, String words) throws Exception {
+        assertSpacerAbove(xml, words, true);
+    }
+
+    /** {@code picture}: the float is a picture, not a text box. */
+    private static void assertSpacerAbove(String xml, String words, boolean picture) throws Exception {
         NodeList body = DocumentBuilderFactory.newInstance().newDocumentBuilder()
                 .parse(new InputSource(new StringReader(xml))).getElementsByTagName("w:body").item(0).getChildNodes();
         Element before = null;
@@ -82,7 +97,7 @@ class SpaceBesideFloatTest {
             }
         }
         assertTrue(caption != null, "the caption is there");
-        assertTrue(xml.contains("<pic:pic") && xml.contains("wrapSquare"), "the photo is a picture text wraps around");
+        assertTrue((!picture || xml.contains("<pic:pic")) && xml.contains("wrapSquare"), "the float is one text wraps around");
         Element spacing = (Element) caption.getElementsByTagName("w:spacing").item(0);
         float space = spacing == null || spacing.getAttribute("w:before").isEmpty() ? 0
                 : Integer.parseInt(spacing.getAttribute("w:before")) / 20f;
@@ -158,6 +173,80 @@ class SpaceBesideFloatTest {
         try (ZipFile zip = new ZipFile(docx.toFile())) {
             return new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
         }
+    }
+
+    /** An introduction, a map with labels, a stack of panels left of it, and the map's caption under them. */
+    private String convertPanels() throws IOException {
+        Path pdf = dir.resolve("panels.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LETTER);
+            doc.addPage(page);
+            float h = PDRectangle.LETTER.getHeight();
+            PDImageXObject map = LosslessFactory.createFromImage(doc, photo(276, 300));
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                for (int i = 0; i < 6; i++) {
+                    text(cs, 36, h - 72 - 13 * i, "Introduction line " + (i + 1) + " runs from the left margin across the page to the right edge");
+                }
+                // A map on the right: a base picture, rivers drawn over it, and labels on them
+                cs.drawImage(map, 300, h - 460, 276, 300);
+                cs.setStrokingColor(new Color(200, 40, 30));
+                cs.setLineWidth(2f);
+                for (int r = 0; r < 24; r++) {
+                    float x = 310 + 11 * r;
+                    cs.moveTo(x, h - 170);
+                    cs.curveTo(x + 20, h - 250, x - 15, h - 330, x + 10, h - 450);
+                    cs.stroke();
+                }
+                String[] legend = {"EXPLANATION", "Blue catfish population", "range through time", "", "", "", "pre-1996", "", "",
+                    "Locations of transient", "blue catfish captured", "", "", "", "", "James"};
+                for (int i = 0; i < legend.length; i++) {
+                    if (!legend[i].isEmpty()) {
+                        text(cs, 430, h - 190 - 13 * i, legend[i]);
+                    }
+                }
+                for (int k = 0; k < 3; k++) {
+                    float top = 170 + 95 * k;
+                    cs.setNonStrokingColor(new Color(215, 240, 225));
+                    rounded(cs, 52, h - top - 80, 314, 80, 10);
+                    cs.fill();
+                    cs.setNonStrokingColor(Color.BLACK);
+                    for (int j = 0; j < 4; j++) {
+                        text(cs, 60, h - top - 18 - 14 * j, "Panel " + (k + 1) + " line " + (j + 1) + " tells of the fish in this part of the bay");
+                    }
+                }
+                String[] caption = {
+                    "Map showing the spatial and temporal invasion of blue catfish in the Chesapeake Bay, 1970-2023, from state",
+                    "records and the surveys of the river commissions, which keep count of where the fish are caught each year.",
+                };
+                for (int i = 0; i < caption.length; i++) {
+                    text(cs, 36, h - 490 - 13 * i, caption[i]);
+                }
+                for (int i = 0; i < 6; i++) {
+                    text(cs, 36, h - 540 - 13 * i, "Body text line " + (i + 1) + " under the panels runs from the left margin across to the right");
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        Path docx = dir.resolve("panels.docx");
+        PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
+        try (ZipFile zip = new ZipFile(docx.toFile())) {
+            return new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    /** A rectangle with rounded corners, as the fact sheet draws its panels. */
+    private static void rounded(PDPageContentStream cs, float x, float y, float w, float h, float r) throws IOException {
+        float k = 0.552f * r;
+        cs.moveTo(x + r, y);
+        cs.lineTo(x + w - r, y);
+        cs.curveTo(x + w - r + k, y, x + w, y + r - k, x + w, y + r);
+        cs.lineTo(x + w, y + h - r);
+        cs.curveTo(x + w, y + h - r + k, x + w - r + k, y + h, x + w - r, y + h);
+        cs.lineTo(x + r, y + h);
+        cs.curveTo(x + r - k, y + h, x, y + h - r + k, x, y + h - r);
+        cs.lineTo(x, y + r);
+        cs.curveTo(x, y + r - k, x + r - k, y, x + r, y);
+        cs.closePath();
     }
 
     private static BufferedImage photo(int w, int h) {
