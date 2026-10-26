@@ -519,6 +519,9 @@ final class RunBuilder {
             }
             boolean odd = switch (Character.UnicodeScript.of(cp)) {
                 case LATIN, GREEK, CYRILLIC, COMMON, INHERITED, HAN, HIRAGANA, KATAKANA -> false;
+                // Hangul isn't shaped: in a face Word has, the PDF's widths are Word's (Malgun Gothic in the IRS's Korean
+                // publications)
+                case HANGUL -> !g.font.exact();
                 case HEBREW -> !standIn;
                 case ARABIC -> !arabic;
                 default -> true;
