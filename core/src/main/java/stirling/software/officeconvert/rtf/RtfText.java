@@ -14,6 +14,7 @@ final class RtfText {
                 case '\t' -> sb.append("\\tab ");
                 case '\n' -> sb.append("\\line ");
                 case '\u00AD' -> sb.append("\\-");
+                case '\u2011' -> sb.append("\\_");
                 case '\u00A0' -> sb.append("\\~");
                 default -> {
                     if (c >= 0x20 && c < 0x7F) {

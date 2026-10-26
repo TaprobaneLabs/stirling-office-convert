@@ -29,10 +29,14 @@ final class Xml {
 
     static void runText(StringBuilder sb, String s) {
         int from = 0;
-        for (int i = s.indexOf('\u00AD'); i >= 0; i = s.indexOf('\u00AD', from)) {
-            text(sb, s.substring(from, i));
-            sb.append("</w:t><w:softHyphen/><w:t xml:space=\"preserve\">");
-            from = i + 1;
+        for (int i = from; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\u00AD' || c == '\u2011') {
+                text(sb, s.substring(from, i));
+                sb.append(c == '\u00AD' ? "</w:t><w:softHyphen/><w:t xml:space=\"preserve\">"
+                        : "</w:t><w:noBreakHyphen/><w:t xml:space=\"preserve\">");
+                from = i + 1;
+            }
         }
         text(sb, s.substring(from));
     }

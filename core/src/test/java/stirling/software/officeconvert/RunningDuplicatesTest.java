@@ -81,6 +81,8 @@ class RunningDuplicatesTest {
                 ZipEntry e = entries.nextElement();
                 if (e.getName().matches("word/header\\d*\\.xml")) {
                     String xml = new String(zip.getInputStream(e).readAllBytes(), StandardCharsets.UTF_8);
+                    // A non-breaking hyphen (a number's, as in SP 800-218A) reads as a hyphen
+                    xml = xml.replaceAll("</w:t><w:noBreakHyphen/><w:t[^>]*>", "-");
                     all.append(xml.replaceAll("<[^>]+>", " ")).append('\n');
                 }
             }
