@@ -56,6 +56,7 @@ import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDFontDescriptor;
 import org.apache.pdfbox.pdmodel.font.PDSimpleFont;
@@ -342,6 +343,12 @@ final class GlyphCollector extends PDFStreamEngine {
     protected void showGlyph(Matrix trm, PDFont font, int code, Vector displacement) throws IOException {
         if (!font.isVertical() && clip.hides(trm, displacement.getX(), font)) {
             // Clipped away whole: the page never shows it
+            if (rotation % 360 == 0 && trm.getScaleX() > 0 && Math.abs(trm.getShearX()) < 0.01f * trm.getScaleX()
+                    && Math.abs(trm.getShearY()) < 0.01f * trm.getScaleX()) {
+                PDRectangle crop = getCurrentPage().getCropBox();
+                markCut(trm.getTranslateX() - crop.getLowerLeftX(), crop.getUpperRightY() - trm.getTranslateY(),
+                        Math.abs(trm.getScaleY()), crop.getWidth());
+            }
             return;
         }
         TextPosition position = positions.of(getGraphicsState(), getTextMatrix(), trm, font, code, displacement);
@@ -468,6 +475,9 @@ final class GlyphCollector extends PDFStreamEngine {
             width = 0.01f;
         }
         if (!onPage(tp, size, width)) {
+            if (Math.round(tp.getDir()) == 0 && rotation % 360 == 0) {
+                markCut(tp.getXDirAdj(), tp.getYDirAdj(), size, tp.getPageWidth());
+            }
             return;
         }
         float x = tp.getXDirAdj();
@@ -562,6 +572,34 @@ final class GlyphCollector extends PDFStreamEngine {
         });
         return em.length == 2 ? new float[] {em[0] / 1000f * along, em[1] / 1000f * along} : null;
     }
+
+    /**
+     * Marks the last glyph drawn on a line whose text runs on past the page's right edge, where a glyph at {@code x} starts:
+     * the left page of a spread (USGS Fact Sheet 2024-3033) sets lines that continue on the next page. Word must end such a
+     * line where the page does, not fill it from the next line.
+     */
+    private void markCut(float x, float baseline, float size, float pageWidth) {
+        if (!(x >= pageWidth) || !(size > 0)) {
+            return;
+        }
+        for (int i = current.size() - 1; i >= Math.max(0, current.size() - CUT_LOOKBACK); i--) {
+            RawGlyph r = current.get(i);
+            Glyph g = r.glyph();
+            if (r.direction() != 0 || Math.abs(g.baseline - baseline) > CUT_BASELINE * size || g.x > x) {
+                return;
+            }
+            if (!g.isSpace()) {
+                g.runsOffPage = true;
+                return;
+            }
+        }
+    }
+
+    /** How many glyphs back, spaces, a cut line's last drawn glyph is looked for. */
+    private static final int CUT_LOOKBACK = 4;
+
+    /** How far from a cut-off glyph's baseline, in its size, the line's last drawn glyph sits. */
+    private static final float CUT_BASELINE = 0.3f;
 
     private boolean onPage(TextPosition tp, float size, float width) {
         float x = tp.getXDirAdj();

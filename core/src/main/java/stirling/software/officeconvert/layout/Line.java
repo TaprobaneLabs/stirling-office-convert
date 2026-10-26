@@ -143,6 +143,11 @@ public final class Line {
         return best;
     }
 
+    /** Whether the page cuts this line off at its right edge, the text running on past it. */
+    public boolean runsOffPage() {
+        return !words.isEmpty() && words.getLast().last().runsOffPage;
+    }
+
     public boolean ideographic() {
         return LineTraits.ideographic(this);
     }

@@ -146,6 +146,12 @@ final class ParagraphFactory {
             }
         }
 
+        if (runsOffPage(d)) {
+            // Lines the page cuts off end with breaks where it does; room past the edge keeps Word from wrapping them where
+            // its widths come out wider than the PDF's
+            p.indentRight = Math.min(p.indentRight, d.right - OFF_PAGE_ROOM);
+        }
+
         if (skip == 1 && p.list == null) {
             p.inlines.clear();
             runs.fill(p, d.lines, 0, colLeft, colRight, hostSize, d.hardBreaks, d.pageBreaks, false, fit);
@@ -200,6 +206,18 @@ final class ParagraphFactory {
         }
         return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest);
     }
+
+    private static boolean runsOffPage(ParaDraft d) {
+        for (Line l : d.lines) {
+            if (l.runsOffPage()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** How far past a cut-off paragraph's widest line Word's room for it reaches. */
+    private static final float OFF_PAGE_ROOM = 72f;
 
     private static boolean narrowed(ParaDraft d) {
         for (Line l : d.lines) {

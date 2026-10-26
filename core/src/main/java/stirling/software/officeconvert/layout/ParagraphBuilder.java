@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import stirling.software.officeconvert.extract.Glyph;
+import stirling.software.officeconvert.model.Paragraph.Align;
 
 public final class ParagraphBuilder {
 
@@ -56,7 +57,22 @@ public final class ParagraphBuilder {
             if (block(p)) {
                 p.hardBreaks.clear();
             }
+            // A line the page cuts off ends there: its text runs on off the page, not into the next line
+            boolean cut = false;
+            for (int i = 0; i < p.lines.size(); i++) {
+                if (p.lines.get(i).runsOffPage()) {
+                    cut = true;
+                    if (i + 1 < p.lines.size()) {
+                        p.hardBreaks.set(i + 1);
+                    }
+                }
+            }
             measure.measure(room, p);
+            if (cut && p.align == Align.JUSTIFY) {
+                // Lines that end at the page's edge aren't justified: Word would spread them over the room past it
+                p.align = Align.LEFT;
+                p.justifySlack = Float.NaN;
+            }
         }
         ParagraphMeasure.alignRtlStarts(room, out);
         return out;

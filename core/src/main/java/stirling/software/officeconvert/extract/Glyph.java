@@ -31,6 +31,9 @@ public final class Glyph {
 
     public boolean upright;
 
+    /** The line's text runs on past the page's right edge after this glyph: the page cuts the line off here. */
+    public boolean runsOffPage;
+
     public boolean invisible;
 
     public IconShape icon;
@@ -77,6 +80,7 @@ public final class Glyph {
         g.hscale = hscale;
         g.tracking = tracking * k;
         g.invisible = invisible;
+        g.runsOffPage = runsOffPage;
         g.icon = icon == null ? null : new IconShape(icon.scaled(k), icon.rgb(), icon.key() + "|" + k);
         return g;
     }
