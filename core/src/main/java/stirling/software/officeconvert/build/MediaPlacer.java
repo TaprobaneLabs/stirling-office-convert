@@ -20,6 +20,7 @@ import stirling.software.officeconvert.layout.ParaDraft;
 import stirling.software.officeconvert.model.Inline;
 import stirling.software.officeconvert.model.Paragraph;
 import stirling.software.officeconvert.model.Picture;
+import stirling.software.officeconvert.model.Stacking;
 
 final class MediaPlacer {
 
@@ -38,9 +39,15 @@ final class MediaPlacer {
     Inline.TextBox textBox(PageLayout.TextBoxItem tb) {
         List<Paragraph> paras = new ArrayList<>();
         float prev = tb.box().top();
+        // Where the output sets the box's text: at its text edges, unless a rounded box's own rounding reaches further in
+        Box b = tb.box();
+        float rounding = tb.rounded() ? Stacking.roundedTextInset(b.width(), b.height()) : 0f;
+        float textLeft = Math.max(tb.textLeft(), b.x() + rounding);
+        float textRight = Math.min(tb.textRight(), b.right() - rounding);
         for (ParaDraft d : tb.paras()) {
             float sb = Math.max(0, paragraphs.wordTop(d) - prev);
-            paras.add(paragraphs.detached(d, tb.textLeft(), tb.textRight(), sb));
+            paras.add(tb.turn() == null ? paragraphs.boxed(d, textLeft, textRight, sb)
+                    : paragraphs.detached(d, tb.textLeft(), tb.textRight(), sb));
             prev = paragraphs.wordBottom(d);
         }
         if (tb.turn() != null) {
@@ -49,7 +56,6 @@ final class MediaPlacer {
                     tb.lineRgb(), tb.lineWidth(), tb.rounded(), tb.overlay(), tb.turn().direction(), tb.groundRgb(),
                     tb.turn().upright());
         }
-        Box b = tb.box();
         return new Inline.TextBox(b.x(), b.top(), b.width(), b.height(), tb.fillRgb(),
                 tb.textLeft() - b.x(), Math.max(0, b.right() - tb.textRight()), tb.gap(), paras,
                 tb.lineRgb(), tb.lineWidth(), tb.rounded(), tb.overlay(), 0, tb.groundRgb(), false);

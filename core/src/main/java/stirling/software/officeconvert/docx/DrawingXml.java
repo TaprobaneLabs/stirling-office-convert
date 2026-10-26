@@ -116,9 +116,12 @@ final class DrawingXml {
         for (Paragraph p : t.paragraphs()) {
             body.paragraph(sb, p, false);
         }
+        // A rounded box sets its text further in by itself: its insets leave that out, so its text starts where the PDF's does
+        float rounding = t.rounded() ? Stacking.roundedTextInset(t.width(), t.height()) : 0f;
         sb.append("</w:txbxContent></wps:txbx><wps:bodyPr rot=\"0\" vert=\"").append(t.upright() ? "eaVert" : vert(t.direction()))
                 .append("\" wrap=\"square\" lIns=\"")
-                .append(Xml.emu(t.insetLeft())).append("\" tIns=\"0\" rIns=\"").append(Xml.emu(t.insetRight()))
+                .append(Xml.emu(Math.max(0f, t.insetLeft() - rounding))).append("\" tIns=\"0\" rIns=\"")
+                .append(Xml.emu(Math.max(0f, t.insetRight() - rounding)))
                 .append("\" bIns=\"0\" anchor=\"t\" anchorCtr=\"0\"><a:noAutofit/></wps:bodyPr></wps:wsp>")
                 .append("</a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice></mc:AlternateContent></w:r>");
     }
@@ -144,7 +147,7 @@ final class DrawingXml {
         if (!rounded) {
             return "<a:avLst/>";
         }
-        long adj = Math.min(50000, Math.round(Stacking.CORNER / Math.max(1f, Math.min(width, height)) * 100000));
+        long adj = Stacking.cornerAdjust(width, height);
         return "<a:avLst><a:gd name=\"adj\" fmla=\"val " + adj + "\"/></a:avLst>";
     }
 
