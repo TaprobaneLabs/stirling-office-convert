@@ -37,7 +37,7 @@ final class TableBuilder {
         Table t = new Table();
         float width = 0;
         for (int c = 0; c < f.cols(); c++) {
-            t.columnWidths.add(Math.max(4f, f.colEdges()[c + 1] - f.colEdges()[c]));
+            t.columnWidths.add(Math.max(MIN_COLUMN, f.colEdges()[c + 1] - f.colEdges()[c]));
             width += t.columnWidths.getLast();
         }
         t.indent = f.left() - colLeft;
@@ -286,11 +286,16 @@ final class TableBuilder {
         }
     }
 
+    /** The narrowest a column is set. */
+    private static final float MIN_COLUMN = 4f;
+
     private static void widenForText(Table t, TableDetection.Found f, PageLayout.TableItem ti) {
         int n = t.columnWidths.size();
         float[] need = new float[n];
         float[] freeLeft = new float[n];
         Arrays.fill(freeLeft, Float.MAX_VALUE);
+        // Whether any cell starting in a column holds text, spanning or not
+        boolean[] holdsText = new boolean[n];
         List<List<Paragraph>> byColumn = new ArrayList<>();
         for (int c = 0; c < n; c++) {
             byColumn.add(new ArrayList<>());
@@ -299,6 +304,11 @@ final class TableBuilder {
         for (Table.Row row : t.rows) {
             int col = 0;
             for (Table.Cell cell : row.cells) {
+                if (col < n) {
+                    for (Paragraph p : cell.paragraphs) {
+                        holdsText[col] |= p.sourceLines > 0;
+                    }
+                }
                 if (cell.gridSpan == 1 && col < n) {
                     for (Paragraph p : cell.paragraphs) {
                         byColumn.get(col).add(p);
@@ -319,8 +329,14 @@ final class TableBuilder {
             if (deficit <= 0) {
                 continue;
             }
-            if (c + 1 < n && freeLeft[c + 1] != Float.MAX_VALUE) {
-                float take = Math.min(deficit, Math.min(freeLeft[c + 1], t.columnWidths.get(c + 1) - need[c + 1]));
+            // A column no cell starts text in gives its room whole: Reg Z's model statement split its transactions'
+            // description column at the gap most rows leave, and the description, all in the first part, widened the
+            // table 94 pt past the page's edge, the amounts with it
+            boolean empty = c + 1 < n && !holdsText[c + 1];
+            if (c + 1 < n && (freeLeft[c + 1] != Float.MAX_VALUE || empty)) {
+                float room = empty ? t.columnWidths.get(c + 1) - MIN_COLUMN
+                        : Math.min(freeLeft[c + 1], t.columnWidths.get(c + 1) - need[c + 1]);
+                float take = Math.min(deficit, room);
                 if (take > 0) {
                     t.columnWidths.set(c, t.columnWidths.get(c) + take);
                     t.columnWidths.set(c + 1, t.columnWidths.get(c + 1) - take);
