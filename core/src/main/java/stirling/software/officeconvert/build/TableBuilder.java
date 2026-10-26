@@ -295,12 +295,12 @@ final class TableBuilder {
      * ("Interest Charged" in Regulation Z's model statement, on a bar across the table, starting in the post-date column):
      * widened for the title instead, that column moved every column after it right, and the amounts over the table's rule.
      */
-    private static void spanOverEmptyCells(Table t) {
+    static void spanOverEmptyCells(Table t) {
         for (Table.Row row : t.rows) {
             int col = 0;
             for (int i = 0; i < row.cells.size(); i++) {
                 Table.Cell cell = row.cells.get(i);
-                float need = lineNeed(t, cell);
+                float need = spannable(cell) ? lineNeed(t, cell) : 0f;
                 float width = spanWidth(t, col, cell.gridSpan);
                 while (need > width && i + 1 < row.cells.size() && cell.vMerge == 0 && joins(cell, row.cells.get(i + 1))) {
                     Table.Cell next = row.cells.remove(i + 1);
@@ -311,6 +311,20 @@ final class TableBuilder {
                 col += cell.gridSpan;
             }
         }
+    }
+
+    /**
+     * Whether a cell's text can take the room of the cells it would span: every paragraph one line, left to right and set
+     * from the left. A paragraph set right or centred would move into the cells joined, and one of several lines rewrap
+     * (from Codex's review).
+     */
+    private static boolean spannable(Table.Cell cell) {
+        for (Paragraph p : cell.paragraphs) {
+            if (p.sourceLines > 0 && (p.sourceLines != 1 || p.bidi || p.align != Align.LEFT && p.align != Align.JUSTIFY)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** The room a cell's widest one-line paragraph, set from the left, needs; 0 when it has none. */
