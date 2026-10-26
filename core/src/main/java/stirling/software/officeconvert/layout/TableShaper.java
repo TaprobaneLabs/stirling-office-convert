@@ -16,11 +16,18 @@ final class TableShaper {
 
     private TableShaper() {}
 
+    /**
+     * Each word's cell: the one whose box holds the word's centre, or is nearest it. Where boxes overlap, the cell whose
+     * column, between the table's column edges, holds the centre wins, then the smaller box. A column's cells reach as far
+     * as its widest text: in Regulation Z's model statement a section title starting in the post-date column ("Interest
+     * Charged") ran into the description column, and the descriptions' first words ("Store") went to the post dates.
+     */
     static List<List<Word>> assign(TableDetection.Found t, List<Word> words) {
         List<List<Word>> out = new ArrayList<>();
         for (int i = 0; i < t.cells().size(); i++) {
             out.add(new ArrayList<>());
         }
+        float[] e = t.colEdges();
         for (Word w : words) {
             float cx = (w.x + w.right) / 2f;
             Glyph g = w.first();
@@ -28,16 +35,21 @@ final class TableShaper {
             int best = -1;
             float bestArea = Float.MAX_VALUE;
             float bestDist = Float.MAX_VALUE;
+            boolean bestInColumn = false;
             for (int i = 0; i < t.cells().size(); i++) {
                 FoundCell c = t.cells().get(i);
                 float dx = cx < c.left() ? c.left() - cx : cx > c.right() ? cx - c.right() : 0;
                 float dy = cy < c.top() ? c.top() - cy : cy > c.bottom() ? cy - c.bottom() : 0;
                 float dist = dx + dy;
                 float area = (c.right() - c.left()) * (c.bottom() - c.top());
-                if (dist < bestDist - 0.01f || Math.abs(dist - bestDist) <= 0.01f && area < bestArea) {
+                boolean inColumn = e != null && c.col() < e.length - 1
+                        && cx >= e[c.col()] && cx <= e[Math.min(c.col() + c.colSpan(), e.length - 1)];
+                boolean tie = Math.abs(dist - bestDist) <= 0.01f;
+                if (dist < bestDist - 0.01f || tie && (inColumn && !bestInColumn || inColumn == bestInColumn && area < bestArea)) {
                     best = i;
                     bestDist = dist;
                     bestArea = area;
+                    bestInColumn = inColumn;
                 }
             }
             if (best >= 0) {
