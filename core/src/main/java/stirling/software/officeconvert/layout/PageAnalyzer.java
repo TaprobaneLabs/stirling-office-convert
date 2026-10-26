@@ -626,6 +626,7 @@ public final class PageAnalyzer {
             items.addAll(rows);
             found = ColumnFinder.find(items, frame.textLeft(), frame.textRight(), page.height(), stats.bodySize);
         }
+        found = SideBySideTables.split(found, blocks, flow, Math.max(0.75f * stats.bodySize, 5f));
         boolean pinPictures = ocr || PictureArranger.pictureDominated(blocks, page);
         List<PageLayout.Band> bands = new ArrayList<>();
         for (ColumnFinder.Band band : found) {
