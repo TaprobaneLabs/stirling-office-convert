@@ -24,8 +24,13 @@ final class StylesPart {
                 .append("<w:lang w:val=\"").append(latinLanguage(sheet.scripts)).append("\" w:eastAsia=\"")
                 .append(eastAsianLanguage(sheet.scripts))
                 .append("\" w:bidi=\"").append(complexLanguage(sheet.scripts)).append("\"/>")
-                .append("</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:widowControl w:val=\"0\"/>")
-                .append("<w:spacing w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/></w:pPr></w:pPrDefault>")
+                .append("</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:widowControl w:val=\"0\"/>");
+        if (sheet.scripts != null && sheet.scripts.eastAsian() != null) {
+            // Word widens the space between East Asian text and Latin letters or digits ("IRS는"), which the PDF has
+            // placed as it wants it
+            sb.append("<w:autoSpaceDE w:val=\"0\"/><w:autoSpaceDN w:val=\"0\"/>");
+        }
+        sb.append("<w:spacing w:after=\"0\" w:line=\"240\" w:lineRule=\"auto\"/></w:pPr></w:pPrDefault>")
                 .append("</w:docDefaults>");
         sb.append("<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/><w:qFormat/>");
         if (normal.bold() || normal.italic() || normal.rgb() != 0) {
