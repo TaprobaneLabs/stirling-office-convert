@@ -45,8 +45,9 @@ final class TableFinder {
                     continue;
                 }
                 if (!Regions.overlapsMostly(b, claimed)) {
+                    Box room = f.gridded() ? f.box() : roomAbove(f.box(), b, claimed);
                     TableDetection.Found kept = f.gridded() ? TableShaper.addBandHeader(t, segments, fills)
-                            : TableShaper.addFrameHeader(t, f.box(), segments);
+                            : TableShaper.addFrameHeader(t, room, segments, room.top() > f.box().top());
                     found.add(kept);
                     claimed.add(f.gridded() ? boxOf(kept) : b);
                 }
@@ -71,6 +72,25 @@ final class TableFinder {
             }
         }
         return found;
+    }
+
+    /**
+     * The part of a rule frame a table found in it may take header rows from: below the tables found in the frame above
+     * it. The CFPB loan estimate frames each column of its second page with rules from top to foot; its cash-to-close and
+     * interest-rate tables, found under the column's other tables, took every line up to the frame's top as header rows,
+     * over those tables, whose words then came out twice.
+     */
+    static Box roomAbove(Box frame, Box table, List<Box> claimed) {
+        float top = frame.top();
+        for (Box c : claimed) {
+            boolean inFrame = c.x() < frame.right() && c.right() > frame.x() && c.top() >= frame.top() - 1
+                    && c.bottom() <= frame.bottom() + 1;
+            boolean above = c.bottom() <= table.top() + 1 && c.x() < table.right() && c.right() > table.x();
+            if (inFrame && above) {
+                top = Math.max(top, c.bottom());
+            }
+        }
+        return top == frame.top() ? frame : new Box(frame.x(), top, frame.right(), frame.bottom());
     }
 
     private TableDetection.Found rejudged(PageData page, Box b, List<Line> segments, List<Rule> rules, List<Fill> fills,

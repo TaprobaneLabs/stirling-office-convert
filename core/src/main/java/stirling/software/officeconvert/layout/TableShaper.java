@@ -289,8 +289,12 @@ final class TableShaper {
         return rgb;
     }
 
-    static TableDetection.Found addFrameHeader(TableDetection.Found t, Box frame, List<Line> segments) {
-        List<Line> edgeAbove = FrameEdgeRows.above(frame, t.colEdges(), segments);
+    /**
+     * {@code under}: the frame's top is the foot of another table found in it, whose rows aren't this table's header, so
+     * no line above it is taken either.
+     */
+    static TableDetection.Found addFrameHeader(TableDetection.Found t, Box frame, List<Line> segments, boolean under) {
+        List<Line> edgeAbove = under ? List.of() : FrameEdgeRows.above(frame, t.colEdges(), segments);
         List<Line> inside = new ArrayList<>();
         for (Line l : segments) {
             float cy = (l.top + l.bottom) / 2f;
