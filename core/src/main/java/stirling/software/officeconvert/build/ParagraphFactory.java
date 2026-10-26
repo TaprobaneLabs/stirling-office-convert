@@ -78,7 +78,10 @@ final class ParagraphFactory {
         p.align = d.align;
         p.sourceTop = wordTop(d);
         p.sourceBottom = wordBottom(d);
-        p.indentLeft = d.left;
+        // Beside a float on the left, measured from the column when the paragraph is indented past the float's edge: from the
+        // room beside it, Word set the lines at the edge (CDC's sheet on violence against American Indian and Alaska Native
+        // people, a list item's runover lines beside its blue panel)
+        p.indentLeft = d.left + d.roomShift;
         p.indentFirst = d.first;
         p.indentRight = d.right;
         p.lineHeight = lineHeight(d);
@@ -101,7 +104,8 @@ final class ParagraphFactory {
             styles.use(p.style, styles.normal);
         }
         if (flow && d.role != ParaDraft.Role.LIST) {
-            lists.body(d.left + Math.min(0, d.first), d.role != ParaDraft.Role.BODY);
+            // From the column, where list markers are measured from
+            lists.body(d.left + d.roomShift + Math.min(0, d.first), d.role != ParaDraft.Role.BODY);
         }
         if (hasMixedSizes(d)) {
             p.lineRule = LineRule.AT_LEAST;

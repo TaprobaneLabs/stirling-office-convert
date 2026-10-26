@@ -46,7 +46,7 @@ final class PictureArranger {
         List<PageLayout.Item> inFlow = new ArrayList<>();
         for (PageLayout.Item b : blocks) {
             if (b instanceof PageLayout.TextBoxItem tb) {
-                obstacles.add(new ParagraphBuilder.Obstacle(tb.box(), tb.gap(), tb.gap()));
+                obstacles.add(new ParagraphBuilder.Obstacle(tb.box(), tb.gap(), tb.gap(), !tb.overlay()));
                 out.add(tb);
             } else if (!isPicture(b)) {
                 out.add(b);
@@ -216,7 +216,7 @@ final class PictureArranger {
         } else {
             float gl = gapLeft == Float.MAX_VALUE ? 9f : Math.clamp(gapLeft, 0f, 36f);
             float gr = gapRight == Float.MAX_VALUE ? 9f : Math.clamp(gapRight, 0f, 36f);
-            obstacles.add(new ParagraphBuilder.Obstacle(new Box(b.x(), b.top(), b.right(), b.bottom()), gl, gr));
+            obstacles.add(new ParagraphBuilder.Obstacle(new Box(b.x(), b.top(), b.right(), b.bottom()), gl, gr, true));
             out.add(new PageLayout.FloatItem(b, Math.min(gl, gr), false));
         }
     }

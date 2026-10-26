@@ -9,7 +9,8 @@ import java.util.Map;
 
 final class LineRoom {
 
-    private record Limits(float left, float right, boolean narrowed) {}
+    /** {@code leftWraps}: the output wraps text around the obstacle that sets the left limit. */
+    private record Limits(float left, float right, boolean narrowed, boolean leftWraps) {}
 
     final float colLeft;
     final float colRight;
@@ -29,6 +30,7 @@ final class LineRoom {
         float left = colLeft;
         float right = colRight;
         boolean narrowed = false;
+        boolean leftWraps = false;
         for (ParagraphBuilder.Obstacle o : obstacles) {
             Box b = o.box();
             if (l.top >= b.bottom() - 1 || l.bottom <= b.top() + 1) {
@@ -38,11 +40,14 @@ final class LineRoom {
                 right = Math.min(right, b.x() - o.gapLeft());
                 narrowed = true;
             } else if (b.right() <= l.x + 1) {
-                left = Math.max(left, b.right() + o.gapRight());
+                if (b.right() + o.gapRight() > left) {
+                    left = b.right() + o.gapRight();
+                    leftWraps = o.wraps();
+                }
                 narrowed = true;
             }
         }
-        return new Limits(left, right, narrowed);
+        return new Limits(left, right, narrowed, leftWraps);
     }
 
     float left(Line l) {
@@ -56,6 +61,11 @@ final class LineRoom {
     float wrap(Line l) {
         Limits lim = limits.get(l);
         return lim.narrowed() ? Math.min(lim.right(), measure) : measure;
+    }
+
+    /** Whether the output wraps text around the obstacle that sets a line's left limit. */
+    boolean leftWraps(Line l) {
+        return limits.get(l).leftWraps();
     }
 
     boolean narrowed(Line l) {

@@ -27,6 +27,11 @@ public final class ParaDraft {
 
     public Align align = Align.LEFT;
     public float left;
+    /**
+     * How far right of the column {@link #left} is measured from in the output: the room beside an obstacle on the left
+     * (a text box, a picture) that narrows each line alike, when the paragraph is written from the column; else 0.
+     */
+    public float roomShift;
     public float first;
     public float right;
     public float pitch;
