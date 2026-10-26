@@ -664,10 +664,11 @@ public final class DocumentBuilder {
 
     /**
      * Whether a paragraph's space above, from {@code from} down to its words at {@code to}, reaches up beside a float Word
-     * wraps text around, one ending in that space and leaving room beside it. Word fits a paragraph's first line, space
-     * above and all, beside such a float, so the line kept only the words that fit beside it: USGS Fact Sheet 2023-3022's
-     * photo caption set its first two words to the photo's right and ran a line longer, onto a page of its own with the
-     * ISSN. Set in a spacer of its own, the space goes beside the float and the line under it.
+     * wraps text around, one ending in that space, wherever it starts, and leaving room beside it. Word fits a paragraph's
+     * first line, space above and all, beside such a float, so the line kept only the words that fit beside it: USGS Fact
+     * Sheet 2023-3022's photo caption set its first two words to the photo's right and ran a line longer, onto a page of its
+     * own with the ISSN, and 2024-3033's map caption, whose space above holds the map's panels whole, set its first line
+     * right of them. Set in a spacer of its own, the space goes beside the float and the line under it.
      */
     private static boolean spaceBesideFloat(ParaDraft d, PageLayout.Column col, PageLayout layout, float from, float to) {
         float roomLeft = col.left() + Math.max(0f, Math.min(d.left, d.left + d.first));
@@ -682,7 +683,7 @@ public final class DocumentBuilder {
                     } else {
                         continue;
                     }
-                    boolean ends = it.top() < from && it.bottom() > from && it.bottom() <= to;
+                    boolean ends = it.bottom() > from && it.bottom() <= to;
                     boolean across = it.x() - gap < col.right() && it.right() + gap > roomLeft;
                     boolean room = it.x() - gap - col.left() >= FILLED_ROOM || col.right() - it.right() - gap >= FILLED_ROOM;
                     if (ends && across && room) {
