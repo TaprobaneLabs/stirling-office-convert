@@ -829,22 +829,33 @@ final class RunBuilder {
     /**
      * {@code whole}: only a fit that keeps every line counts (otherwise justified lines are squeezed one by one).
      * {@code firstStart} and {@code restStart}: where Word starts the first and later lines, or NaN to measure each line
-     * from where it starts in the PDF.
+     * from where it starts in the PDF. {@code marker}: words the first line starts with that Word draws as the
+     * paragraph's list number, left out of its measure, which starts where its text does.
      */
-    record Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart) {}
+    record Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart, int marker) {
+
+        Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart) {
+            this(edge, preferred, justified, whole, firstStart, restStart, 0);
+        }
+
+        int from(int line) {
+            return line == 0 ? marker : 0;
+        }
+    }
 
     private float fit(List<Line> lines, Fit target, BitSet hardBreaks, float[] squeezes) {
         if (Float.isNaN(target.edge())) {
             return Float.NaN;
         }
-        for (Line l : lines) {
-            for (int wi = 1; wi < l.words.size(); wi++) {
+        for (int i = 0; i < lines.size(); i++) {
+            Line l = lines.get(i);
+            for (int wi = target.from(i) + 1; wi < l.words.size(); wi++) {
                 if (l.gaps[wi] != Line.SPACE) {
                     return Float.NaN;
                 }
             }
         }
-        exactFit = exact(lines);
+        exactFit = exact(lines, target.marker());
         if (!exactFit) {
             return Float.NaN;
         }
@@ -890,10 +901,11 @@ final class RunBuilder {
      * widths are known too; but a line it can't break, a paragraph's only one, keeps the wider slack an unfitted stand-in
      * gets (a form's title in a narrow column broke at its hyphen when fitted).
      */
-    private boolean exact(List<Line> lines) {
+    private boolean exact(List<Line> lines, int marker) {
         boolean breaks = lines.size() > 1;
-        for (Line l : lines) {
-            for (Word w : l.words) {
+        for (int i = 0; i < lines.size(); i++) {
+            List<Word> words = lines.get(i).words;
+            for (Word w : i == 0 ? words.subList(Math.min(marker, words.size()), words.size()) : words) {
                 for (Glyph g : w.glyphs) {
                     WidthFix fix = spacing.get(lookKey(g));
                     if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || !wordKnows(g)
@@ -910,15 +922,16 @@ final class RunBuilder {
         List<float[]> spans = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
             Line l = lines.get(i);
+            int from = Math.min(target.from(i), l.words.size() - 1);
             float start = i == 0 ? target.firstStart() : target.restStart();
-            float room = target.edge() - (Float.isNaN(start) ? l.x : start);
+            float room = target.edge() - (Float.isNaN(start) ? l.words.get(from).x : start);
             Word lastWord = l.words.getLast();
             Glyph last = lastWord.last();
             Word next = i + 1 < lines.size() && !hardBreaks.get(i + 1) ? lines.get(i + 1).words.getFirst() : null;
-            float natural = natural(l, t) - room;
+            float natural = natural(l, from, t) - room;
             boolean soft = next != null && HYPHENS.contains(last.text)
                     && (dropHyphens || last.text.equals("\u00AD")) && Character.isLowerCase(next.first().text.charAt(0));
-            int spaces = spaces(l);
+            int spaces = spaces(l, from);
             float over = Float.MAX_VALUE;
             if (next != null && (soft || !HYPHENS.contains(last.text))) {
                 float unit = unitWidth(next, t);
@@ -938,18 +951,18 @@ final class RunBuilder {
         return Math.min(SPACE_GIVE * spaces * fitSpace(space, 0f), WORD_GIVE * word + WORD_GIVE_FLOOR);
     }
 
-    private static int spaces(Line l) {
+    private static int spaces(Line l, int from) {
         int n = 0;
-        for (int wi = 1; wi < l.words.size(); wi++) {
+        for (int wi = from + 1; wi < l.words.size(); wi++) {
             n += l.sentenceSpace(wi) ? 2 : 1;
         }
         return n;
     }
 
-    private float natural(Line l, float t) {
+    private float natural(Line l, int from, float t) {
         float drawn = 0;
-        for (int wi = 0; wi < l.words.size(); wi++) {
-            if (wi > 0) {
+        for (int wi = from; wi < l.words.size(); wi++) {
+            if (wi > from) {
                 drawn += (l.sentenceSpace(wi) ? 2 : 1) * fitSpace(l.words.get(wi - 1).last(), t);
             }
             drawn += wordWidth(l.words.get(wi), t, null);

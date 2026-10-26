@@ -46,6 +46,8 @@ class StandInFitTest {
     private static final float PITCH = 12;
     private static final float LEFT = 72;
     private static final float TOP = 700;
+    /** A list item's text starts this far right of its bullet. */
+    private static final float BULLET_GAP = 14;
     private static final String TEXT = "Agencies should review the guidance each year and report on how the plan was carried out, "
             + "which offices took part, what the work cost and whether the results matched the goals set at the start. "
             + "Where a program missed its targets, the report explains why and what will change before the next review. "
@@ -66,6 +68,20 @@ class StandInFitTest {
         assertTrue(spacings(paragraph(xml, lines)).stream().anyMatch(s -> s > 0),
                 "its runs carry spacing for the wider face");
         assertEquals(text(lines), wordBreaks(xml, lines), "Word breaks the paragraph where the PDF does");
+    }
+
+    /**
+     * A bulleted item keeps them too. Its bullet is Word's list number, a tab from its text, so the item is measured from
+     * where its text starts: unfitted, it took a word Word could fit, and a column holding a list wasn't pinned, so Word ran
+     * the next column's first lines into it (the IRS's Korean Publication 1, page 2).
+     */
+    @Test
+    void aListItemInAStandInFaceKeepsThePdfLineBreaks() throws Exception {
+        List<String> words = Arrays.asList(TEXT.split(" "));
+        List<List<String>> lines = breakLines(words, takesAWord(words));
+        String xml = convert(lines, true);
+        assertTrue(paragraph(xml, lines).contains("<w:numPr>"), "the item is a list item");
+        assertEquals(text(lines), wordBreaks(xml, lines), "Word breaks the item where the PDF does");
     }
 
     /**
@@ -112,16 +128,25 @@ class StandInFitTest {
     }
 
     private String convert(List<List<String>> lines) throws IOException {
+        return convert(lines, false);
+    }
+
+    private String convert(List<List<String>> lines, boolean bullet) throws IOException {
         Path pdf = dir.resolve("stand-in.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
             doc.addPage(page);
             PDResources resources = new PDResources();
             resources.put(COSName.getPDFName("F1"), new PDTrueTypeFont(widerFace()));
+            resources.put(COSName.getPDFName("F2"), ARIAL);
             page.setResources(resources);
             StringBuilder content = new StringBuilder();
+            float x = bullet ? LEFT + BULLET_GAP : LEFT;
+            if (bullet) {
+                content.append(String.format(Locale.ROOT, "BT /F2 %.0f Tf %.2f %.2f Td (\\225) Tj ET%n", SIZE, LEFT, TOP));
+            }
             for (int i = 0; i < lines.size(); i++) {
-                content.append(String.format(Locale.ROOT, "BT /F1 %.0f Tf %.2f %.2f Td (%s) Tj ET%n", SIZE, LEFT, TOP - i * PITCH,
+                content.append(String.format(Locale.ROOT, "BT /F1 %.0f Tf %.2f %.2f Td (%s) Tj ET%n", SIZE, x, TOP - i * PITCH,
                         String.join(" ", lines.get(i))));
             }
             PDStream stream = new PDStream(doc);
