@@ -179,7 +179,7 @@ final class TextBlocks {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c != '\u00AD' && c != '\0' && c != '\r' && c != '\uFFFE' && c != '\uFFFF') {
-                sb.append(c);
+                sb.append(c == '\u2011' ? '-' : c);
             }
         }
     }

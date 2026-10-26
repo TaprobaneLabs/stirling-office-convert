@@ -670,13 +670,33 @@ final class RunBuilder {
                             continue;
                         }
                     }
-                    sink.append(g.text, styled(g, hostSize), g.link);
+                    sink.append(numberHyphen(w, gi) ? NO_BREAK_HYPHEN : g.text, styled(g, hostSize), g.link);
                 }
             }
         }
         sink.flush();
         squeeze = 0f;
     }
+
+    /**
+     * Whether a word's glyph {@code gi} is a hyphen between digits, as in a phone number (1-800-232-4636). The PDF keeps
+     * such a number whole within its line, but Word breaks after any hyphen where its room runs out, and a number split at
+     * a line's end reads as one run of digits: CDC's HPV sheet and the IRS's Spanish Publication 1 lost their phone numbers.
+     * A hyphen ending a line isn't one: there the PDF breaks the number too.
+     */
+    static boolean numberHyphen(Word w, int gi) {
+        if (gi == 0 || gi + 1 >= w.glyphs.size()) {
+            return false;
+        }
+        String t = w.glyphs.get(gi).text;
+        String before = w.glyphs.get(gi - 1).text;
+        String after = w.glyphs.get(gi + 1).text;
+        return (t.equals("-") || t.equals("\u2010")) && !before.isEmpty() && !after.isEmpty()
+                && Character.isDigit(before.codePointBefore(before.length())) && Character.isDigit(after.codePointAt(0));
+    }
+
+    /** A hyphen no line breaks after: Word's {@code noBreakHyphen}, RTF's {@code \_}. */
+    static final String NO_BREAK_HYPHEN = "\u2011";
 
     private static final float SQUEEZE_MARGIN = 0.5f;
 
@@ -955,7 +975,7 @@ final class RunBuilder {
             drawn += drawnWidth(g) - t * g.text.length();
             if (g.text.equals("-") && gi > 0 && gi + 1 < w.glyphs.size()
                     && Character.isLetterOrDigit(w.glyphs.get(gi - 1).text.codePointAt(0))
-                    && Character.isLetterOrDigit(w.glyphs.get(gi + 1).text.codePointAt(0))) {
+                    && Character.isLetterOrDigit(w.glyphs.get(gi + 1).text.codePointAt(0)) && !numberHyphen(w, gi)) {
                 break;
             }
         }
