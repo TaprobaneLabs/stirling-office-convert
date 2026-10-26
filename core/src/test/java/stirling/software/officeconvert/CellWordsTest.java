@@ -68,6 +68,63 @@ class CellWordsTest {
         assertTrue(width < pdfWidth + 10, "the table is about as wide as the PDF's (" + pdfWidth + " pt), not " + width);
     }
 
+    /** A label that only just fits its cell of a ruled form doesn't take the blank field after it, over the rule between them. */
+    @Test
+    void aBlankFieldOfARuledFormKeepsItsDivider() throws Exception {
+        String xml = convertForm();
+        int at = xml.indexOf(FORM_LABEL);
+        assertTrue(at >= 0, "the label is there");
+        int cell = xml.lastIndexOf("<w:tc>", at);
+        assertFalse(xml.substring(cell, at).contains("<w:gridSpan "), "the label's cell keeps to its column");
+    }
+
+    /** Fills the first column of {@link #convertForm()}'s grid to within 2 pt of its rule. */
+    private static final String FORM_LABEL = "Applicant's surname";
+
+    /** A ruled grid of labels, blank fields and notes. */
+    private String convertForm() throws IOException {
+        Path pdf = dir.resolve("form.pdf");
+        float[] cols = {72, 74 + PLAIN.getStringWidth(FORM_LABEL) / 1000 * 8 + 2, 260, 400};
+        String[][] rows = {
+            {"Field", "Entry", "Notes"},
+            {"Date of birth", "", "As on your passport"},
+            {FORM_LABEL, "", "Family name"},
+            {"Given names", "", "All of them"},
+            {"Country", "", "Where you live now"},
+        };
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LEGAL);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                float top = 120;
+                float pitch = 16;
+                cs.setLineWidth(0.75f);
+                for (int r = 0; r <= rows.length; r++) {
+                    cs.moveTo(cols[0], H - top - pitch * r);
+                    cs.lineTo(cols[cols.length - 1], H - top - pitch * r);
+                }
+                for (float x : cols) {
+                    cs.moveTo(x, H - top);
+                    cs.lineTo(x, H - top - pitch * rows.length);
+                }
+                cs.stroke();
+                for (int r = 0; r < rows.length; r++) {
+                    for (int c = 0; c < 3; c++) {
+                        if (!rows[r][c].isEmpty()) {
+                            text(cs, r == 0 ? BOLD : PLAIN, cols[c] + 2, top + pitch * r + 11, 8, rows[r][c]);
+                        }
+                    }
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        Path docx = dir.resolve("form.docx");
+        PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
+        try (ZipFile zip = new ZipFile(docx.toFile())) {
+            return new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
     /** The text of each table cell, its paragraphs' runs joined. */
     private static List<String> cells(String xml) {
         List<String> out = new ArrayList<>();

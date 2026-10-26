@@ -332,14 +332,18 @@ final class TableBuilder {
         return w;
     }
 
-    /** Whether an empty cell can join the one before it: nothing in it, and drawn the same above and below. */
+    /**
+     * Whether an empty cell can join the one before it: nothing in it, no rule drawn between them (a blank field of a
+     * ruled form stays a field of its own), and drawn the same above and below.
+     */
     private static boolean joins(Table.Cell cell, Table.Cell next) {
         for (Paragraph p : next.paragraphs) {
             if (p.sourceLines > 0) {
                 return false;
             }
         }
-        return next.vMerge == 0 && next.shading == cell.shading && next.top.equals(cell.top) && next.bottom.equals(cell.bottom);
+        return next.vMerge == 0 && cell.right.equals(Table.Border.NONE) && next.left.equals(Table.Border.NONE)
+                && next.shading == cell.shading && next.top.equals(cell.top) && next.bottom.equals(cell.bottom);
     }
 
     private static void widenForText(Table t, TableDetection.Found f, PageLayout.TableItem ti) {
