@@ -19,6 +19,8 @@ public final class Line {
     public char[] leaders;
     public float drawnSpace = Float.NaN;
     public boolean narrowed;
+    /** An obstacle on the right ends this line's room before its column's edge. */
+    public boolean narrowedRight;
     public final float baseline;
     public final float x;
     public final float right;
