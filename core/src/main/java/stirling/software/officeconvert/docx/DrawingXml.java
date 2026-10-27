@@ -45,7 +45,11 @@ final class DrawingXml {
                 .append("<wp:effectExtent l=\"0\" t=\"0\" r=\"0\" b=\"0\"/>");
         if (floating) {
             switch (pic.wrap) {
-                case SQUARE -> sb.append("<wp:wrapSquare wrapText=\"bothSides\"/>");
+                case SQUARE -> sb.append("<wp:wrapSquare wrapText=\"").append(switch (pic.wrapSide) {
+                    case LEFT -> "left";
+                    case RIGHT -> "right";
+                    case BOTH -> "bothSides";
+                }).append("\"/>");
                 case TOP_BOTTOM -> sb.append("<wp:wrapTopAndBottom/>");
                 default -> sb.append("<wp:wrapNone/>");
             }

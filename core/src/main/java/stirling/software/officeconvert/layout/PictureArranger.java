@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import stirling.software.officeconvert.extract.PageData;
+import stirling.software.officeconvert.model.Picture;
 
 final class PictureArranger {
 
@@ -217,7 +218,9 @@ final class PictureArranger {
             float gl = gapLeft == Float.MAX_VALUE ? 9f : Math.clamp(gapLeft, 0f, 36f);
             float gr = gapRight == Float.MAX_VALUE ? 9f : Math.clamp(gapRight, 0f, 36f);
             obstacles.add(new ParagraphBuilder.Obstacle(new Box(b.x(), b.top(), b.right(), b.bottom()), gl, gr, true));
-            out.add(new PageLayout.FloatItem(b, Math.min(gl, gr), false));
+            Picture.Side side = gapLeft == Float.MAX_VALUE ? Picture.Side.RIGHT
+                    : gapRight == Float.MAX_VALUE ? Picture.Side.LEFT : Picture.Side.BOTH;
+            out.add(new PageLayout.FloatItem(b, Math.min(gl, gr), false, side));
         }
     }
 

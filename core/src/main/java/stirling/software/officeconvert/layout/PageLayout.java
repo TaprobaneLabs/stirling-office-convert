@@ -6,6 +6,7 @@ import java.util.Set;
 import stirling.software.officeconvert.extract.PageData;
 import stirling.software.officeconvert.extract.PageGraphics;
 import stirling.software.officeconvert.extract.PageGraphics.ImageDraw;
+import stirling.software.officeconvert.model.Picture;
 import stirling.software.officeconvert.table.TableDetection;
 
 public record PageLayout(
@@ -151,7 +152,15 @@ public record PageLayout(
         }
     }
 
-    public record FloatItem(Item picture, float gap, boolean overlay) implements Item {
+    /**
+     * A picture text wraps round, or an overlay over or under the text. {@code side}: the sides the PDF sets text beside it.
+     */
+    public record FloatItem(Item picture, float gap, boolean overlay, Picture.Side side) implements Item {
+
+        public FloatItem(Item picture, float gap, boolean overlay) {
+            this(picture, gap, overlay, Picture.Side.BOTH);
+        }
+
         public float top() {
             return picture.top();
         }

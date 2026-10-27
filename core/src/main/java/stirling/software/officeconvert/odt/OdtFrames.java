@@ -40,7 +40,11 @@ final class OdtFrames {
             }
         } else {
             String wrap = switch (pic.wrap) {
-                case SQUARE -> "style:wrap=\"parallel\" style:number-wrapped-paragraphs=\"no-limit\" style:wrap-contour=\"false\"";
+                case SQUARE -> "style:wrap=\"" + switch (pic.wrapSide) {
+                    case LEFT -> "left";
+                    case RIGHT -> "right";
+                    case BOTH -> "parallel";
+                } + "\" style:number-wrapped-paragraphs=\"no-limit\" style:wrap-contour=\"false\"";
                 case TOP_BOTTOM -> "style:wrap=\"none\"";
                 default -> "style:wrap=\"run-through\" style:run-through=\"" + (pic.behind ? "background" : "foreground") + "\"";
             };

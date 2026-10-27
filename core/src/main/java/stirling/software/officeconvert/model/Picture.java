@@ -9,6 +9,13 @@ public final class Picture {
         NONE
     }
 
+    /** The sides of a square-wrapped picture text runs on. */
+    public enum Side {
+        BOTH,
+        LEFT,
+        RIGHT
+    }
+
     public final MediaRef media;
     public float width;
     public float height;
@@ -21,6 +28,7 @@ public final class Picture {
     public int z;
     public boolean fromParagraph;
     public float wrapGap;
+    public Side wrapSide = Side.BOTH;
     public float cropLeft;
     public float cropTop;
     public float cropRight;
