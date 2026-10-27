@@ -159,6 +159,9 @@ final class RunBuilder {
 
     private boolean exactFit;
 
+    /** Lines whose first word keeps its hyphens unbroken, so Word moves it whole as the PDF does. */
+    private BitSet heldWords = new BitSet();
+
     /** How a font's runs are fitted: spacing and scale make Word's widths match the PDF's glyphs; tracking is the PDF's own
      *  character spacing, which Word applies the same way. */
     private record WidthFix(float spacing, int scale, float tracking) {
@@ -604,6 +607,7 @@ final class RunBuilder {
         spacing = widthFixes(lines, p.align != Paragraph.Align.JUSTIFY);
         float[] squeezes = new float[lines.size()];
         exactFit = false;
+        heldWords = new BitSet();
         fitted = target == null ? Float.NaN : fit(lines, target, hardBreaks, squeezes);
         if (Float.isNaN(fitted) && target != null && target.justified()) {
             squeezes = squeezesFor(lines, target.preferred());
@@ -688,7 +692,8 @@ final class RunBuilder {
                             continue;
                         }
                     }
-                    sink.append(numberHyphen(w, gi) ? NO_BREAK_HYPHEN : g.text, styled(g, hostSize), g.link);
+                    boolean held = wi == 0 && heldWords.get(li) && breakingHyphen(w, gi);
+                    sink.append(numberHyphen(w, gi) || held ? NO_BREAK_HYPHEN : g.text, styled(g, hostSize), g.link);
                 }
             }
         }
@@ -930,17 +935,20 @@ final class RunBuilder {
      * spacing that keeps the word out, in Word's steps of a twentieth of a point and at most {@link #MAX_BREAK_SPACING}
      * of its size, where the line still fits. InDesign's paragraph composer breaks lines early to even out a ragged edge,
      * which no one edge matches, and Word took the word up and every later line's first word with it (USGS Fact Sheet
-     * 2024-3052). Returns the fit's score with those lines' breaks kept.
+     * 2024-3052). Where only the first part of a hyphenated next word fits and the spacing can't keep it out, that word's
+     * hyphens become no-break hyphens, so Word moves it whole as the PDF does (USGS Fact Sheet 2024-3036 lost its line
+     * breaks from "ever-increasing" on, Word ending a line with "ever-"). Returns the fit's score with those lines' breaks
+     * kept.
      */
     private int keepBreaks(List<Line> lines, Fit target, BitSet hardBreaks, float slack, float t, float[] squeezes) {
         int score = 0;
         for (int i = 0; i < lines.size(); i++) {
-            float[] span = span(lines, i, target, hardBreaks, t, t);
+            float[] span = span(lines, i, target, hardBreaks, t, t, false);
             if (slack > span[1]) {
                 Word lastWord = lines.get(i).words.getLast();
                 int steps = (int) (MAX_BREAK_SPACING * lastWord.last().size / SPACING_STEP + 1e-3f);
                 for (int k = 1; k <= steps; k++) {
-                    float[] wider = span(lines, i, target, hardBreaks, t - k * SPACING_STEP, t);
+                    float[] wider = span(lines, i, target, hardBreaks, t - k * SPACING_STEP, t, false);
                     if (wider[0] > slack) {
                         break;
                     }
@@ -949,6 +957,13 @@ final class RunBuilder {
                         span = wider;
                         break;
                     }
+                }
+            }
+            if (slack > span[1] && i + 1 < lines.size() && breaksAtHyphen(lines.get(i + 1).words.getFirst())) {
+                float[] whole = span(lines, i, target, hardBreaks, squeezes[i], t, true);
+                if (slack <= whole[1]) {
+                    heldWords.set(i + 1);
+                    span = whole;
                 }
             }
             score += slack <= span[1] ? lines.size() - i : 0;
@@ -995,16 +1010,17 @@ final class RunBuilder {
     private List<float[]> spans(List<Line> lines, Fit target, BitSet hardBreaks, float t) {
         List<float[]> spans = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
-            spans.add(span(lines, i, target, hardBreaks, t, t));
+            spans.add(span(lines, i, target, hardBreaks, t, t, false));
         }
         return spans;
     }
 
     /**
      * Line {@code i}'s slack past the fit's edge: the least that holds the line, and the most that still leaves the next
-     * line's first word out of it, with the line's characters {@code t} narrower and the next word's {@code tNext}.
+     * line's first word out of it, with the line's characters {@code t} narrower and the next word's {@code tNext}. The
+     * next word is measured to its first hyphen Word breaks at, or {@code whole}.
      */
-    private float[] span(List<Line> lines, int i, Fit target, BitSet hardBreaks, float t, float tNext) {
+    private float[] span(List<Line> lines, int i, Fit target, BitSet hardBreaks, float t, float tNext, boolean whole) {
         Line l = lines.get(i);
         int from = Math.min(target.from(i), l.words.size() - 1);
         float start = i == 0 ? target.firstStart() : target.restStart();
@@ -1018,7 +1034,7 @@ final class RunBuilder {
         int spaces = spaces(l, from);
         float over = Float.MAX_VALUE;
         if (next != null && (soft || !HYPHENS.contains(last.text))) {
-            float unit = unitWidth(next, tNext);
+            float unit = whole && !soft ? wordWidth(next, tNext, null) : unitWidth(next, tNext);
             float stem = wordWidth(lastWord, t, last);
             float joined = soft ? natural - wordWidth(lastWord, t, null) + stem + unit : natural + fitSpace(last, t) + unit;
             over = joined - allowance(target, soft ? spaces : spaces + 1, last, soft ? stem + unit : unit);
@@ -1089,13 +1105,27 @@ final class RunBuilder {
         for (int gi = 0; gi < w.glyphs.size(); gi++) {
             Glyph g = w.glyphs.get(gi);
             drawn += drawnWidth(g) - t * g.text.length();
-            if (g.text.equals("-") && gi > 0 && gi + 1 < w.glyphs.size()
-                    && Character.isLetterOrDigit(w.glyphs.get(gi - 1).text.codePointAt(0))
-                    && Character.isLetterOrDigit(w.glyphs.get(gi + 1).text.codePointAt(0)) && !numberHyphen(w, gi)) {
+            if (breakingHyphen(w, gi)) {
                 break;
             }
         }
         return drawn;
+    }
+
+    /** Whether Word may break a word after its glyph {@code gi}: a hyphen between letters or digits, not in a number. */
+    private static boolean breakingHyphen(Word w, int gi) {
+        return w.glyphs.get(gi).text.equals("-") && gi > 0 && gi + 1 < w.glyphs.size()
+                && Character.isLetterOrDigit(w.glyphs.get(gi - 1).text.codePointAt(0))
+                && Character.isLetterOrDigit(w.glyphs.get(gi + 1).text.codePointAt(0)) && !numberHyphen(w, gi);
+    }
+
+    private static boolean breaksAtHyphen(Word w) {
+        for (int gi = 0; gi < w.glyphs.size(); gi++) {
+            if (breakingHyphen(w, gi)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private float fitSpace(Glyph before, float t) {
