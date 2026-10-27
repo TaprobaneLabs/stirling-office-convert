@@ -393,6 +393,7 @@ final class RunBuilder {
                     acc[11] += g.text.length();
                     acc[12] += g.tracking * g.tracking * g.text.length();
                     acc[13] += g.tracking / g.size * g.text.length();
+                    acc[14] += (float) g.text.chars().filter(Character::isLowerCase).count();
                     acc[8] += exact;
                     acc[7] = Math.max(acc[7], Math.abs(wordSize(g) - g.size) / g.size);
                     acc[0] += g.width;
@@ -427,7 +428,7 @@ final class RunBuilder {
             boolean placedApart = a[5] == 0 && a[4] > 0 && a[3] / a[4] < 1 - (a[6] * 2 > a[2] ? CJK_SQUEEZED : SQUEEZED);
             boolean otherFace = a[5] == 0 && !placedApart && a[0] < OTHER_FACE * a[8];
             // Glyph positions, when measured, already hold the character spacing
-            float tracking = placedApart || a[2] < 3 || !tracked ? 0f : tracking(a);
+            float tracking = placedApart || a[2] < 3 || !tracked ? 0f : tracking(a, a[5] == 0 && !otherFace);
             if (a[2] < 3 || a[5] == 0 && !placedApart && !otherFace && a[7] < ROUNDED_SIZE) {
                 if (tracking != 0f) {
                     out.put(e.getKey(), new WidthFix(0f, 100, tracking));
@@ -450,32 +451,49 @@ final class RunBuilder {
     }
 
     /**
-     * The condensed character spacing a font's runs share in the PDF, in Word's steps of a twentieth of a point, or 0 when
-     * it is too small to matter, varies (justification done with character spacing, say) or is more than a spacing (a
-     * producer's way of moving to a column). Expanded spacing is left out: without it a line only comes out narrower, never
-     * wraps, and Word's PDFs of letterspaced capitals read as separate letters.
+     * The character spacing a font's runs share in the PDF, in Word's steps of a twentieth of a point, or 0 when it is too
+     * small to matter, varies (justification done with character spacing, say) or is more than a spacing (a producer's way
+     * of moving to a column). Expanded spacing is kept only when slight, in mostly lower-case text and in a face Word has
+     * ({@code known}): without it a body text's lines come out shorter in Word, which then takes words onto them (GAO's
+     * highlights, set with a tenth of a point a letter). Word's PDFs of letterspaced capitals read as separate letters, and
+     * a stand-in's widths are matched only to a twentieth of a point a character, so it needs the room the spacing leaves
+     * (CFPB's closing disclosure wrapped a line in a narrow cell).
      */
-    private static float tracking(float[] a) {
+    private static float tracking(float[] a, boolean known) {
         if (a[11] <= 0) {
             return 0f;
         }
         float mean = a[10] / a[11];
         float em = a[13] / a[11];
         float spread = (float) Math.sqrt(Math.max(0, a[12] / a[11] - mean * mean));
-        if (mean > -MIN_TRACKING || em < -MAX_CONDENSED || spread > TRACKING_SPREAD) {
+        if (spread > TRACKING_SPREAD) {
             return 0f;
         }
-        return (float) Math.floor(mean * 20f) / 20f;
+        if (mean <= -MIN_TRACKING && em >= -MAX_CONDENSED) {
+            return (float) Math.floor(mean * 20f) / 20f;
+        }
+        // Down to Word's step, a hair rounded up first: a tenth of a point, summed and averaged, stays one
+        float expanded = (float) Math.floor(mean * 20f + 0.01f) / 20f;
+        if (known && expanded >= MIN_TRACKING && em <= MAX_EXPANDED && a[14] >= LOWER_CASE * a[11]) {
+            return expanded;
+        }
+        return 0f;
     }
 
     private static final float MIN_TRACKING = 0.1f;
 
     private static final float MAX_CONDENSED = 0.12f;
 
+    /** The most expanded spacing kept, as a share of the size: letterspaced headings and letterheads run wider. */
+    private static final float MAX_EXPANDED = 0.03f;
+
+    /** The share of a font's characters that must be lower-case letters for its expanded spacing to be kept. */
+    private static final float LOWER_CASE = 0.5f;
+
     private static final float TRACKING_SPREAD = 0.05f;
 
     private static float[] look(Map<String, float[]> sums, Glyph g) {
-        float[] acc = sums.computeIfAbsent(lookKey(g), k -> new float[14]);
+        float[] acc = sums.computeIfAbsent(lookKey(g), k -> new float[15]);
         acc[5] = g.font.substituted() ? 1 : acc[5];
         return acc;
     }
