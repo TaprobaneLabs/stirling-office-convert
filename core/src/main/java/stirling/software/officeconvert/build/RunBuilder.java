@@ -559,7 +559,7 @@ final class RunBuilder {
         }
         if (fix != null && (fix.added() != 0f || fix.scale() != 100 || squeeze != 0) && g.vertAlign == 0
                 && !unmeasured(g)) {
-            int scale = Math.round(s.scale() * fix.scale() / 100f);
+            int scale = wordScale(g, fix);
             return new RunStyle(s.font(), s.size(), s.bold(), s.italic(), s.underline(), s.strike(), s.rgb(),
                     s.highlight(), s.vertAlign(), s.symbol(), fix.added() - squeeze, scale, s.smallCaps(), s.border());
         }
@@ -803,27 +803,41 @@ final class RunBuilder {
     }
 
     private float spaceAfter(Glyph before) {
+        return spaceAfter(before, scaleOf(before));
+    }
+
+    private float spaceAfter(Glyph before, int scale) {
         float space = SubstituteMetrics.width(" ", before.font.family(), before.bold, before.italic, wordSize(before))
-                * scaleOf(before) / 100f;
+                * scale / 100f;
         if (Float.isNaN(space) && before.font.exact()) {
             // The PDF's space of a face Word has, at the scale and the half-point size Word sets it in
-            return before.spaceWidth / before.hscale * scaleOf(before) / 100f * wordSize(before) / before.size;
+            return before.spaceWidth / before.hscale * scale / 100f * wordSize(before) / before.size;
         }
-        return Float.isNaN(space) ? before.spaceWidth : space;
+        return Float.isNaN(space) ? before.spaceWidth * scale / scaleOf(before) : space;
+    }
+
+    /**
+     * The character scale Word sets a glyph at: its PDF run's times its stand-in's width fix, rounded to a whole percent as
+     * {@link #styled} writes it. Measured unrounded, a 97% run with an 82% fix came out 0.6% wider in Word than the fit
+     * expected.
+     */
+    private static int wordScale(Glyph g, WidthFix fix) {
+        return fix == null ? scaleOf(g) : Math.round(scaleOf(g) * fix.scale() / 100f);
     }
 
     private float drawnWidth(Glyph g) {
+        WidthFix fix = spacing.get(lookKey(g));
+        int scale = wordScale(g, fix);
         float exact = g.vertAlign != 0 || unmeasured(g) || modeled(g) != null ? Float.NaN
-                : substituteWidth(g) * scaleOf(g) / 100f * wordSize(g) / g.size;
+                : substituteWidth(g) * scale / 100f * wordSize(g) / g.size;
         if (Float.isNaN(exact) && g.vertAlign == 0 && !unmeasured(g) && modeled(g) == null && wordKnows(g)) {
             // The PDF's width of a face Word has, at the scale and the half-point size Word sets it in
-            exact = g.width / g.hscale * scaleOf(g) / 100f * wordSize(g) / g.size;
+            exact = g.width / g.hscale * scale / 100f * wordSize(g) / g.size;
         }
-        WidthFix fix = spacing.get(lookKey(g));
         if (Float.isNaN(exact)) {
             return g.width;
         }
-        return fix != null ? exact * fix.scale() / 100f + fix.added() * g.text.length() : exact;
+        return fix != null ? exact + fix.added() * g.text.length() : exact;
     }
 
     /**
@@ -897,9 +911,10 @@ final class RunBuilder {
 
     /**
      * Whether Word's widths of these lines are known, so their edge can be fitted to the PDF's breaks. A face Word lacks
-     * is set in its stand-in with the character spacing that makes up the difference, which Word applies as given, so its
-     * widths are known too; but a line it can't break, a paragraph's only one, keeps the wider slack an unfitted stand-in
-     * gets (a form's title in a narrow column broke at its hyphen when fitted).
+     * is set in its stand-in with the character spacing that makes up the difference, and a much narrower or wider one
+     * with a character scale too, which Word applies as given, so its widths are known too; but a line it can't break, a
+     * paragraph's only one, keeps the wider slack an unfitted stand-in gets (a form's title in a narrow column broke at
+     * its hyphen when fitted).
      */
     private boolean exact(List<Line> lines, int marker) {
         boolean breaks = lines.size() > 1;
@@ -909,7 +924,7 @@ final class RunBuilder {
                 for (Glyph g : w.glyphs) {
                     WidthFix fix = spacing.get(lookKey(g));
                     if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || !wordKnows(g)
-                            || fix != null && (fix.scale() != 100 || !breaks && Math.abs(fix.spacing()) > EXACT_SPACING)) {
+                            || fix != null && !breaks && Math.abs(fix.spacing()) > EXACT_SPACING) {
                         return false;
                     }
                 }
@@ -997,8 +1012,8 @@ final class RunBuilder {
 
     private float fitSpace(Glyph before, float t) {
         WidthFix fix = spacing.get(lookKey(before));
-        float space = spaceAfter(before);
-        return (fix == null ? space : space * fix.scale() / 100f + fix.added()) - t;
+        float space = spaceAfter(before, wordScale(before, fix));
+        return (fix == null ? space : space + fix.added()) - t;
     }
 
     float fitted() {

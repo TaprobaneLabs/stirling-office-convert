@@ -42,6 +42,11 @@ class StandInFitTest {
     private static final PDType1Font ARIAL = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
     /** The PDF face's widths against its stand-in's. */
     private static final float WIDER = 1.04f;
+    /** The PDF face's widths against its stand-in's, and its name, in this test. */
+    private float face = WIDER;
+    private String faceName = "MyriadPro-Regular";
+    /** The PDF's own horizontal scaling of the text (its Tz), as a share. */
+    private float tz = 1f;
     private static final float SIZE = 10;
     private static final float PITCH = 12;
     private static final float LEFT = 72;
@@ -71,6 +76,40 @@ class StandInFitTest {
     }
 
     /**
+     * A condensed face is set in its stand-in with a character scale (Univers Condensed in Arial at about 80%), which
+     * Word applies to every character, spaces included, so its widths are known exactly as well and its paragraphs are
+     * fitted: unfitted, the Federal Register's and USGS's pages set in condensed faces had their lines rewrapped, and a
+     * column holding one never kept its PDF end.
+     */
+    @Test
+    void aCondensedStandInKeepsThePdfLineBreaks() throws Exception {
+        face = 0.82f;
+        faceName = "Univers-Condensed";
+        List<String> words = Arrays.asList(TEXT.split(" "));
+        List<List<String>> lines = breakLines(words, takesAWord(words, 250));
+        String xml = convert(lines);
+        assertTrue(paragraph(xml, lines).contains("<w:w w:val="), "its runs carry a character scale");
+        assertEquals(text(lines), wordBreaks(xml, lines), "Word breaks the paragraph where the PDF does");
+    }
+
+    /**
+     * So does a condensed run the PDF scales as well (97% here): Word sets it at the two scales' product rounded to a
+     * whole percent, as written, which the fit measures too.
+     */
+    @Test
+    void aCondensedRunThePdfScalesKeepsItsLineBreaks() throws Exception {
+        face = 0.82f;
+        faceName = "Univers-Condensed";
+        tz = 0.97f;
+        List<String> words = Arrays.asList(TEXT.split(" "));
+        // Long lines with a window of about a point: measured at 79.54%, a line set at 80% runs 2 pt past the fit's edge
+        List<List<String>> lines = breakLines(words, takesAWord(words, 400, 0.8f, 1.4f, 5));
+        String xml = convert(lines);
+        assertTrue(paragraph(xml, lines).contains("<w:w w:val=\"80\"/>"), "its runs are set at 80%, not 79.54%");
+        assertEquals(text(lines), wordBreaks(xml, lines), "Word breaks the paragraph where the PDF does");
+    }
+
+    /**
      * A bulleted item keeps them too. Its bullet is Word's list number, a tab from its text, so the item is measured from
      * where its text starts: unfitted, it took a word Word could fit, and a column holding a list wasn't pinned, so Word ran
      * the next column's first lines into it (the IRS's Korean Publication 1, page 2).
@@ -89,8 +128,16 @@ class StandInFitTest {
      * on one line), but the tightest leaves less than the slack Word gets past the widest line without a fit, so an
      * unfitted paragraph takes a word there.
      */
-    private static float takesAWord(List<String> words) {
-        for (float m = 330; m < 470; m += 0.05f) {
+    private float takesAWord(List<String> words) {
+        return takesAWord(words, 330);
+    }
+
+    private float takesAWord(List<String> words, float from) {
+        return takesAWord(words, from, 2.5f, 3.5f, 8);
+    }
+
+    private float takesAWord(List<String> words, float from, float minWindow, float maxWindow, int minLines) {
+        for (float m = from; m < 470; m += 0.05f) {
             List<List<String>> lines = breakLines(words, m);
             float widest = 0;
             float tightest = Float.MAX_VALUE;
@@ -100,14 +147,14 @@ class StandInFitTest {
                     tightest = Math.min(tightest, pdfWidth(String.join(" ", lines.get(i)) + " " + lines.get(i + 1).getFirst()));
                 }
             }
-            if (lines.size() >= 8 && tightest - widest > 2.5f && tightest - widest < 3.5f) {
+            if (lines.size() >= minLines && tightest - widest > minWindow && tightest - widest < maxWindow) {
                 return m;
             }
         }
         throw new AssertionError("no measure with a window of a few points");
     }
 
-    private static List<List<String>> breakLines(List<String> words, float measure) {
+    private List<List<String>> breakLines(List<String> words, float measure) {
         List<List<String>> lines = new ArrayList<>();
         List<String> line = new ArrayList<>();
         for (String word : words) {
@@ -146,8 +193,8 @@ class StandInFitTest {
                 content.append(String.format(Locale.ROOT, "BT /F2 %.0f Tf %.2f %.2f Td (\\225) Tj ET%n", SIZE, LEFT, TOP));
             }
             for (int i = 0; i < lines.size(); i++) {
-                content.append(String.format(Locale.ROOT, "BT /F1 %.0f Tf %.2f %.2f Td (%s) Tj ET%n", SIZE, x, TOP - i * PITCH,
-                        String.join(" ", lines.get(i))));
+                content.append(String.format(Locale.ROOT, "BT /F1 %.0f Tf %.0f Tz %.2f %.2f Td (%s) Tj ET%n", SIZE, tz * 100,
+                        x, TOP - i * PITCH, String.join(" ", lines.get(i))));
             }
             PDStream stream = new PDStream(doc);
             try (OutputStream out = stream.createOutputStream()) {
@@ -166,14 +213,14 @@ class StandInFitTest {
     }
 
     /** Myriad Pro as a PDF names it without embedding it, with widths 4% wider than Arial's. */
-    private static COSDictionary widerFace() throws IOException {
+    private COSDictionary widerFace() throws IOException {
         COSArray widths = new COSArray();
         for (int c = 32; c <= 126; c++) {
-            widths.add(COSInteger.get(Math.round(ARIAL.getWidth(c) * WIDER)));
+            widths.add(COSInteger.get(Math.round(ARIAL.getWidth(c) * face)));
         }
         COSDictionary descriptor = new COSDictionary();
         descriptor.setItem(COSName.TYPE, COSName.FONT_DESC);
-        descriptor.setName(COSName.FONT_NAME, "MyriadPro-Regular");
+        descriptor.setName(COSName.FONT_NAME, faceName);
         descriptor.setInt(COSName.FLAGS, 32);
         descriptor.setItem(COSName.FONT_BBOX, numbers(-157, -250, 1126, 952));
         descriptor.setInt(COSName.ITALIC_ANGLE, 0);
@@ -184,7 +231,7 @@ class StandInFitTest {
         COSDictionary font = new COSDictionary();
         font.setItem(COSName.TYPE, COSName.FONT);
         font.setItem(COSName.SUBTYPE, COSName.TRUE_TYPE);
-        font.setName(COSName.BASE_FONT, "MyriadPro-Regular");
+        font.setName(COSName.BASE_FONT, faceName);
         font.setInt(COSName.FIRST_CHAR, 32);
         font.setInt(COSName.LAST_CHAR, 126);
         font.setItem(COSName.WIDTHS, widths);
@@ -235,15 +282,20 @@ class StandInFitTest {
         float room = PDRectangle.LETTER.getWidth() - right - indRight - (left + indLeft);
         StringBuilder chars = new StringBuilder();
         List<Float> spacing = new ArrayList<>();
+        List<Float> scales = new ArrayList<>();
         Matcher run = Pattern.compile("<w:r>(?:<w:rPr>(.*?)</w:rPr>)?((?:<w:t[^>]*>[^<]*</w:t>)+)</w:r>").matcher(para);
         while (run.find()) {
-            Matcher sp = Pattern.compile("<w:spacing w:val=\"(-?\\d+)\"/>").matcher(run.group(1) == null ? "" : run.group(1));
+            String rPr = run.group(1) == null ? "" : run.group(1);
+            Matcher sp = Pattern.compile("<w:spacing w:val=\"(-?\\d+)\"/>").matcher(rPr);
             float extra = sp.find() ? Integer.parseInt(sp.group(1)) / 20f : 0;
+            Matcher sc = Pattern.compile("<w:w w:val=\"(\\d+)\"/>").matcher(rPr);
+            float scale = sc.find() ? Integer.parseInt(sc.group(1)) / 100f : 1f;
             Matcher t = Pattern.compile("<w:t[^>]*>([^<]*)</w:t>").matcher(run.group(2));
             while (t.find()) {
                 for (char c : t.group(1).toCharArray()) {
                     chars.append(c);
                     spacing.add(extra);
+                    scales.add(scale);
                 }
             }
         }
@@ -258,7 +310,7 @@ class StandInFitTest {
             }
             float word = 0;
             for (int k = i; k < end; k++) {
-                word += wordWidth(String.valueOf(chars.charAt(k))) + spacing.get(k);
+                word += wordWidth(String.valueOf(chars.charAt(k))) * scales.get(k) + spacing.get(k);
             }
             if (line.length() > 0 && used + word > room) {
                 out.add(line.toString().strip());
@@ -269,7 +321,7 @@ class StandInFitTest {
             used += word;
             if (end < chars.length()) {
                 line.append(' ');
-                used += wordWidth(" ") + spacing.get(end);
+                used += wordWidth(" ") * scales.get(end) + spacing.get(end);
             }
             i = end + 1;
         }
@@ -287,11 +339,11 @@ class StandInFitTest {
     }
 
     /** The PDF face's width. */
-    private static float pdfWidth(String s) {
+    private float pdfWidth(String s) {
         float w = 0;
         try {
             for (char c : s.toCharArray()) {
-                w += Math.round(ARIAL.getWidth(c) * WIDER) / 1000f * SIZE;
+                w += Math.round(ARIAL.getWidth(c) * face) / 1000f * SIZE * tz;
             }
         } catch (IOException e) {
             throw new IllegalStateException(e);
