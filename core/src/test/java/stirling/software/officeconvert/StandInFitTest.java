@@ -45,6 +45,8 @@ class StandInFitTest {
     /** The PDF face's widths against its stand-in's, and its name, in this test. */
     private float face = WIDER;
     private String faceName = "MyriadPro-Regular";
+    /** The PDF's own horizontal scaling of the text (its Tz), as a share. */
+    private float tz = 1f;
     private static final float SIZE = 10;
     private static final float PITCH = 12;
     private static final float LEFT = 72;
@@ -91,6 +93,23 @@ class StandInFitTest {
     }
 
     /**
+     * So does a condensed run the PDF scales as well (97% here): Word sets it at the two scales' product rounded to a
+     * whole percent, as written, which the fit measures too.
+     */
+    @Test
+    void aCondensedRunThePdfScalesKeepsItsLineBreaks() throws Exception {
+        face = 0.82f;
+        faceName = "Univers-Condensed";
+        tz = 0.97f;
+        List<String> words = Arrays.asList(TEXT.split(" "));
+        // Long lines with a window of about a point: measured at 79.54%, a line set at 80% runs 2 pt past the fit's edge
+        List<List<String>> lines = breakLines(words, takesAWord(words, 400, 0.8f, 1.4f, 5));
+        String xml = convert(lines);
+        assertTrue(paragraph(xml, lines).contains("<w:w w:val=\"80\"/>"), "its runs are set at 80%, not 79.54%");
+        assertEquals(text(lines), wordBreaks(xml, lines), "Word breaks the paragraph where the PDF does");
+    }
+
+    /**
      * A bulleted item keeps them too. Its bullet is Word's list number, a tab from its text, so the item is measured from
      * where its text starts: unfitted, it took a word Word could fit, and a column holding a list wasn't pinned, so Word ran
      * the next column's first lines into it (the IRS's Korean Publication 1, page 2).
@@ -114,6 +133,10 @@ class StandInFitTest {
     }
 
     private float takesAWord(List<String> words, float from) {
+        return takesAWord(words, from, 2.5f, 3.5f, 8);
+    }
+
+    private float takesAWord(List<String> words, float from, float minWindow, float maxWindow, int minLines) {
         for (float m = from; m < 470; m += 0.05f) {
             List<List<String>> lines = breakLines(words, m);
             float widest = 0;
@@ -124,7 +147,7 @@ class StandInFitTest {
                     tightest = Math.min(tightest, pdfWidth(String.join(" ", lines.get(i)) + " " + lines.get(i + 1).getFirst()));
                 }
             }
-            if (lines.size() >= 8 && tightest - widest > 2.5f && tightest - widest < 3.5f) {
+            if (lines.size() >= minLines && tightest - widest > minWindow && tightest - widest < maxWindow) {
                 return m;
             }
         }
@@ -170,8 +193,8 @@ class StandInFitTest {
                 content.append(String.format(Locale.ROOT, "BT /F2 %.0f Tf %.2f %.2f Td (\\225) Tj ET%n", SIZE, LEFT, TOP));
             }
             for (int i = 0; i < lines.size(); i++) {
-                content.append(String.format(Locale.ROOT, "BT /F1 %.0f Tf %.2f %.2f Td (%s) Tj ET%n", SIZE, x, TOP - i * PITCH,
-                        String.join(" ", lines.get(i))));
+                content.append(String.format(Locale.ROOT, "BT /F1 %.0f Tf %.0f Tz %.2f %.2f Td (%s) Tj ET%n", SIZE, tz * 100,
+                        x, TOP - i * PITCH, String.join(" ", lines.get(i))));
             }
             PDStream stream = new PDStream(doc);
             try (OutputStream out = stream.createOutputStream()) {
@@ -320,7 +343,7 @@ class StandInFitTest {
         float w = 0;
         try {
             for (char c : s.toCharArray()) {
-                w += Math.round(ARIAL.getWidth(c) * face) / 1000f * SIZE;
+                w += Math.round(ARIAL.getWidth(c) * face) / 1000f * SIZE * tz;
             }
         } catch (IOException e) {
             throw new IllegalStateException(e);
