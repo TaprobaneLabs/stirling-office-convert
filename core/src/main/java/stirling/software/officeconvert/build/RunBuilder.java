@@ -974,6 +974,27 @@ final class RunBuilder {
         return n;
     }
 
+    /**
+     * Word's width of a line whose glyphs' widths are all known and whose words are a space apart, else NaN. A
+     * paragraph's only line in a stand-in face isn't fitted (it keeps the stand-in's wider slack), but its width is
+     * known all the same.
+     */
+    float knownWidth(Line l) {
+        for (int wi = 1; wi < l.words.size(); wi++) {
+            if (l.gaps[wi] != Line.SPACE) {
+                return Float.NaN;
+            }
+        }
+        for (Word w : l.words) {
+            for (Glyph g : w.glyphs) {
+                if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || !wordKnows(g)) {
+                    return Float.NaN;
+                }
+            }
+        }
+        return natural(l, 0, 0f);
+    }
+
     private float natural(Line l, int from, float t) {
         float drawn = 0;
         for (int wi = from; wi < l.words.size(); wi++) {
