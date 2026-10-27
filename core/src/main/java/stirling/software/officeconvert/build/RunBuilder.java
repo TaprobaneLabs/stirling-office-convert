@@ -909,7 +909,7 @@ final class RunBuilder {
                 for (Glyph g : w.glyphs) {
                     WidthFix fix = spacing.get(lookKey(g));
                     if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || !wordKnows(g)
-                            || fix != null && (fix.scale() != 100 || !breaks && Math.abs(fix.spacing()) > EXACT_SPACING)) {
+                            || fix != null && !breaks && Math.abs(fix.spacing()) > EXACT_SPACING) {
                         return false;
                     }
                 }
