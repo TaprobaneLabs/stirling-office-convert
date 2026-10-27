@@ -914,11 +914,46 @@ final class RunBuilder {
                 }
             }
         }
+        Arrays.fill(squeezes, bestSqueeze);
+        if (!target.justified() && !Float.isNaN(best)) {
+            bestScore = keepBreaks(lines, target, hardBreaks, best, bestSqueeze, squeezes);
+        }
         if (target.whole() && bestScore < lines.size() * (lines.size() + 1) / 2) {
+            Arrays.fill(squeezes, 0f);
             return Float.NaN;
         }
-        Arrays.fill(squeezes, bestSqueeze);
         return best;
+    }
+
+    /**
+     * Gives each ragged line that leaves room at the fitted edge for the next line's first word the least extra character
+     * spacing that keeps the word out, in Word's steps of a twentieth of a point and at most {@link #MAX_BREAK_SPACING}
+     * of its size, where the line still fits. InDesign's paragraph composer breaks lines early to even out a ragged edge,
+     * which no one edge matches, and Word took the word up and every later line's first word with it (USGS Fact Sheet
+     * 2024-3052). Returns the fit's score with those lines' breaks kept.
+     */
+    private int keepBreaks(List<Line> lines, Fit target, BitSet hardBreaks, float slack, float t, float[] squeezes) {
+        int score = 0;
+        for (int i = 0; i < lines.size(); i++) {
+            float[] span = span(lines, i, target, hardBreaks, t, t);
+            if (slack > span[1]) {
+                Word lastWord = lines.get(i).words.getLast();
+                int steps = (int) (MAX_BREAK_SPACING * lastWord.last().size / SPACING_STEP + 1e-3f);
+                for (int k = 1; k <= steps; k++) {
+                    float[] wider = span(lines, i, target, hardBreaks, t - k * SPACING_STEP, t);
+                    if (wider[0] > slack) {
+                        break;
+                    }
+                    if (slack <= wider[1]) {
+                        squeezes[i] = t - k * SPACING_STEP;
+                        span = wider;
+                        break;
+                    }
+                }
+            }
+            score += slack <= span[1] ? lines.size() - i : 0;
+        }
+        return score;
     }
 
     private static int score(List<float[]> spans, float slack) {
@@ -960,27 +995,35 @@ final class RunBuilder {
     private List<float[]> spans(List<Line> lines, Fit target, BitSet hardBreaks, float t) {
         List<float[]> spans = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
-            Line l = lines.get(i);
-            int from = Math.min(target.from(i), l.words.size() - 1);
-            float start = i == 0 ? target.firstStart() : target.restStart();
-            float room = target.edge() - (Float.isNaN(start) ? l.words.get(from).x : start);
-            Word lastWord = l.words.getLast();
-            Glyph last = lastWord.last();
-            Word next = i + 1 < lines.size() && !hardBreaks.get(i + 1) ? lines.get(i + 1).words.getFirst() : null;
-            float natural = natural(l, from, t) - room;
-            boolean soft = next != null && HYPHENS.contains(last.text)
-                    && (dropHyphens || last.text.equals("\u00AD")) && Character.isLowerCase(next.first().text.charAt(0));
-            int spaces = spaces(l, from);
-            float over = Float.MAX_VALUE;
-            if (next != null && (soft || !HYPHENS.contains(last.text))) {
-                float unit = unitWidth(next, t);
-                float stem = wordWidth(lastWord, t, last);
-                float joined = soft ? natural - wordWidth(lastWord, t, null) + stem + unit : natural + fitSpace(last, t) + unit;
-                over = joined - allowance(target, soft ? spaces : spaces + 1, last, soft ? stem + unit : unit);
-            }
-            spans.add(new float[] {natural + FIT_MARGIN, over - FIT_MARGIN});
+            spans.add(span(lines, i, target, hardBreaks, t, t));
         }
         return spans;
+    }
+
+    /**
+     * Line {@code i}'s slack past the fit's edge: the least that holds the line, and the most that still leaves the next
+     * line's first word out of it, with the line's characters {@code t} narrower and the next word's {@code tNext}.
+     */
+    private float[] span(List<Line> lines, int i, Fit target, BitSet hardBreaks, float t, float tNext) {
+        Line l = lines.get(i);
+        int from = Math.min(target.from(i), l.words.size() - 1);
+        float start = i == 0 ? target.firstStart() : target.restStart();
+        float room = target.edge() - (Float.isNaN(start) ? l.words.get(from).x : start);
+        Word lastWord = l.words.getLast();
+        Glyph last = lastWord.last();
+        Word next = i + 1 < lines.size() && !hardBreaks.get(i + 1) ? lines.get(i + 1).words.getFirst() : null;
+        float natural = natural(l, from, t) - room;
+        boolean soft = next != null && HYPHENS.contains(last.text)
+                && (dropHyphens || last.text.equals("\u00AD")) && Character.isLowerCase(next.first().text.charAt(0));
+        int spaces = spaces(l, from);
+        float over = Float.MAX_VALUE;
+        if (next != null && (soft || !HYPHENS.contains(last.text))) {
+            float unit = unitWidth(next, tNext);
+            float stem = wordWidth(lastWord, t, last);
+            float joined = soft ? natural - wordWidth(lastWord, t, null) + stem + unit : natural + fitSpace(last, t) + unit;
+            over = joined - allowance(target, soft ? spaces : spaces + 1, last, soft ? stem + unit : unit);
+        }
+        return new float[] {natural + FIT_MARGIN, over - FIT_MARGIN};
     }
 
     private float allowance(Fit target, int spaces, Glyph space, float word) {
@@ -1084,6 +1127,12 @@ final class RunBuilder {
     private static final float MAX_WIDEN = 5f;
 
     private static final float MAX_NARROW = 4f;
+
+    /** The most character spacing that keeps a line's break, as a share of its size. */
+    private static final float MAX_BREAK_SPACING = 0.015f;
+
+    /** Word's step of character spacing, a twentieth of a point. */
+    private static final float SPACING_STEP = 0.05f;
 
     private static final float EXACT_SPACING = 0.1f;
 
