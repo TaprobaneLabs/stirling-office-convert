@@ -112,6 +112,7 @@ final class TextBoxFinder {
             Fill f = cand.mark() == null ? new Fill(box.x(), box.top(), box.right(), box.bottom(), cand.fill()) : null;
             List<Line> inside = new ArrayList<>();
             boolean beside = false;
+            boolean besideRight = false;
             float gap = Float.MAX_VALUE;
             for (Line l : flow) {
                 if (holds(box, l)) {
@@ -121,6 +122,7 @@ final class TextBoxFinder {
                 boolean overlapsV = l.top < box.bottom() - 1 && l.bottom > box.top() + 1;
                 if (overlapsV && (l.right <= box.x() + 1 || l.x >= box.right() - 1) && !insideOther(l, cand, candidates)) {
                     beside = true;
+                    besideRight |= l.right > box.x() + 1;
                     gap = Math.min(gap, l.right <= box.x() + 1 ? box.x() - l.right : l.x - box.right());
                 }
             }
@@ -133,6 +135,12 @@ final class TextBoxFinder {
             }
             if (!beside) {
                 gap = panelGap;
+            } else if (!besideRight) {
+                // Text that ends beside the box, on its left, keeps it out of the room up to that text less what a
+                // fitted line may run past its PDF line: at the PDF's gap, Word broke lines beside the box a word early
+                // where its widths came out wider (USGS Fact Sheet 2024-3021's references, beside the box in the other
+                // column). Text on its right starts at the gap, so that keeps it
+                gap = Math.max(0f, gap - BESIDE_SLACK);
             }
             flow.removeAll(inside);
             out.add(item(cand, inside, gap));
@@ -159,6 +167,12 @@ final class TextBoxFinder {
 
     /** Boxes set apart from each other in a row hold no text running beside them, only each other: a row of panels. */
     private static final float PANEL_GAP = 4f;
+
+    /**
+     * How far the text ending beside a box may run past the PDF's lines in Word: the most a fitted paragraph's edge may
+     * move out (5 pt) and a point.
+     */
+    private static final float BESIDE_SLACK = 6f;
 
     /** A panel is a short box of text: at most this share of the page's height and this many lines. */
     private static final float PANEL_PAGE_SHARE = 1f / 3f;
