@@ -21,6 +21,8 @@ public final class Line {
     public boolean narrowed;
     /** An obstacle on the right ends this line's room before its column's edge. */
     public boolean narrowedRight;
+    /** Where this line's room ends on the right: its column's edge, or short of an obstacle there. */
+    public float roomRight = Float.NaN;
     public final float baseline;
     public final float x;
     public final float right;

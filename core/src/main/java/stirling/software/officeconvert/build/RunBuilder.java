@@ -844,12 +844,18 @@ final class RunBuilder {
      * {@code whole}: only a fit that keeps every line counts (otherwise justified lines are squeezed one by one).
      * {@code firstStart} and {@code restStart}: where Word starts the first and later lines, or NaN to measure each line
      * from where it starts in the PDF. {@code marker}: words the first line starts with that Word draws as the
-     * paragraph's list number, left out of its measure, which starts where its text does.
+     * paragraph's list number, left out of its measure, which starts where its text does. {@code ceiling}: the most room
+     * past {@code edge} the fit may give, where a float's edge would end the lines first.
      */
-    record Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart, int marker) {
+    record Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart, int marker,
+            float ceiling) {
 
         Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart) {
             this(edge, preferred, justified, whole, firstStart, restStart, 0);
+        }
+
+        Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart, int marker) {
+            this(edge, preferred, justified, whole, firstStart, restStart, marker, Float.POSITIVE_INFINITY);
         }
 
         int from(int line) {
@@ -883,7 +889,7 @@ final class RunBuilder {
             for (int ci = -1; ci < 2 * spans.size(); ci++) {
                 float c = ci < 0 ? centre : spans.get(ci / 2)[ci % 2];
                 int score = score(spans, c);
-                if (c <= centre + MAX_WIDEN && c >= centre - MAX_NARROW && score > bestScore) {
+                if (c <= centre + MAX_WIDEN && c >= centre - MAX_NARROW && c <= target.ceiling() && score > bestScore) {
                     best = c;
                     bestSqueeze = t;
                     bestScore = score;

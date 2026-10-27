@@ -35,11 +35,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * A paragraph beside a picture on its left keeps the PDF's line breaks on a page without flowing columns. It wasn't
- * fitted there, as the fit measured every line from the paragraph's indent, and Word, measuring a stand-in face, took a
- * word onto a line: the bullets beside NOAA's GeoXO icons and CMS's notices moved words between their lines. Word starts
- * each line beside the picture where the picture leaves room, where the PDF's lines start, and the fit now measures from
- * there.
+ * A paragraph beside a picture keeps the PDF's line breaks on a page without flowing columns. It wasn't fitted there, as
+ * the fit measured every line from the paragraph's indent to the column's edge, and Word, measuring a stand-in face, took a
+ * word onto a line: the bullets beside NOAA's GeoXO icons and CMS's notices moved words between their lines. Beside a
+ * picture on its left, Word starts each line where the picture leaves room, where the PDF's lines start, and the fit
+ * measures from there. Beside one on its right, the picture's edge ends the lines unless the paragraph's own does first,
+ * so the fit's edge, held inside the PDF's room, is written as the paragraph's right indent.
  */
 class BesideFloatFitTest {
 
@@ -61,10 +62,27 @@ class BesideFloatFitTest {
             + "asking for more papers. Offices that share systems agree in writing on who owns the data, who may change "
             + "it and how long it is kept, and they test their backups at least twice a year.";
 
+    /** A line that runs from the left margin past the picture's right edge. */
+    private static final String FULL_WIDTH = "The offices named in this report keep their records in one shared system and review "
+            + "them together each spring.";
+
     @TempDir Path dir;
+
+    /** Whether the picture is on the paragraph's right instead of its left. */
+    private boolean pictureOnRight;
 
     @Test
     void aParagraphBesideAPictureKeepsThePdfLineBreaks() throws Exception {
+        List<String> words = Arrays.asList(TEXT.split(" "));
+        List<List<String>> lines = breakLines(words, takesAWord(words));
+        String xml = convert(lines);
+        assertTrue(xml.contains("<wp:wrapSquare"), "the picture is a float the text wraps around");
+        assertEquals(text(lines), wordBreaks(xml, lines), "Word breaks the paragraph where the PDF does");
+    }
+
+    @Test
+    void aParagraphBesideAPictureOnItsRightKeepsThePdfLineBreaks() throws Exception {
+        pictureOnRight = true;
         List<String> words = Arrays.asList(TEXT.split(" "));
         List<List<String>> lines = breakLines(words, takesAWord(words));
         String xml = convert(lines);
@@ -131,11 +149,27 @@ class BesideFloatFitTest {
             resources.put(COSName.getPDFName("Im1"), LosslessFactory.createFromImage(doc, photo));
             page.setResources(resources);
             float height = lines.size() * PITCH + 20;
+            // On the right, the picture stands 12 pt past the widest line; the converter wraps text 9 pt from it, the gap it
+            // gives the side with nothing beside it, so Word's room past the widest line is 3 pt, more than the window
+            float widest = 0;
+            for (List<String> l : lines) {
+                widest = Math.max(widest, pdfWidth(String.join(" ", l)));
+            }
+            float pictureX = pictureOnRight ? LEFT + widest + 12 : LEFT;
+            float textX = pictureOnRight ? LEFT : TEXT_X;
             StringBuilder content = new StringBuilder(String.format(Locale.ROOT, "q %.2f 0 0 %.2f %.2f %.2f cm /Im1 Do Q%n",
-                    PICTURE_W, height, LEFT, TOP + SIZE - height + 4));
+                    PICTURE_W, height, pictureX, TOP + SIZE - height + 4));
             for (int i = 0; i < lines.size(); i++) {
-                content.append(String.format(Locale.ROOT, "BT /F1 %.0f Tf %.2f %.2f Td (%s) Tj ET%n", SIZE, TEXT_X,
+                content.append(String.format(Locale.ROOT, "BT /F1 %.0f Tf %.2f %.2f Td (%s) Tj ET%n", SIZE, textX,
                         TOP - i * PITCH, String.join(" ", lines.get(i))));
+            }
+            if (pictureOnRight) {
+                // Text under the picture runs the column's full width, so the picture stands inside the column
+                resources.put(COSName.getPDFName("F2"), ARIAL);
+                for (int i = 0; i < 3; i++) {
+                    content.append(String.format(Locale.ROOT, "BT /F2 %.0f Tf %.2f %.2f Td (%s) Tj ET%n", SIZE, LEFT,
+                            TOP + SIZE - height - 20 - i * PITCH, FULL_WIDTH));
+                }
             }
             PDStream stream = new PDStream(doc);
             try (OutputStream out = stream.createOutputStream()) {
@@ -188,10 +222,11 @@ class BesideFloatFitTest {
     }
 
     /**
-     * The paragraph broken as Word breaks it: Arial's widths and its runs' character spacing, each line from where the
-     * picture leaves room (or the paragraph's indent, if further) to the page's right margin less the paragraph's indent.
+     * The paragraph broken as Word breaks it: Arial's widths and its runs' character spacing, each line from the
+     * paragraph's indent or where a picture on its left leaves room, whichever is further, to the page's right margin
+     * less its indent or where a picture on its right leaves room, whichever comes first.
      */
-    private static List<String> wordBreaks(String xml, List<List<String>> lines) {
+    private List<String> wordBreaks(String xml, List<List<String>> lines) {
         String first = String.join(" ", lines.getFirst().subList(0, 3));
         Matcher pm = Pattern.compile("<w:p>(?:(?!</w:p>).)*?" + Pattern.quote(first) + ".*?</w:p>", Pattern.DOTALL).matcher(xml);
         assertTrue(pm.find(), "the paragraph");
@@ -204,11 +239,17 @@ class BesideFloatFitTest {
                 + "<wp:posOffset>(-?\\d+)</wp:posOffset>(?:(?!</wp:anchor>).)*?<wp:extent cx=\"(\\d+)\"(?:(?!</wp:anchor>).)*?<wp:wrapSquare",
                 Pattern.DOTALL).matcher(xml);
         assertTrue(anchor.find(), "the picture's anchor");
-        float edge = (Long.parseLong(anchor.group(2)) + Long.parseLong(anchor.group(3)) + Long.parseLong(anchor.group(1))) / 12700f;
+        float dist = Long.parseLong(anchor.group(1)) / 12700f;
+        float x = Long.parseLong(anchor.group(2)) / 12700f;
+        float w = Long.parseLong(anchor.group(3)) / 12700f;
         float indLeft = twips(para, "w:left");
         float indRight = twips(para, "w:right");
-        float start = Math.max(left + indLeft, edge);
-        float room = PDRectangle.LETTER.getWidth() - right - indRight - start;
+        float start = pictureOnRight ? left + indLeft : Math.max(left + indLeft, x + w + dist);
+        float limit = PDRectangle.LETTER.getWidth() - right - indRight;
+        if (pictureOnRight) {
+            limit = Math.min(limit, x - dist);
+        }
+        float room = limit - start;
         StringBuilder chars = new StringBuilder();
         List<Float> spacing = new ArrayList<>();
         Matcher run = Pattern.compile("<w:r>(?:<w:rPr>(.*?)</w:rPr>)?((?:<w:t[^>]*>[^<]*</w:t>)+)</w:r>").matcher(para);

@@ -139,6 +139,10 @@ final class ParagraphFactory {
         boolean fitted = !Float.isNaN(runs.fitted());
         if (fitted) {
             p.indentRight += SectionPlanner.RIGHT_SLACK - runs.fitted();
+            if (!box && flow && !Float.isNaN(floatRight(d))) {
+                // From the column's edge: the paragraph's lines end before the float's edge does
+                p.indentRight += colRight - floatRight(d) + SectionPlanner.RIGHT_SLACK;
+            }
         } else if (flow && p.align == Align.JUSTIFY && !Float.isNaN(d.justifySlack)) {
             p.indentRight += SectionPlanner.RIGHT_SLACK - d.justifySlack;
         }
@@ -190,8 +194,8 @@ final class ParagraphFactory {
 
     /**
      * {@code singleColumn}: a page without flowing columns. There a justified paragraph keeps its fit only when the fit
-     * keeps every line, its lines start at its indents, and a paragraph wrapped beside a float on its right isn't fitted,
-     * as the fit measures every line to the column's edge.
+     * keeps every line, its lines start at its indents, and a paragraph beside a float on its right is fitted only when
+     * that float narrows every line alike, its right indent then ending the lines before the float's edge does.
      */
     void fitting(boolean on, boolean singleColumn) {
         fitting = on;
@@ -208,10 +212,14 @@ final class ParagraphFactory {
             return null;
         }
         // Beside a float on the left, Word starts each line where the float leaves room, where the PDF's lines start, as
-        // on pages with flowing columns; beside one on the right, the float's edge ends them, not the paragraph's
+        // on pages with flowing columns. Beside one on the right, the float's edge ends them unless the paragraph's own
+        // does first: the fit's edge, held inside the PDF's room, is written as its right indent (floatRight)
         boolean beside = singleColumn && narrowed(d);
-        float edge = p.bidi || markerTab || !fitting || beside && narrowedRight(d) ? Float.NaN
+        float floatRight = floatRight(d);
+        float edge = p.bidi || markerTab || !fitting || beside && narrowedRight(d) && Float.isNaN(floatRight) ? Float.NaN
+                : !Float.isNaN(floatRight) ? floatRight - d.right - SectionPlanner.RIGHT_SLACK
                 : colRight - d.right - (innerColumn ? SectionPlanner.RIGHT_SLACK : 0);
+        float ceiling = Float.isNaN(floatRight) ? Float.POSITIVE_INFINITY : d.right + SectionPlanner.RIGHT_SLACK;
         // A list item's number is Word's, a tab from its text: the item is measured from its text, where Word starts it
         // (unfitted, a column holding a list wasn't pinned, and Word ran the next column's first lines into it)
         boolean listed = skip > 0 && p.list != null;
@@ -223,12 +231,12 @@ final class ParagraphFactory {
         }
         int marker = listed ? skip : 0;
         if (d.align == Align.JUSTIFY && !Float.isNaN(d.justifySlack)) {
-            return new RunBuilder.Fit(edge, d.justifySlack, true, singleColumn, first, rest, marker);
+            return new RunBuilder.Fit(edge, d.justifySlack, true, singleColumn, first, rest, marker, ceiling);
         }
         if (Float.isNaN(edge) || d.align != Align.LEFT || skip > 0 && !listed) {
             return null;
         }
-        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest, marker);
+        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest, marker, ceiling);
     }
 
     /**
@@ -299,6 +307,23 @@ final class ParagraphFactory {
             }
         }
         return false;
+    }
+
+    /**
+     * Where the room of every line of a paragraph on a page without flowing columns ends, when a float on the right narrows
+     * them all alike; else NaN.
+     */
+    private float floatRight(ParaDraft d) {
+        if (!singleColumn || d.lines.isEmpty()) {
+            return Float.NaN;
+        }
+        float right = d.first().roomRight;
+        for (Line l : d.lines) {
+            if (!l.narrowedRight || Float.isNaN(l.roomRight) || Math.abs(l.roomRight - right) > 1f) {
+                return Float.NaN;
+            }
+        }
+        return right;
     }
 
     private static boolean narrowedRight(ParaDraft d) {
