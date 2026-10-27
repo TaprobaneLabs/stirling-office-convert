@@ -55,6 +55,23 @@ class EarlyBreakFitTest {
         assertEquals(text(lines), wordBreaks(xml, para), "Word breaks the paragraph where the PDF does");
     }
 
+    /**
+     * A paragraph that ends with a note mark, a superscript on its last line, is fitted all the same: its width in Word
+     * matters only to that line, after which no break is decided (CDC's sheet on violence against American Indian and
+     * Alaska Native people ends each list item with one).
+     */
+    @Test
+    void aParagraphEndingInANoteMarkKeepsItsBreaks() throws Exception {
+        List<List<String>> lines = earlyBreak(0.5f, 2f);
+        assertNotNull(lines, "a line broken early whose next word fits within the paragraph's longest line");
+        String xml = convert(makePdf(lines, true));
+        String para = paragraph(xml, String.join(" ", lines.getFirst().subList(0, 2)));
+        assertTrue(para.contains("<w:vertAlign w:val=\"superscript\"/>"), "the note mark is a superscript");
+        List<String> expected = new ArrayList<>(text(lines));
+        expected.set(expected.size() - 1, expected.getLast() + "1");
+        assertEquals(expected, wordBreaks(xml, para), "Word breaks the paragraph where the PDF does");
+    }
+
     @Test
     void aLineBrokenFarEarlyGetsNoVisibleSpacing() throws Exception {
         List<List<String>> lines = earlyBreak(12f, 30f);
@@ -196,6 +213,11 @@ class EarlyBreakFitTest {
 
     /** Ragged lines at the top of a page. */
     private Path makePdf(List<List<String>> lines) throws IOException {
+        return makePdf(lines, false);
+    }
+
+    /** Ragged lines at the top of a page, the last one ending with a raised note mark if {@code note}. */
+    private Path makePdf(List<List<String>> lines, boolean note) throws IOException {
         Path pdf = dir.resolve("para.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
@@ -206,6 +228,14 @@ class EarlyBreakFitTest {
                     cs.setFont(FONT, SIZE);
                     cs.newLineAtOffset(LEFT, TOP - i * PITCH);
                     cs.showText(String.join(" ", lines.get(i)));
+                    cs.endText();
+                }
+                if (note) {
+                    int last = lines.size() - 1;
+                    cs.beginText();
+                    cs.setFont(FONT, 6.5f);
+                    cs.newLineAtOffset(LEFT + width(String.join(" ", lines.get(last))), TOP - last * PITCH + 3.5f);
+                    cs.showText("1");
                     cs.endText();
                 }
             }

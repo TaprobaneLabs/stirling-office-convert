@@ -29,6 +29,9 @@ final class RunBuilder {
 
     private static final float SCRIPT_SCALE = 0.66f;
 
+    /** How far a superscript's or subscript's width in Word may run past the PDF's, as a share of it. */
+    private static final float SCRIPT_SLACK = 0.25f;
+
     private final boolean dropHyphens;
     private IconPictures icons;
 
@@ -898,7 +901,7 @@ final class RunBuilder {
                 }
             }
         }
-        exactFit = exact(lines, target.marker());
+        exactFit = exact(lines, target.marker(), target.justified());
         if (!exactFit) {
             return Float.NaN;
         }
@@ -988,16 +991,21 @@ final class RunBuilder {
      * is set in its stand-in with the character spacing that makes up the difference, and a much narrower or wider one
      * with a character scale too, which Word applies as given, so its widths are known too; but a line it can't break, a
      * paragraph's only one, keeps the wider slack an unfitted stand-in gets (a form's title in a narrow column broke at
-     * its hyphen when fitted).
+     * its hyphen when fitted). A superscript or subscript, whose width in Word is only near the PDF's, may stand on
+     * the last line of a ragged paragraph of several, after which no break is decided: CDC's sheet on violence against
+     * American Indian and Alaska Native people ends each item with a note mark, and none was fitted. Justified
+     * paragraphs keep their squeezes line by line instead (a justified MMWR paragraph ending in a note mark reflowed
+     * when fitted).
      */
-    private boolean exact(List<Line> lines, int marker) {
+    private boolean exact(List<Line> lines, int marker, boolean justified) {
         boolean breaks = lines.size() > 1;
         for (int i = 0; i < lines.size(); i++) {
             List<Word> words = lines.get(i).words;
             for (Word w : i == 0 ? words.subList(Math.min(marker, words.size()), words.size()) : words) {
                 for (Glyph g : w.glyphs) {
                     WidthFix fix = spacing.get(lookKey(g));
-                    if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || !wordKnows(g)
+                    boolean script = g.vertAlign != 0 && (i + 1 < lines.size() || !breaks || justified);
+                    if (script || unmeasured(g) || modeled(g) != null || !wordKnows(g)
                             || fix != null && !breaks && Math.abs(fix.spacing()) > EXACT_SPACING) {
                         return false;
                     }
@@ -1039,7 +1047,20 @@ final class RunBuilder {
             float joined = soft ? natural - wordWidth(lastWord, t, null) + stem + unit : natural + fitSpace(last, t) + unit;
             over = joined - allowance(target, soft ? spaces : spaces + 1, last, soft ? stem + unit : unit);
         }
-        return new float[] {natural + FIT_MARGIN, over - FIT_MARGIN};
+        return new float[] {natural + FIT_MARGIN + scriptSlack(l, from), over - FIT_MARGIN};
+    }
+
+    /** Room for a line's superscripts and subscripts, whose widths in Word are only near the PDF's. */
+    private static float scriptSlack(Line l, int from) {
+        float slack = 0;
+        for (int wi = from; wi < l.words.size(); wi++) {
+            for (Glyph g : l.words.get(wi).glyphs) {
+                if (g.vertAlign != 0) {
+                    slack += SCRIPT_SLACK * g.width;
+                }
+            }
+        }
+        return slack;
     }
 
     private float allowance(Fit target, int spaces, Glyph space, float word) {
