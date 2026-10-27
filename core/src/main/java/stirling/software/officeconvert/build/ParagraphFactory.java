@@ -1,6 +1,7 @@
 package stirling.software.officeconvert.build;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import stirling.software.officeconvert.extract.Glyph;
@@ -116,7 +117,7 @@ final class ParagraphFactory {
             // From the column, where list markers are measured from
             lists.body(d.left + d.roomShift + Math.min(0, d.first), d.role != ParaDraft.Role.BODY);
         }
-        if (hasMixedSizes(d)) {
+        if (hasMixedSizes(d, skip)) {
             p.lineRule = LineRule.AT_LEAST;
         }
         int rtlLines = 0;
@@ -354,11 +355,17 @@ final class ParagraphFactory {
 
     private static final float STAND_IN_SLACK = 0.025f;
 
-    private static boolean hasMixedSizes(ParaDraft d) {
+    /**
+     * Whether the paragraph's text mixes sizes, so that its lines need at least their own height. A list item's first
+     * {@code skip} words, its marker, are left out: Word draws the marker from the list's level, and NOAA's GeoXO fact
+     * sheet sets its bullets at 18 pt beside 11 pt text, so each item's first line grew to the bullet's height.
+     */
+    private static boolean hasMixedSizes(ParaDraft d, int skip) {
         float min = Float.MAX_VALUE;
         float max = 0;
-        for (Line l : d.lines) {
-            for (Word w : l.words) {
+        for (int li = 0; li < d.lines.size(); li++) {
+            List<Word> words = d.lines.get(li).words;
+            for (Word w : li == 0 ? words.subList(Math.min(skip, words.size()), words.size()) : words) {
                 for (Glyph g : w.glyphs) {
                     if (g.vertAlign == 0) {
                         min = Math.min(min, g.size);
