@@ -825,6 +825,10 @@ public final class DocumentBuilder {
         pic.x = fi.x();
         pic.y = fi.top();
         pic.wrapGap = fi.gap();
+        // Text runs on the sides the PDF sets it: on both, Word set a word in the room between a picture and the page's
+        // margin (the first word of each line beside USGS Fact Sheet 2024-3033's icons). Not where columns flow: a
+        // picture whose anchor runs on into the next column would push that column's text below it (an arXiv paper)
+        pic.wrapSide = flowing ? Picture.Side.BOTH : fi.side();
         if (pending instanceof Paragraph p && pendingPage == pageCount && fi.top() >= p.sourceTop - 3
                 && fi.top() < p.sourceBottom) {
             pic.fromParagraph = true;
