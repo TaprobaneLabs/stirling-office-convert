@@ -897,9 +897,10 @@ final class RunBuilder {
 
     /**
      * Whether Word's widths of these lines are known, so their edge can be fitted to the PDF's breaks. A face Word lacks
-     * is set in its stand-in with the character spacing that makes up the difference, which Word applies as given, so its
-     * widths are known too; but a line it can't break, a paragraph's only one, keeps the wider slack an unfitted stand-in
-     * gets (a form's title in a narrow column broke at its hyphen when fitted).
+     * is set in its stand-in with the character spacing that makes up the difference, and a much narrower or wider one
+     * with a character scale too, which Word applies as given, so its widths are known too; but a line it can't break, a
+     * paragraph's only one, keeps the wider slack an unfitted stand-in gets (a form's title in a narrow column broke at
+     * its hyphen when fitted).
      */
     private boolean exact(List<Line> lines, int marker) {
         boolean breaks = lines.size() > 1;
