@@ -46,7 +46,8 @@ public final class ParagraphBuilder {
         ParaDraft para = null;
         for (Line line : lines) {
             line.narrowed = room.narrowed(line);
-            line.narrowedRight = room.right(line) < colRight - 0.5f;
+            line.roomRight = room.right(line);
+            line.narrowedRight = line.roomRight < colRight - 0.5f;
             if (para == null || breaksBefore(room, para, line, pitch)) {
                 para = new ParaDraft(colLeft, colRight);
                 out.add(para);
