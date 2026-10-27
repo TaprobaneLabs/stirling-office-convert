@@ -190,8 +190,8 @@ final class ParagraphFactory {
 
     /**
      * {@code singleColumn}: a page without flowing columns. There a justified paragraph keeps its fit only when the fit
-     * keeps every line, and a paragraph wrapped beside a float isn't fitted, as the fit measures every line to the
-     * column's edge.
+     * keeps every line, its lines start at its indents, and a paragraph wrapped beside a float on its right isn't fitted,
+     * as the fit measures every line to the column's edge.
      */
     void fitting(boolean on, boolean singleColumn) {
         fitting = on;
@@ -207,13 +207,16 @@ final class ParagraphFactory {
         if (!flow) {
             return null;
         }
-        float edge = p.bidi || markerTab || !fitting || singleColumn && narrowed(d) ? Float.NaN
+        // Beside a float on the left, Word starts each line where the float leaves room, where the PDF's lines start, as
+        // on pages with flowing columns; beside one on the right, the float's edge ends them, not the paragraph's
+        boolean beside = singleColumn && narrowed(d);
+        float edge = p.bidi || markerTab || !fitting || beside && narrowedRight(d) ? Float.NaN
                 : colRight - d.right - (innerColumn ? SectionPlanner.RIGHT_SLACK : 0);
         // A list item's number is Word's, a tab from its text: the item is measured from its text, where Word starts it
         // (unfitted, a column holding a list wasn't pinned, and Word ran the next column's first lines into it)
         boolean listed = skip > 0 && p.list != null;
         // Word starts each line at the paragraph's indents, not where its PDF line starts (within a couple of points)
-        float rest = singleColumn && (skip == 0 || listed) && !markerTab ? colLeft + p.indentLeft : Float.NaN;
+        float rest = singleColumn && !beside && (skip == 0 || listed) && !markerTab ? colLeft + p.indentLeft : Float.NaN;
         float first = listed ? colLeft + d.markerTextX : rest + p.indentFirst;
         if (Float.isNaN(rest)) {
             first = Float.NaN;
@@ -265,6 +268,15 @@ final class ParagraphFactory {
     private static boolean narrowed(ParaDraft d) {
         for (Line l : d.lines) {
             if (l.narrowed) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean narrowedRight(ParaDraft d) {
+        for (Line l : d.lines) {
+            if (l.narrowedRight) {
                 return true;
             }
         }
