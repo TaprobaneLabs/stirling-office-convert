@@ -209,16 +209,23 @@ final class ParagraphFactory {
         }
         float edge = p.bidi || markerTab || !fitting || singleColumn && narrowed(d) ? Float.NaN
                 : colRight - d.right - (innerColumn ? SectionPlanner.RIGHT_SLACK : 0);
+        // A list item's number is Word's, a tab from its text: the item is measured from its text, where Word starts it
+        // (unfitted, a column holding a list wasn't pinned, and Word ran the next column's first lines into it)
+        boolean listed = skip > 0 && p.list != null;
         // Word starts each line at the paragraph's indents, not where its PDF line starts (within a couple of points)
-        float rest = singleColumn && skip == 0 && !markerTab ? colLeft + p.indentLeft : Float.NaN;
-        float first = rest + p.indentFirst;
-        if (d.align == Align.JUSTIFY && !Float.isNaN(d.justifySlack)) {
-            return new RunBuilder.Fit(edge, d.justifySlack, true, singleColumn, first, rest);
+        float rest = singleColumn && (skip == 0 || listed) && !markerTab ? colLeft + p.indentLeft : Float.NaN;
+        float first = listed ? colLeft + d.markerTextX : rest + p.indentFirst;
+        if (Float.isNaN(rest)) {
+            first = Float.NaN;
         }
-        if (Float.isNaN(edge) || d.align != Align.LEFT || skip > 0) {
+        int marker = listed ? skip : 0;
+        if (d.align == Align.JUSTIFY && !Float.isNaN(d.justifySlack)) {
+            return new RunBuilder.Fit(edge, d.justifySlack, true, singleColumn, first, rest, marker);
+        }
+        if (Float.isNaN(edge) || d.align != Align.LEFT || skip > 0 && !listed) {
             return null;
         }
-        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest);
+        return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest, marker);
     }
 
     /**
