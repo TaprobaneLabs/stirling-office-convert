@@ -142,9 +142,6 @@ final class ParagraphFactory {
         } else if (flow && p.align == Align.JUSTIFY && !Float.isNaN(d.justifySlack)) {
             p.indentRight += SectionPlanner.RIGHT_SLACK - d.justifySlack;
         }
-        if (fitting && flow && !(fitted && runs.exactFit())) {
-            misses++;
-        }
         boolean startSet = p.align == (p.bidi ? Align.RIGHT : Align.LEFT) || p.align == Align.JUSTIFY;
         float slack = fitted ? 0f : standInSlack(d);
         if (flow && (d.lines.size() >= 2 || startSet) && slack > 0 && !d.first().unspaced()
@@ -158,6 +155,9 @@ final class ParagraphFactory {
             } else {
                 p.indentRight -= Math.min(5f, slack * widest);
             }
+        }
+        if (fitting && flow && !(fitted && runs.exactFit()) && !keepsItsLine(d, p, skip, markerTab, colLeft, colRight)) {
+            misses++;
         }
 
         if (!p.bidi && runsOffPage(d)) {
@@ -251,6 +251,33 @@ final class ParagraphFactory {
             return null;
         }
         return new RunBuilder.Fit(edge, SectionPlanner.RIGHT_SLACK, false, false, first, rest);
+    }
+
+    /** How far inside its room a lone line's known width must end for Word to keep it on one line. */
+    private static final float ONE_LINE_MARGIN = 2f;
+
+    /**
+     * Whether a paragraph's only line, unfitted, stays one line in Word: its widths are known and it ends at least a margin
+     * (2 pt, or 2% of its width) inside its room. Such a line can't wrap, so a column holding one still keeps its PDF lines
+     * and is ended where the PDF's ends; unfitted headings and labels in stand-in faces had let every such column flow on,
+     * and Word pulled the next column's lines into it.
+     */
+    private boolean keepsItsLine(ParaDraft d, Paragraph p, int skip, boolean markerTab, float colLeft, float colRight) {
+        if (d.lines.size() != 1 || skip > 0 || markerTab || p.bidi) {
+            return false;
+        }
+        Line l = d.first();
+        boolean fromStart = p.align == Align.LEFT || p.align == Align.JUSTIFY;
+        if (l.narrowedRight || l.narrowed && !fromStart) {
+            return false;
+        }
+        float width = runs.knownWidth(l);
+        if (Float.isNaN(width)) {
+            return false;
+        }
+        float indent = colLeft + p.indentLeft + p.indentFirst;
+        float room = colRight - p.indentRight - (fromStart ? Math.max(l.x, indent) : indent);
+        return width + Math.max(ONE_LINE_MARGIN, 0.02f * width) <= room;
     }
 
     private static boolean runsOffPage(ParaDraft d) {

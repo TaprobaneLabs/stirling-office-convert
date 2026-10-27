@@ -3,16 +3,26 @@ package stirling.software.officeconvert;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipFile;
 
+import org.apache.pdfbox.cos.COSArray;
+import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSInteger;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.common.PDStream;
+import org.apache.pdfbox.pdmodel.font.PDTrueTypeFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.Test;
@@ -74,6 +84,21 @@ class ColumnFitTest {
         assertTrue(breaks == 1, "the columns below the title are fitted, and their first ends with a column break: " + breaks);
     }
 
+    /**
+     * A heading in a face Word lacks is a paragraph of one line the fit leaves to its stand-in's slack, but its width is
+     * known and it can't wrap, so its column still ends with a column break: unfitted headings and labels had let every
+     * such column flow on, and Word pulled the next column's lines into it.
+     */
+    @Test
+    void aOneLineHeadingInAStandInFaceKeepsTheColumnBreak() throws Exception {
+        String xml = convert(makePdf(false, false, true));
+        int from = xml.indexOf("w:name=\"_Pg1\"");
+        int to = xml.indexOf("w:name=\"_Pg2\"");
+        assertTrue(xml.substring(from, to).contains("Wage limits"), "the heading is on page 1");
+        int breaks = xml.substring(from, to).split("<w:br w:type=\"column\"/>", -1).length - 1;
+        assertTrue(breaks == 1, "page 1's first column, a heading over fitted paragraphs, ends with a column break: " + breaks);
+    }
+
     @Test
     void aColumnThatCanGrowStillFlows() throws Exception {
         String xml = convert(makePdf(true));
@@ -104,6 +129,11 @@ class ColumnFitTest {
      * {@code titled} puts a full-width title above page 1's columns, which start lower.
      */
     private Path makePdf(boolean mixed, boolean titled) throws IOException {
+        return makePdf(mixed, titled, false);
+    }
+
+    /** {@code heading}: page 1's first column starts with a one-line heading in a face Word lacks, set in a stand-in. */
+    private Path makePdf(boolean mixed, boolean titled, boolean heading) throws IOException {
         Path pdf = dir.resolve("cols.pdf");
         try (PDDocument doc = new PDDocument()) {
             for (int p = 1; p <= 4; p++) {
@@ -122,6 +152,9 @@ class ColumnFitTest {
                         for (int i = title ? 4 : 0; i < 55; i++) {
                             boolean last = i % 7 == 6;
                             float y = 682 - i * PITCH;
+                            if (heading && p == 1 && left == 42 && i == 0) {
+                                continue;
+                            }
                             if (mixed && p == 1 && left == 42 && i == 8) {
                                 text(cs, left, y, "LIMIT", LARGE, 0);
                                 float after = left + FONT.getStringWidth("LIMIT ") / 1000f * LARGE;
@@ -142,9 +175,54 @@ class ColumnFitTest {
                     }
                 }
             }
+            if (heading) {
+                headingInStandIn(doc, doc.getPage(0), 42, 682, "Wage limits");
+            }
             doc.save(pdf.toFile());
         }
         return pdf;
+    }
+
+    /** A line in Myriad Pro Bold as a PDF names it without embedding it, its widths 4% wider than Helvetica Bold's. */
+    private static void headingInStandIn(PDDocument doc, PDPage page, float x, float y, String s) throws IOException {
+        PDType1Font bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+        COSArray widths = new COSArray();
+        for (int c = 32; c <= 126; c++) {
+            widths.add(COSInteger.get(Math.round(bold.getWidth(c) * 1.04f)));
+        }
+        COSDictionary descriptor = new COSDictionary();
+        descriptor.setItem(COSName.TYPE, COSName.FONT_DESC);
+        descriptor.setName(COSName.FONT_NAME, "MyriadPro-Bold");
+        descriptor.setInt(COSName.FLAGS, 32 + 262144);
+        COSArray bbox = new COSArray();
+        for (int v : new int[] {-163, -250, 1256, 989}) {
+            bbox.add(COSInteger.get(v));
+        }
+        descriptor.setItem(COSName.FONT_BBOX, bbox);
+        descriptor.setInt(COSName.ITALIC_ANGLE, 0);
+        descriptor.setInt(COSName.ASCENT, 750);
+        descriptor.setInt(COSName.DESCENT, -250);
+        descriptor.setInt(COSName.CAP_HEIGHT, 674);
+        descriptor.setInt(COSName.STEM_V, 152);
+        COSDictionary font = new COSDictionary();
+        font.setItem(COSName.TYPE, COSName.FONT);
+        font.setItem(COSName.SUBTYPE, COSName.TRUE_TYPE);
+        font.setName(COSName.BASE_FONT, "MyriadPro-Bold");
+        font.setInt(COSName.FIRST_CHAR, 32);
+        font.setInt(COSName.LAST_CHAR, 126);
+        font.setItem(COSName.WIDTHS, widths);
+        font.setItem(COSName.ENCODING, COSName.WIN_ANSI_ENCODING);
+        font.setItem(COSName.FONT_DESC, descriptor);
+        page.getResources().put(COSName.getPDFName("FH"), new PDTrueTypeFont(font));
+        List<PDStream> streams = new ArrayList<>();
+        page.getContentStreams().forEachRemaining(streams::add);
+        PDStream heading = new PDStream(doc);
+        try (OutputStream out = heading.createOutputStream()) {
+            out.write(String.format(Locale.ROOT, "BT /FH %.0f Tf %.2f %.2f Td (%s) Tj ET%n", SIZE, x, y, s)
+                    .getBytes(StandardCharsets.US_ASCII));
+        }
+        streams.add(heading);
+        page.setContents(streams);
     }
 
     private static void text(PDPageContentStream cs, float x, float y, String s, float wordSpacing) throws IOException {
