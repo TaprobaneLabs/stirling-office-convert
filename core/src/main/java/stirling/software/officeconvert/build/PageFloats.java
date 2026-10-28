@@ -79,7 +79,7 @@ final class PageFloats {
     private static IntStream paperOrders(PageLayout layout) {
         return layout.bands().stream().flatMap(b -> b.columns().stream()).flatMap(c -> c.items().stream())
                 .map(it -> it instanceof PageLayout.FloatItem f ? f.picture() : it)
-                .filter(it -> it instanceof PageLayout.FigureItem fi && fi.paper())
+                .filter(it -> it instanceof PageLayout.FigureItem fi && (fi.paper() || fi.ground()))
                 .mapToInt(it -> ((PageLayout.FigureItem) it).order());
     }
 

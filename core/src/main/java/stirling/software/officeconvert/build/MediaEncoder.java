@@ -64,6 +64,7 @@ final class MediaEncoder {
     private PDFRenderer textFreeRenderer;
     private final java.util.Map<Integer, PDFRenderer> turnedRenderers = new java.util.HashMap<>();
     private FigureRenderer paperRenderer;
+    private FigureRenderer groundRenderer;
     private int lastFigurePage = -1;
     private BufferedImage pageRender;
 
@@ -217,6 +218,20 @@ final class MediaEncoder {
         }
     }
 
+    /**
+     * A gradient's ground: {@code box} drawn without text, leaving out the image draws placed on their own above it.
+     */
+    Encoded ground(PDPage page, int pageIndex, AffineTransform toDisplay, Box box, List<FigureRenderer.Drawn> placedAbove) {
+        try {
+            FigureRenderer r = groundRenderer();
+            r.leaveOut(placedAbove);
+            return png(render(r, page, pageIndex, toDisplay, box, scaleFor(box)));
+        } catch (Exception e) {
+            LOG.warn("Ground left out: the page region could not be rendered", e);
+            return null;
+        }
+    }
+
     Encoded veil(List<PageGraphics.Outline> outlines, Box box, List<Box> shown) {
         float scale = scaleFor(box);
         int w = Math.max(1, Math.round(box.width() * scale));
@@ -261,6 +276,14 @@ final class MediaEncoder {
             renderer.setSubsamplingAllowed(true);
         }
         return renderer;
+    }
+
+    private FigureRenderer groundRenderer() {
+        if (groundRenderer == null) {
+            groundRenderer = new FigureRenderer(document, false);
+            groundRenderer.setSubsamplingAllowed(true);
+        }
+        return groundRenderer;
     }
 
     private FigureRenderer paperRenderer() {
