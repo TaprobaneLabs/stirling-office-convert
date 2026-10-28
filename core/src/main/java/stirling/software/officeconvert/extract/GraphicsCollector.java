@@ -74,6 +74,12 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
 
     private int maskedGroups;
 
+    /**
+     * The opacity of the transparency groups being drawn, multiplied: PDFBox runs a group's content at full opacity and
+     * without its soft mask, which it applies to the whole group when it composites it.
+     */
+    private double groupAlpha = 1;
+
     private List<Path2D> lastClip;
     private int lastClipCount;
     private float[] lastClipBox;
@@ -227,11 +233,14 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
             return;
         }
         boolean masked = getGraphicsState().getSoftMask() != null;
+        double outer = groupAlpha;
         maskedGroups += masked ? 1 : 0;
+        groupAlpha *= getGraphicsState().getNonStrokeAlphaConstant();
         try {
             super.showTransparencyGroup(form);
         } finally {
             maskedGroups -= masked ? 1 : 0;
+            groupAlpha = outer;
         }
     }
 
@@ -440,7 +449,7 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         if (pdImage.isStencil()) {
             stencil = toRgb(gs.getNonStrokingColor(), 0);
         }
-        float alpha = (float) gs.getNonStrokeAlphaConstant();
+        float alpha = (float) (gs.getNonStrokeAlphaConstant() * groupAlpha);
         if (alpha <= 0.01f) {
             return;
         }
@@ -525,13 +534,24 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
 
     private void emit(boolean fill, boolean stroke) {
         PDGraphicsState gs = getGraphicsState();
-        fill &= gs.getNonStrokeAlphaConstant() > 0.01;
-        stroke &= gs.getAlphaConstant() > 0.01;
+        double fillAlpha = gs.getNonStrokeAlphaConstant() * groupAlpha;
+        double strokeAlpha = gs.getAlphaConstant() * groupAlpha;
+        fill &= fillAlpha > 0.01;
+        stroke &= strokeAlpha > 0.01;
         if (!fill && !stroke) {
             return;
         }
         if (gs.getSoftMask() != null) {
             masked(stroke);
+            return;
+        }
+        // A fill across much of the page in a soft-masked group is a tint, a fade or a soft shadow, which shows only
+        // where the mask lets it: drawn as it is, it would be solid everywhere (USGS Fact Sheet 2023-3022's pages 2 and 3
+        // mask blue rectangles the size of the page down to a faint tint over a photo of the sky), and as masked paint,
+        // a picture behind the page's shapes, it hid what those shapes cover (3029's map, over its shadow). So it is left
+        // out. Smaller paint in masked groups stays as it was: CMS's notices set their page thumbnails, text, rules and
+        // shadows, in them
+        if (maskedGroups > 0 && fill && maskedTint()) {
             return;
         }
         if (pointBudget <= 0) {
@@ -542,16 +562,16 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
             return;
         }
         boolean pattern = fill && gs.getNonStrokingColor().getColorSpace() instanceof PDPattern;
-        int fillRgb = onPaper(toRgb(gs.getNonStrokingColor(), 0xFFFFFF), gs.getNonStrokeAlphaConstant());
+        int fillRgb = onPaper(toRgb(gs.getNonStrokingColor(), 0xFFFFFF), fillAlpha);
         if (pattern) {
             int tone = tones.computeIfAbsent(getResources(), k -> new HashMap<>())
                     .computeIfAbsent(gs.getNonStrokingColor().getPatternName(), k -> PatternTone.of(gs.getNonStrokingColor(), getResources()));
             if (tone >= 0) {
                 pattern = false;
-                fillRgb = onPaper(tone, gs.getNonStrokeAlphaConstant());
+                fillRgb = onPaper(tone, fillAlpha);
             }
         }
-        int strokeRgb = onPaper(toRgb(gs.getStrokingColor(), 0), gs.getAlphaConstant());
+        int strokeRgb = onPaper(toRgb(gs.getStrokingColor(), 0), strokeAlpha);
         PathShapes.Paint paint = new PathShapes.Paint(fill, stroke, pattern, fillRgb, strokeRgb, lineWidth(), evenOdd);
         PathShapes.Shapes shapes = PathShapes.classify(subpaths, pathCurved, paint, clipBox());
         rules.addAll(shapes.rules());
@@ -565,15 +585,15 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         BlendMode blend = gs.getBlendMode();
         boolean blended = gs.getSoftMask() != null
                 || blend != null && blend != BlendMode.NORMAL && blend != BlendMode.COMPATIBLE;
-        if (pattern || gs.getNonStrokeAlphaConstant() < 0.99 || blended) {
+        if (pattern || fillAlpha < 0.99 || blended) {
             seeThrough.addAll(shapes.fills());
         }
-        boolean faint = fill ? gs.getNonStrokeAlphaConstant() < 0.99 : gs.getAlphaConstant() < 0.99;
+        boolean faint = fill ? fillAlpha < 0.99 : strokeAlpha < 0.99;
         if (shapes.mark() != null && faint) {
             seeThrough.add(shapes.mark());
             if (fill) {
                 outlines.put(shapes.mark(), new PageGraphics.Outline(outline(),
-                        toRgb(gs.getNonStrokingColor(), 0xFFFFFF), (float) gs.getNonStrokeAlphaConstant()));
+                        toRgb(gs.getNonStrokingColor(), 0xFFFFFF), (float) fillAlpha));
             }
         } else if (shapes.mark() != null && fill && panel(shapes.mark()) && panels++ < MAX_PANELS) {
             outlines.put(shapes.mark(), new PageGraphics.Outline(outline(), shapes.mark().rgb(), 1f));
@@ -596,6 +616,17 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         }
         pastBudget.add(box[0], box[1], box[2], box[3], unkeptPoints + subpaths.stream().mapToInt(List::size).sum());
     }
+
+    /** Whether the path being filled covers at least a page panel's share of the page where it is shown. */
+    private boolean maskedTint() {
+        float[] box = paintedBox(false);
+        return box[2] - box[0] >= MASKED_TINT_WIDTH * pageWidth && box[3] - box[1] >= MASKED_TINT_HEIGHT * pageHeight;
+    }
+
+    /** A fill in a masked group at least this share of the page wide and high is a tint, as PageAnalyzer's panels. */
+    private static final float MASKED_TINT_WIDTH = 0.4f;
+
+    private static final float MASKED_TINT_HEIGHT = 0.1f;
 
     private void masked(boolean stroke) {
         float[] box = paintedBox(stroke);
