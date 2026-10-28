@@ -84,7 +84,11 @@ final class ParagraphMeasure {
         for (Line l : lines) {
             leftSpread = Math.max(leftSpread, Math.abs(l.x - first.x));
         }
-        if (centred && leftVaries && leftSpread > 3 * EDGE) {
+        // A first line at the room's left edge and the rest indented together is a hanging indent, whose lines' centres
+        // can line up: a reference whose first line starts 10 pt further left and ends about as far further right
+        // (USGS Fact Sheets 2024-3021 and 2024-3052) was set centred, and Word moved every line's start
+        boolean hanging = flushLeft && room.rel(first) <= EDGE && bodyRel > room.rel(first) + EDGE;
+        if (centred && leftVaries && leftSpread > 3 * EDGE && !hanging) {
             p.align = Align.CENTER;
             centreIndents(p, centreRef, colLeft, colRight);
             return;
