@@ -153,17 +153,21 @@ final class ScanRegions {
                 && (float) h / w <= MAX_ASPECT && (float) w / h <= MAX_ASPECT;
     }
 
+    /** Darker than this on white paper is ink; grey paper lowers it by as much as the paper is darker. */
+    private static final int INK = 190;
+
     private static boolean[][] inkCells(BufferedImage img, int cols, int rows) {
         boolean[][] ink = new boolean[rows][cols];
         int w = img.getWidth();
         int h = img.getHeight();
+        int dark = INK - ScanPaper.shift(img);
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 int x0 = c * w / cols;
                 int x1 = Math.max(x0 + 1, (c + 1) * w / cols);
                 int y0 = r * h / rows;
                 int y1 = Math.max(y0 + 1, (r + 1) * h / rows);
-                int dark = 0;
+                int inked = 0;
                 int total = 0;
                 for (int y = y0; y < Math.min(h, y1); y++) {
                     for (int x = x0; x < Math.min(w, x1); x++) {
@@ -173,13 +177,13 @@ final class ScanRegions {
                         int blue = rgb & 0xFF;
                         int max = Math.max(red, Math.max(green, blue));
                         int min = Math.min(red, Math.min(green, blue));
-                        if (max - min > 40 || (red * 299 + green * 587 + blue * 114) / 1000 < 190) {
-                            dark++;
+                        if (max - min > 40 || (red * 299 + green * 587 + blue * 114) / 1000 < dark) {
+                            inked++;
                         }
                         total++;
                     }
                 }
-                ink[r][c] = total > 0 && dark >= 0.3f * total;
+                ink[r][c] = total > 0 && inked >= 0.3f * total;
             }
         }
         return ink;
