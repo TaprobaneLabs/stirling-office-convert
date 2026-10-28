@@ -462,6 +462,10 @@ final class GlyphCollector extends PDFStreamEngine {
         boolean invisible = mode == RenderingMode.NEITHER || mode == RenderingMode.NEITHER_CLIP;
         // Invisible text (an OCR layer's) draws nothing to recover its characters from: OCRmyPDF's glyphless font gives
         // many characters one empty glyph, which turned Sinhala and Tamil letters into the first character mapped to it
+        if (invisible && tp.getUnicode() != null && tp.getUnicode().isEmpty()) {
+            carry(tp);
+            return;
+        }
         String unicode = clean(invisible ? tp.getUnicode() : recovery.text(tp, tp.getUnicode()));
         if (unicode == null && outerActual != null) {
             unicode = HIDDEN;
@@ -535,6 +539,29 @@ final class GlyphCollector extends PDFStreamEngine {
                         invisible,
                         tm.getTranslateX(),
                         tm.getTranslateY()));
+    }
+
+    /**
+     * An OCR layer's glyph with no text (TextPositions.unicode()): the rest of the cluster drawn just before it, so its
+     * advance widens that cluster's glyph. Left out instead, its advance read as a gap, and a Tamil word broke in two
+     * after each such cluster ("வாடிக்கை யாளர்").
+     */
+    private void carry(TextPosition tp) {
+        if (current.isEmpty()) {
+            return;
+        }
+        RawGlyph last = current.getLast();
+        Glyph g = last.glyph();
+        float near = 0.02f * g.size + 0.05f;
+        float x = tp.getXDirAdj();
+        float right = x + Math.max(0f, tp.getWidthDirAdj());
+        if (!last.invisible() || last.direction() != Math.floorMod(Math.round(tp.getDir()), 360)
+                || Math.abs(g.baseline - tp.getYDirAdj()) > near || x < g.x - near || x > g.right() + near
+                || right <= g.right()) {
+            return;
+        }
+        current.set(current.size() - 1, new RawGlyph(g.withWidth(right - g.x), last.direction(), last.invisible(),
+                last.originX(), last.originY()));
     }
 
     /**
