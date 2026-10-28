@@ -891,68 +891,64 @@ public final class PageAnalyzer {
                 grounds.set(under, new PageLayout.FigureItem(grounds.get(under).box(), true, false, order));
             }
         }
-        grounds.replaceAll(g -> new PageLayout.FigureItem(takingIn(g.box(), g.order(), gfx), true, false, g.order()));
+        if (!grounds.isEmpty()) {
+            List<Painted> painting = painting(page, gfx);
+            grounds.replaceAll(g -> new PageLayout.FigureItem(takingIn(g.box(), g.order(), painting), true, false,
+                    g.order()));
+        }
         return grounds;
     }
 
+    /** One painting on the page but text: its box, its place in the paint order, and whether it's an image. */
+    private record Painted(Box box, int order, boolean image) {}
+
+    /** The page's paintings but text and page-sized ones, in no particular order. */
+    private static List<Painted> painting(PageData page, PageGraphics gfx) {
+        List<Painted> all = new ArrayList<>();
+        for (PageGraphics.VectorMark m : gfx.marks()) {
+            all.add(new Painted(new Box(m.x(), m.top(), m.right(), m.bottom()), gfx.order(m), false));
+        }
+        for (Fill f : gfx.fills()) {
+            all.add(new Painted(Regions.of(f), gfx.order(f), false));
+        }
+        for (Rule r : gfx.rules()) {
+            all.add(new Painted(Regions.of(r), gfx.order(r), false));
+        }
+        for (ImageDraw d : gfx.images()) {
+            all.add(new Painted(new Box(d.clipX(), d.clipTop(), d.clipRight(), d.clipBottom()), gfx.order(d), true));
+        }
+        all.removeIf(p -> p.order() == Integer.MAX_VALUE
+                || p.box().width() >= 0.9f * page.width() && p.box().height() >= 0.9f * page.height());
+        return all;
+    }
+
     /**
-     * A ground's box grown over the images painted after its gradient that cross its edge and lie at least half in it, or
-     * that the PDF paints over where they lie in it, so its picture draws them with what is painted over them. Placed on
-     * their own, above the picture, they hid that: GeoXO's second page sets its header's photo from the page's edge,
-     * 10 pt left of the gradient, and covered the logo and the fade into blue drawn over it. Other images crossing the
-     * edge stay pictures of their own, which the ground's picture leaves out.
+     * A ground's box grown over what is painted after its gradient across its edge (an image, a shape, a rule) where the
+     * PDF paints over its part in the box, and over an image after it that lies at least half in the box, so its picture
+     * draws them with what is painted over them. Placed on their own above the picture, they hid that: GeoXO's second
+     * page sets its header's photo from the page's edge, 10 pt left of the gradient, and covered the logo and the fade
+     * into blue drawn over it. Other images crossing the edge stay pictures of their own, which the ground's picture
+     * leaves out; other shapes are drawn in both, opaque as Word draws shapes.
      */
-    private static Box takingIn(Box ground, int order, PageGraphics gfx) {
+    private static Box takingIn(Box ground, int order, List<Painted> painting) {
         Box b = ground;
         boolean grown = true;
         while (grown) {
             grown = false;
-            for (ImageDraw d : gfx.images()) {
-                Box shown = new Box(d.clipX(), d.clipTop(), d.clipRight(), d.clipBottom());
-                int painted = gfx.order(d);
-                if (painted == Integer.MAX_VALUE || painted <= order || Regions.insideAny(shown, List.of(b), 2f)
-                        || shown.overlapArea(b) <= 0) {
+            for (Painted p : painting) {
+                if (p.order() <= order || p.box().overlapArea(b) <= 0 || Regions.insideAny(p.box(), List.of(b), 2f)) {
                     continue;
                 }
-                Box on = new Box(Math.max(shown.x(), b.x()), Math.max(shown.top(), b.top()),
-                        Math.min(shown.right(), b.right()), Math.min(shown.bottom(), b.bottom()));
-                if (shown.overlapArea(b) >= 0.5f * shown.area() || paintedOver(on, painted, gfx)) {
-                    b = b.union(shown);
+                Box on = new Box(Math.max(p.box().x(), b.x()), Math.max(p.box().top(), b.top()),
+                        Math.min(p.box().right(), b.right()), Math.min(p.box().bottom(), b.bottom()));
+                boolean mostlyIn = p.image() && p.box().overlapArea(b) >= 0.5f * p.box().area();
+                if (mostlyIn || painting.stream().anyMatch(q -> q.order() > p.order() && q.box().overlapArea(on) > 0)) {
+                    b = b.union(p.box());
                     grown = true;
                 }
             }
         }
         return b;
-    }
-
-    /** Whether the PDF paints anything but text over {@code region} after its {@code after}th painting. */
-    private static boolean paintedOver(Box region, int after, PageGraphics gfx) {
-        List<Box> later = new ArrayList<>();
-        for (PageGraphics.VectorMark m : gfx.marks()) {
-            if (later(gfx.order(m), after)) {
-                later.add(new Box(m.x(), m.top(), m.right(), m.bottom()));
-            }
-        }
-        for (Fill f : gfx.fills()) {
-            if (later(gfx.order(f), after)) {
-                later.add(Regions.of(f));
-            }
-        }
-        for (Rule r : gfx.rules()) {
-            if (later(gfx.order(r), after)) {
-                later.add(Regions.of(r));
-            }
-        }
-        for (ImageDraw d : gfx.images()) {
-            if (later(gfx.order(d), after)) {
-                later.add(new Box(d.clipX(), d.clipTop(), d.clipRight(), d.clipBottom()));
-            }
-        }
-        return later.stream().anyMatch(l -> l.overlapArea(region) > 0);
-    }
-
-    private static boolean later(int painted, int after) {
-        return painted != Integer.MAX_VALUE && painted > after;
     }
 
     /**

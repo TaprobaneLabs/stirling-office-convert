@@ -129,6 +129,56 @@ class GradientGroundTest {
         assertTrue(shown.getGreen() > 150 && shown.getRed() < 80, "the ground draws the box over the picture: " + shown);
     }
 
+    @Test
+    void aStripAcrossTheGroundsEdgeWithPaintOverItIsTakenIn() throws Exception {
+        Path docx = docx("strip", (doc, cs) -> {
+            band(cs, 200, 300, new float[] {0.85f, 0.9f, 1f}, new float[] {0.6f, 0.75f, 0.95f});
+            body(cs, 72, 450);
+            // a dark strip from 120 pt to 260 pt up the page across the tint's lower edge, then a green box on its part
+            // on the tint: as a shape of its own above the ground's picture, the strip would hide the box
+            cs.setNonStrokingColor(0.2f, 0.2f, 0.3f);
+            cs.addRect(280, 120, 60, 140);
+            cs.fill();
+            cs.setNonStrokingColor(0.1f, 0.7f, 0.2f);
+            cs.addRect(290, 220, 40, 30);
+            cs.fill();
+        });
+        BufferedImage ground = picture(docx, W, 380);
+        // 310 pt across and 235 pt up the page: 265 pt below the ground's top, at 500 pt
+        Color shown = new Color(ground.getRGB(Math.round(310 / W * ground.getWidth()),
+                Math.round(265 / 380f * ground.getHeight())));
+        assertTrue(shown.getGreen() > 150 && shown.getRed() < 80, "the ground draws the box over the strip: " + shown);
+    }
+
+    @Test
+    void anImageDrawnTwiceUnderTwoClipsKeepsTheDrawOnTheGround() throws Exception {
+        Path docx = docx("twice", (doc, cs) -> {
+            band(cs, 200, 300, new float[] {0.85f, 0.9f, 1f}, new float[] {0.6f, 0.75f, 0.95f});
+            body(cs, 72, 450);
+            BufferedImage red = new BufferedImage(40, 40, BufferedImage.TYPE_INT_RGB);
+            for (int y = 0; y < 40; y++) {
+                for (int x = 0; x < 40; x++) {
+                    red.setRGB(x, y, 0xD02020);
+                }
+            }
+            PDImageXObject picture = LosslessFactory.createFromImage(doc, red);
+            // one image at 150 to 270 pt up the page, drawn clipped to its part on the tint (220 to 270 pt), which the
+            // ground's picture draws, and again clipped mostly off it (150 to 215 pt), which is placed on its own
+            for (float[] clip : new float[][] {{220, 50}, {150, 65}}) {
+                cs.saveGraphicsState();
+                cs.addRect(300, clip[0], 100, clip[1]);
+                cs.clip();
+                cs.drawImage(picture, 300, 150, 100, 120);
+                cs.restoreGraphicsState();
+            }
+        });
+        BufferedImage ground = picture(docx, W, 300);
+        // 350 pt across and 245 pt up the page, in the first draw: 255 pt below the tint's top
+        Color shown = new Color(ground.getRGB(Math.round(350 / W * ground.getWidth()),
+                Math.round(255 / 300f * ground.getHeight())));
+        assertTrue(shown.getRed() > 180 && shown.getGreen() < 80, "the ground keeps the draw on it: " + shown);
+    }
+
     /**
      * The tint from 200 pt to 500 pt up the page under five lines of text, then a red picture at half opacity 100 pt
      * wide, {@code height} high from {@code bottom}, across its lower edge.

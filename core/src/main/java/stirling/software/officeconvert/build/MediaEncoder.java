@@ -219,10 +219,9 @@ final class MediaEncoder {
     }
 
     /**
-     * A gradient's ground: {@code box} drawn without text, leaving out the images placed on their own above it
-     * ({@code placedAbove}, bounds on the PDF page).
+     * A gradient's ground: {@code box} drawn without text, leaving out the image draws placed on their own above it.
      */
-    Encoded ground(PDPage page, int pageIndex, AffineTransform toDisplay, Box box, List<Rectangle2D> placedAbove) {
+    Encoded ground(PDPage page, int pageIndex, AffineTransform toDisplay, Box box, List<FigureRenderer.Drawn> placedAbove) {
         try {
             FigureRenderer r = groundRenderer();
             r.leaveOut(placedAbove);

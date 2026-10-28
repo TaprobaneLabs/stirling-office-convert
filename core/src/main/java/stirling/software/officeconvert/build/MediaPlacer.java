@@ -141,10 +141,10 @@ final class MediaPlacer {
      * drawn region in its picture), so drawn in it too, a translucent one would be painted twice where they overlap.
      * Images painted before it stay in: the picture is opaque and covers their own placing.
      */
-    private static List<java.awt.geom.Rectangle2D> placedAbove(PageLayout.FigureItem ground, PageData page,
+    private static List<FigureRenderer.Drawn> placedAbove(PageLayout.FigureItem ground, PageData page,
             java.awt.geom.AffineTransform toDisplay) throws IOException {
         Box g = ground.box();
-        List<java.awt.geom.Rectangle2D> above = new ArrayList<>();
+        List<FigureRenderer.Drawn> above = new ArrayList<>();
         try {
             java.awt.geom.AffineTransform toPdf = toDisplay.createInverse();
             for (ImageDraw d : page.graphics().images()) {
@@ -153,14 +153,20 @@ final class MediaPlacer {
                         && shown.bottom() <= g.bottom() + 2;
                 int order = page.graphics().order(d);
                 if (!inside && shown.overlapArea(g) > 0 && order != Integer.MAX_VALUE && order > ground.order()) {
-                    above.add(toPdf.createTransformedShape(new java.awt.geom.Rectangle2D.Float(d.x(), d.top(),
-                            d.right() - d.x(), d.bottom() - d.top())).getBounds2D());
+                    above.add(new FigureRenderer.Drawn(onPdf(toPdf, d.x(), d.top(), d.right(), d.bottom()),
+                            onPdf(toPdf, shown.x(), shown.top(), shown.right(), shown.bottom())));
                 }
             }
         } catch (java.awt.geom.NoninvertibleTransformException e) {
             throw new IOException("The page's transform can't be inverted", e);
         }
         return above;
+    }
+
+    private static java.awt.geom.Rectangle2D onPdf(java.awt.geom.AffineTransform toPdf, float x, float top, float right,
+            float bottom) {
+        return toPdf.createTransformedShape(new java.awt.geom.Rectangle2D.Float(x, top, right - x, bottom - top))
+                .getBounds2D();
     }
 
     Picture veil(PageLayout.Veil veil, PageData page, List<Box> shown) throws IOException {

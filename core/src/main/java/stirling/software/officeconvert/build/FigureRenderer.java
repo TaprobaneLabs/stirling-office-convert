@@ -39,16 +39,21 @@ final class FigureRenderer extends PDFRenderer {
 
     private static final double PAPER_SPAN = 0.9;
 
-    /** An image left out is the one drawn within this many points of its bounds. */
+    /** An image draw left out is the one within this many points of its bounds and of what its clip shows. */
     private static final double SAME_IMAGE = 0.5;
+
+    private static final double SAME_CLIP = 1;
 
     private final boolean text;
     private final boolean paper;
     /** Without text, the page's reading direction: glyphs set in another (turned text) are drawn all the same. */
     private final int turnedFrom;
     private Rectangle2D span;
-    /** Images the next render leaves out, by their bounds on the PDF page. */
-    private List<Rectangle2D> leftOut = List.of();
+    /** Image draws the next render leaves out. */
+    private List<Drawn> leftOut = List.of();
+
+    /** An image draw on the PDF page: the image's bounds, and the part of them its clip shows. */
+    record Drawn(Rectangle2D bounds, Rectangle2D shown) {}
 
     FigureRenderer(PDDocument document, boolean text) {
         this(document, text, false);
@@ -99,15 +104,15 @@ final class FigureRenderer extends PDFRenderer {
         span = region;
     }
 
-    /** Leaves out of the next render the images drawn at {@code images}, their bounds on the PDF page. */
-    void leaveOut(List<Rectangle2D> images) {
-        leftOut = images;
+    /** Leaves {@code draws} out of the next render. */
+    void leaveOut(List<Drawn> draws) {
+        leftOut = draws;
     }
 
     @Override
     protected PageDrawer createPageDrawer(PageDrawerParameters parameters) throws IOException {
         Rectangle2D target = span;
-        List<Rectangle2D> skipped = leftOut;
+        List<Drawn> skipped = leftOut;
         return new PageDrawer(parameters) {
             private boolean painting;
             private final OperatorBudget budget = new OperatorBudget("rendering a figure");
@@ -226,14 +231,19 @@ final class FigureRenderer extends PDFRenderer {
                 }
                 Rectangle2D b = getGraphicsState().getCurrentTransformationMatrix().createAffineTransform()
                         .createTransformedShape(new Rectangle2D.Double(0, 0, 1, 1)).getBounds2D();
-                for (Rectangle2D r : skipped) {
-                    if (Math.abs(r.getMinX() - b.getMinX()) < SAME_IMAGE && Math.abs(r.getMinY() - b.getMinY()) < SAME_IMAGE
-                            && Math.abs(r.getMaxX() - b.getMaxX()) < SAME_IMAGE
-                            && Math.abs(r.getMaxY() - b.getMaxY()) < SAME_IMAGE) {
+                Rectangle2D clip = clipBounds();
+                Rectangle2D shown = clip == null ? b : b.createIntersection(clip);
+                for (Drawn d : skipped) {
+                    if (same(d.bounds(), b, SAME_IMAGE) && same(d.shown(), shown, SAME_CLIP)) {
                         return true;
                     }
                 }
                 return false;
+            }
+
+            private static boolean same(Rectangle2D a, Rectangle2D b, double slack) {
+                return Math.abs(a.getMinX() - b.getMinX()) < slack && Math.abs(a.getMinY() - b.getMinY()) < slack
+                        && Math.abs(a.getMaxX() - b.getMaxX()) < slack && Math.abs(a.getMaxY() - b.getMaxY()) < slack;
             }
 
             private Rectangle2D clipBounds() {
