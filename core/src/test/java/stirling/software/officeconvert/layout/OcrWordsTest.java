@@ -92,6 +92,25 @@ class OcrWordsTest {
     }
 
     @Test
+    void aConjunctSplitAcrossGlyphsIsMeasuredWhole() {
+        // क्ष drawn as क् and ष (a combining mark joins the letter before it, the next consonant stays apart)
+        String[] parts = {"क्", "ष"};
+        float whole = ScriptWidths.width(String.join("", parts), Character.UnicodeScript.DEVANAGARI, false);
+        float apart = ScriptWidths.width(parts[0], Character.UnicodeScript.DEVANAGARI, false)
+                + ScriptWidths.width(parts[1], Character.UnicodeScript.DEVANAGARI, false);
+        assertTrue(whole > 0 && Math.abs(apart - whole) > 0.1f * whole, "the conjunct is narrower than its parts");
+        float reach = 1.3f * whole * SIZE;
+        List<Glyph> glyphs = new ArrayList<>();
+        for (String c : parts) {
+            Glyph g = glyph(c, 72 + glyphs.size() * reach / parts.length, reach / parts.length, OCCULTA, glyphs.size());
+            g.hscale = 2.6f;
+            glyphs.add(g);
+        }
+        List<Glyph> out = OcrWords.fit(glyphs);
+        assertEquals(Math.floor(reach / (whole * SIZE) * 100) / 100, out.get(0).hscale, 1e-4, "the conjunct's stretch");
+    }
+
+    @Test
     void aWordWithNoKnownWidthsLosesTheOcrFontsStretch() {
         // Hangul in Tesseract's GlyphLessFont, stretched twice over: Word would set Malgun Gothic's syllables twice as wide
         List<Glyph> glyphs = new ArrayList<>();

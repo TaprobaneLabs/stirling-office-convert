@@ -137,7 +137,10 @@ final class OcrWords {
                 unstretched(glyphs, out, w);
                 return;
             }
-            total += ems[k];
+        }
+        inContext(glyphs, w, ems, family);
+        for (float em : ems) {
+            total += em;
         }
         Character.UnicodeScript script = ScriptWidths.script(first.text);
         float spaceEm = script != null ? ScriptWidths.space(script, first.bold)
@@ -176,6 +179,41 @@ final class OcrWords {
         }
         Character.UnicodeScript script = ScriptWidths.script(g.text);
         return script == null ? Float.NaN : ScriptWidths.width(g.text, script, g.bold);
+    }
+
+    /**
+     * Shapes a run of letters of one script as a whole: a conjunct can be split across glyphs (क् and ष), and its parts
+     * measured apart came to 1.33 em where Word sets the conjunct in 0.74. Each run's width is shared out over its
+     * glyphs by their own widths.
+     */
+    private static void inContext(List<Glyph> glyphs, Word w, float[] ems, String family) {
+        Character.UnicodeScript[] scripts = new Character.UnicodeScript[ems.length];
+        for (int k = 0; k < ems.length; k++) {
+            Glyph g = glyphs.get(w.letters().get(k));
+            scripts[k] = SubstituteMetrics.width(g.text, family, g.bold, g.italic, 1f) > 0 ? null
+                    : ScriptWidths.script(g.text);
+        }
+        for (int k = 0; k < ems.length; ) {
+            int end = k + 1;
+            while (scripts[k] != null && end < ems.length && scripts[end] == scripts[k]) {
+                end++;
+            }
+            if (scripts[k] != null && end - k > 1) {
+                StringBuilder run = new StringBuilder();
+                float parts = 0;
+                for (int j = k; j < end; j++) {
+                    run.append(glyphs.get(w.letters().get(j)).text);
+                    parts += ems[j];
+                }
+                float whole = ScriptWidths.width(run.toString(), scripts[k], glyphs.get(w.letters().get(k)).bold);
+                if (whole > 0 && parts > 0) {
+                    for (int j = k; j < end; j++) {
+                        ems[j] *= whole / parts;
+                    }
+                }
+            }
+            k = end;
+        }
     }
 
     /** A word with no known widths, where it's drawn but without the OCR font's stretch. */
