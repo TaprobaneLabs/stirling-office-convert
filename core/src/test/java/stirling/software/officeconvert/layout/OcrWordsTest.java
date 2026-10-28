@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import stirling.software.officeconvert.build.SubstituteMetrics;
 import stirling.software.officeconvert.extract.FontInfo;
 import stirling.software.officeconvert.extract.Glyph;
+import stirling.software.officeconvert.model.ScriptWidths;
 
 /**
  * OCRmyPDF draws each word in its NotoSans with its own stretch and places the next word where the scan has it. Each OCR
@@ -24,6 +25,10 @@ class OcrWordsTest {
     private static final FontInfo NOTO = new FontInfo("Arial", false, false, false, false, false, "MPDFAA+NotoSans", true);
 
     private static final FontInfo HELVETICA = new FontInfo("Arial", false, false, false, false, false, "Helvetica", false);
+
+    private static final FontInfo OCCULTA = new FontInfo("Arial", false, false, false, false, false, "MPDFAA+Occulta", true);
+
+    private static final FontInfo GLYPHLESS = new FontInfo("Arial", false, false, false, false, false, "GlyphLessFont", true);
 
     private static final float SIZE = 7.2f;
 
@@ -65,6 +70,40 @@ class OcrWordsTest {
         List<Glyph> out = OcrWords.fit(glyphs);
         for (int i = 0; i < glyphs.size(); i++) {
             assertSame(glyphs.get(i), out.get(i));
+        }
+    }
+
+    @Test
+    void scriptLettersTakeTheirScriptFacesWidths() {
+        // A Tamil word, one Occulta glyph a cluster (வா டி க் கை), which OCRmyPDF stretches 2.6 times to its box
+        String[] clusters = {"வா", "டி", "க்", "கை"};
+        float em = ScriptWidths.width(String.join("", clusters), Character.UnicodeScript.TAMIL, false);
+        assertTrue(em > 0, "Tamil has script widths");
+        float reach = 1.3f * em * SIZE;
+        List<Glyph> glyphs = new ArrayList<>();
+        for (String c : clusters) {
+            Glyph g = glyph(c, 72 + glyphs.size() * reach / clusters.length, reach / clusters.length, OCCULTA, glyphs.size());
+            g.hscale = 2.6f;
+            glyphs.add(g);
+        }
+        List<Glyph> out = OcrWords.fit(glyphs);
+        assertEquals(Math.floor(reach / (em * SIZE) * 100) / 100, out.get(0).hscale, 1e-4, "the stretch Tamil's widths need");
+        assertEquals(72f + reach, out.getLast().right(), 0.02f * reach, "the word still ends where its box does");
+    }
+
+    @Test
+    void aWordWithNoKnownWidthsLosesTheOcrFontsStretch() {
+        // Hangul in Tesseract's GlyphLessFont, stretched twice over: Word would set Malgun Gothic's syllables twice as wide
+        List<Glyph> glyphs = new ArrayList<>();
+        for (String c : new String[] {"한", "국", "어"}) {
+            Glyph g = glyph(c, 72 + glyphs.size() * SIZE, SIZE, GLYPHLESS, glyphs.size());
+            g.hscale = 2f;
+            glyphs.add(g);
+        }
+        List<Glyph> out = OcrWords.fit(glyphs);
+        for (int i = 0; i < glyphs.size(); i++) {
+            assertEquals(1f, out.get(i).hscale, 1e-6);
+            assertEquals(glyphs.get(i).x, out.get(i).x, 1e-6, "each syllable stays where it's drawn");
         }
     }
 

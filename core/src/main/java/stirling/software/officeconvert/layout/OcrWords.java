@@ -5,6 +5,7 @@ import java.util.List;
 
 import stirling.software.officeconvert.build.SubstituteMetrics;
 import stirling.software.officeconvert.extract.Glyph;
+import stirling.software.officeconvert.model.ScriptWidths;
 
 /**
  * An OCR tool's words set out as Word will set them. OCRmyPDF (17) and Tesseract draw each word in their own invisible
@@ -18,7 +19,10 @@ import stirling.software.officeconvert.extract.Glyph;
  * line's last word, and a word before a wider gap (a table's next cell), keep their own box. Word's lines are then as
  * long as the scan's, so a fitted paragraph keeps its line breaks. The OCR layer's size stays: an OCR layer's size is a
  * line box's (about 0.73 of the type's), but set larger, a table's rows grew in Word and pushed what follows down.
- * A word whose widths the stand-in metrics lack (other scripts) stays as drawn, and so does invisible text in a real face
+ * Letters the stand-in face lacks (Sinhala, Tamil, Devanagari) take their script face's widths (ScriptWidths). OCRmyPDF
+ * draws those scripts in its glyphless Occulta, stretched to their box: kept, that stretch (two to three and a half
+ * times) widened Word's Tamil letters as much, and a one-page notice ran to two. A word whose widths neither has
+ * (Hangul, Han) keeps its place at its face's own widths, without the OCR font's stretch. Invisible text in a real face
  * (Adobe's OCR), which has its real widths.
  */
 final class OcrWords {
@@ -128,13 +132,16 @@ final class OcrWords {
         float total = 0;
         for (int k = 0; k < ems.length; k++) {
             Glyph g = glyphs.get(w.letters().get(k));
-            ems[k] = SubstituteMetrics.width(g.text, family, g.bold, g.italic, 1f);
+            ems[k] = em(g, family);
             if (!(ems[k] > 0)) {
+                unstretched(glyphs, out, w);
                 return;
             }
             total += ems[k];
         }
-        float spaceEm = SubstituteMetrics.width(" ", family, first.bold, first.italic, 1f);
+        Character.UnicodeScript script = ScriptWidths.script(first.text);
+        float spaceEm = script != null ? ScriptWidths.space(script, first.bold)
+                : SubstituteMetrics.width(" ", family, first.bold, first.italic, 1f);
         if (!(spaceEm > 0)) {
             return;
         }
@@ -158,6 +165,28 @@ final class OcrWords {
             Glyph space = glyphs.get(w.space());
             float end = spaced ? next : Math.max(space.right(), x + spaceWidth);
             out.set(w.space(), reset(space, x, Math.max(0f, end - x), scale, spaceWidth));
+        }
+    }
+
+    /** A letter's width in 1/1000 em: the stand-in face's, else its script face's, else NaN. */
+    private static float em(Glyph g, String family) {
+        float em = SubstituteMetrics.width(g.text, family, g.bold, g.italic, 1f);
+        if (em > 0) {
+            return em;
+        }
+        Character.UnicodeScript script = ScriptWidths.script(g.text);
+        return script == null ? Float.NaN : ScriptWidths.width(g.text, script, g.bold);
+    }
+
+    /** A word with no known widths, where it's drawn but without the OCR font's stretch. */
+    private static void unstretched(List<Glyph> glyphs, List<Glyph> out, Word w) {
+        List<Integer> all = new ArrayList<>(w.letters());
+        if (w.space() >= 0) {
+            all.add(w.space());
+        }
+        for (int i : all) {
+            Glyph g = glyphs.get(i);
+            out.set(i, reset(g, g.x, g.width, 1f, g.spaceWidth));
         }
     }
 
