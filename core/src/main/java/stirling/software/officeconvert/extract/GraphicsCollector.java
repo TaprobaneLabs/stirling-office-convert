@@ -545,18 +545,6 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
             masked(stroke);
             return;
         }
-        // A fill across much of the page in a soft-masked group is a tint, a fade or a soft shadow, which shows only
-        // where the mask lets it: drawn as it is, it would be solid everywhere (USGS Fact Sheet 2023-3022's pages 2 and 3
-        // mask blue rectangles the size of the page down to a faint tint over a photo of the sky), and as masked paint,
-        // a picture behind the page's shapes, it hid what those shapes cover (3029's map, over its shadow). So the fill is
-        // left out; a stroke painted with it stays. Smaller paint in masked groups stays as it was: CMS's notices set their
-        // page thumbnails, text, rules and shadows, in them
-        if (maskedGroups > 0 && fill && maskedTint()) {
-            fill = false;
-            if (!stroke) {
-                return;
-            }
-        }
         if (pointBudget <= 0) {
             pastBudget(fill, stroke);
             return;
@@ -577,6 +565,27 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         int strokeRgb = onPaper(toRgb(gs.getStrokingColor(), 0), strokeAlpha);
         PathShapes.Paint paint = new PathShapes.Paint(fill, stroke, pattern, fillRgb, strokeRgb, lineWidth(), evenOdd);
         PathShapes.Shapes shapes = PathShapes.classify(subpaths, pathCurved, paint, clipBox());
+        // A filled area across much of the page in a soft-masked group is a tint, a fade or a soft shadow, which shows
+        // only where the mask lets it: drawn as it is, it would be solid everywhere (USGS Fact Sheet 2023-3022's pages 2
+        // and 3 mask blue rectangles the size of the page down to a faint tint over a photo of the sky), and as masked
+        // paint, a picture behind the page's shapes, it hid what those shapes cover (3029's map, over its shadow). So it
+        // is left out, judged once the path is classified: a border drawn as a hollow fill is rules, small shapes filled
+        // at once are each their own, and a stroke painted with the tint stays. Smaller paint in masked groups stays as
+        // it was: CMS's notices set their page thumbnails, text, rules and shadows, in them
+        if (maskedGroups > 0 && fill && tint(shapes)) {
+            if (stroke) {
+                fill = false;
+                pattern = false;
+                paint = new PathShapes.Paint(false, true, false, fillRgb, strokeRgb, lineWidth(), evenOdd);
+                shapes = PathShapes.classify(subpaths, pathCurved, paint, clipBox());
+            } else {
+                VectorMark mark = shapes.mark();
+                shapes = new PathShapes.Shapes(shapes.rules(),
+                        shapes.fills().stream().filter(f -> !tintSized(f.x(), f.top(), f.right(), f.bottom())).toList(),
+                        mark != null && mark.filled() && tintSized(mark.x(), mark.top(), mark.right(), mark.bottom())
+                                ? null : mark);
+            }
+        }
         rules.addAll(shapes.rules());
         fills.addAll(shapes.fills());
         if (shapes.mark() != null) {
@@ -620,26 +629,16 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         pastBudget.add(box[0], box[1], box[2], box[3], unkeptPoints + subpaths.stream().mapToInt(List::size).sum());
     }
 
-    /**
-     * Whether one shape of the path being filled covers at least a page panel's share of the page where it is shown. One
-     * fill can hold many small shapes spread across the page, which together span it but are no tint.
-     */
-    private boolean maskedTint() {
-        float[] clip = clipBox();
-        for (List<Point2D.Float> sp : subpaths) {
-            float[] b = {Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
-            for (Point2D.Float p : sp) {
-                if (p != CURVE) {
-                    widen(b, p);
-                }
-            }
-            float w = Math.min(b[2], clip[2]) - Math.max(b[0], clip[0]);
-            float h = Math.min(b[3], clip[3]) - Math.max(b[1], clip[1]);
-            if (w >= MASKED_TINT_WIDTH * pageWidth && h >= MASKED_TINT_HEIGHT * pageHeight) {
-                return true;
-            }
-        }
-        return false;
+    /** Whether a classified path holds a filled area of a tint's size: a fill, or a filled mark. */
+    private boolean tint(PathShapes.Shapes shapes) {
+        VectorMark mark = shapes.mark();
+        return shapes.fills().stream().anyMatch(f -> tintSized(f.x(), f.top(), f.right(), f.bottom()))
+                || mark != null && mark.filled() && tintSized(mark.x(), mark.top(), mark.right(), mark.bottom());
+    }
+
+    /** Whether a box covers at least a page panel's share of the page. */
+    private boolean tintSized(float x, float top, float right, float bottom) {
+        return right - x >= MASKED_TINT_WIDTH * pageWidth && bottom - top >= MASKED_TINT_HEIGHT * pageHeight;
     }
 
     /** A fill in a masked group at least this share of the page wide and high is a tint, as PageAnalyzer's panels. */

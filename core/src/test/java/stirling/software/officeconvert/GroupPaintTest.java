@@ -69,6 +69,39 @@ class GroupPaintTest {
     }
 
     @Test
+    void aBorderFilledAsAHollowShapeInAMaskedGroupStays() throws Exception {
+        String xml = convert("hollow", (doc, page, cs) -> {
+            // a 1 pt red border drawn as one even-odd fill, a 300 by 100 pt rectangle less a 298 by 98 pt one, in a group
+            // whose mask shows all of it: its outer box is a tint's size, but it is four rules
+            PDFormXObject group = group(doc, page);
+            try (PDFormContentStream g = new PDFormContentStream(group)) {
+                g.setNonStrokingColor(0.8f, 0.1f, 0.1f);
+                g.addRect(150, 300, 300, 100);
+                g.addRect(151, 301, 298, 98);
+                g.fillEvenOdd();
+            }
+            PDFormXObject mask = group(doc, page);
+            try (PDFormContentStream m = new PDFormContentStream(mask)) {
+                m.setNonStrokingColor(1f, 1f, 1f);
+                m.addRect(0, 0, 612, 792);
+                m.fill();
+            }
+            COSDictionary smask = new COSDictionary();
+            smask.setItem(COSName.TYPE, COSName.MASK);
+            smask.setItem(COSName.S, COSName.LUMINOSITY);
+            smask.setItem(COSName.G, mask.getCOSObject());
+            PDExtendedGraphicsState state = new PDExtendedGraphicsState();
+            state.getCOSObject().setItem(COSName.SMASK, smask);
+            cs.saveGraphicsState();
+            cs.setGraphicsStateParameters(state);
+            cs.drawForm(group);
+            cs.restoreGraphicsState();
+            body(cs);
+        });
+        assertTrue(xml.contains("<a:srgbClr val=\"CC1A1A\"/>"), "the border is drawn");
+    }
+
+    @Test
     void aMaskedTintsBorderStays() throws Exception {
         String xml = convert("border", (doc, page, cs) -> {
             // a 300 by 100 pt panel filled and stroked at once in a group whose mask shows all of it: the tint is left
