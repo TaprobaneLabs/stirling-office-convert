@@ -92,13 +92,41 @@ public final class OcrText {
         return n;
     }
 
+    /**
+     * The hidden glyphs worth reading: spaces, glyphs at least a little wide, and marks joined to the glyph drawn before
+     * them. An OCR layer's text is in logical order and draws a vowel sign or a joiner after its letter with no advance
+     * (OCRmyPDF's glyphless font): left out as too narrow, Sinhala and Tamil words lost their vowel signs.
+     */
     public static List<Glyph> glyphs(List<Glyph> hidden) {
         List<Glyph> out = new ArrayList<>(hidden.size());
         for (Glyph g : hidden) {
             if (g.isSpace() || g.width >= 0.12f * g.size) {
                 out.add(g);
+            } else if (joining(g.text) && !out.isEmpty() && follows(out.getLast(), g)) {
+                out.set(out.size() - 1, out.getLast().withText(out.getLast().text + g.text));
             }
         }
         return out;
+    }
+
+    /** Combining marks and joiners: characters that belong to the letter before them. */
+    private static boolean joining(String text) {
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            int type = Character.getType(cp);
+            if (type != Character.NON_SPACING_MARK && type != Character.COMBINING_SPACING_MARK
+                    && type != Character.ENCLOSING_MARK && cp != 0x200C && cp != 0x200D) {
+                return false;
+            }
+            i += Character.charCount(cp);
+        }
+        return !text.isEmpty();
+    }
+
+    /** Whether {@code mark} is drawn on {@code before}'s line, where it ends. */
+    private static boolean follows(Glyph before, Glyph mark) {
+        float near = 0.5f * Math.max(before.size, mark.size);
+        return !before.isSpace() && Math.abs(before.baseline - mark.baseline) <= near
+                && mark.x >= before.x - near && mark.x <= before.right() + near;
     }
 }
