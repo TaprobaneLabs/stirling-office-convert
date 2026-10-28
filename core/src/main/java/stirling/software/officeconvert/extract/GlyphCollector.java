@@ -341,7 +341,7 @@ final class GlyphCollector extends PDFStreamEngine {
 
     @Override
     protected void showGlyph(Matrix trm, PDFont font, int code, Vector displacement) throws IOException {
-        if (!font.isVertical() && clip.hides(trm, displacement.getX(), font)) {
+        if (!font.isVertical() && !invisibleText() && clip.hides(trm, displacement.getX(), font)) {
             // Clipped away whole: the page never shows it
             if (rotation % 360 == 0 && trm.getScaleX() > 0 && Math.abs(trm.getShearX()) < 0.01f * trm.getScaleX()
                     && Math.abs(trm.getShearY()) < 0.01f * trm.getScaleX()) {
@@ -442,6 +442,18 @@ final class GlyphCollector extends PDFStreamEngine {
             int blank = nextIndex++;
             sink.accept(blank, document.getPage(blank), List.of());
         }
+    }
+
+    /**
+     * Whether the text being shown is invisible (rendering mode 3, an OCR layer's). No clip hides what isn't painted: such
+     * text is there to be found, and viewers find it wherever it lies. OCRmyPDF (17.13) grafts the text of a page it turns
+     * onto that page in a form whose BBox is the unturned page's, so the BBox cuts off every word past the unturned
+     * page's width: the right-hand columns of a landscape table printed sideways, the top of a portrait page photographed
+     * sideways.
+     */
+    private boolean invisibleText() {
+        RenderingMode mode = getGraphicsState().getTextState().getRenderingMode();
+        return mode == RenderingMode.NEITHER || mode == RenderingMode.NEITHER_CLIP;
     }
 
     private void processTextPosition(TextPosition tp) {
