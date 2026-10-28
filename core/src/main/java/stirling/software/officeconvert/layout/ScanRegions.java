@@ -15,13 +15,12 @@ final class ScanRegions {
     private ScanRegions() {}
 
     static List<Box> find(ImageDraw scan, List<Line> ocrLines, float pageW, float pageH) {
-        if (scan.quarterTurns() != 0 || scan.flipH() || scan.flipV() || !plausibleShape(scan)
-                || !ImageBudget.affordable(scan.image())) {
+        if (!plausibleShape(scan) || !ImageBudget.affordable(scan.image())) {
             return List.of();
         }
         BufferedImage img;
         try {
-            int sub = Math.max(1, scan.image().getWidth() / (GRID * 4));
+            int sub = Math.max(1, ScanImage.shownWidth(scan) / (GRID * 4));
             img = scan.image().getImage(null, sub);
         } catch (IOException | RuntimeException e) {
             return List.of();
@@ -29,6 +28,7 @@ final class ScanRegions {
         if (img == null) {
             return List.of();
         }
+        img = ScanImage.shown(img, scan);
         float boxW = scan.right() - scan.x();
         float boxH = scan.bottom() - scan.top();
         int cols = GRID;
