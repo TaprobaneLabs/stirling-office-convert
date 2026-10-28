@@ -617,10 +617,26 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         pastBudget.add(box[0], box[1], box[2], box[3], unkeptPoints + subpaths.stream().mapToInt(List::size).sum());
     }
 
-    /** Whether the path being filled covers at least a page panel's share of the page where it is shown. */
+    /**
+     * Whether one shape of the path being filled covers at least a page panel's share of the page where it is shown. One
+     * fill can hold many small shapes spread across the page, which together span it but are no tint.
+     */
     private boolean maskedTint() {
-        float[] box = paintedBox(false);
-        return box[2] - box[0] >= MASKED_TINT_WIDTH * pageWidth && box[3] - box[1] >= MASKED_TINT_HEIGHT * pageHeight;
+        float[] clip = clipBox();
+        for (List<Point2D.Float> sp : subpaths) {
+            float[] b = {Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+            for (Point2D.Float p : sp) {
+                if (p != CURVE) {
+                    widen(b, p);
+                }
+            }
+            float w = Math.min(b[2], clip[2]) - Math.max(b[0], clip[0]);
+            float h = Math.min(b[3], clip[3]) - Math.max(b[1], clip[1]);
+            if (w >= MASKED_TINT_WIDTH * pageWidth && h >= MASKED_TINT_HEIGHT * pageHeight) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A fill in a masked group at least this share of the page wide and high is a tint, as PageAnalyzer's panels. */

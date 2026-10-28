@@ -69,6 +69,39 @@ class GroupPaintTest {
     }
 
     @Test
+    void smallShapesSpreadAcrossAMaskedGroupStay() throws Exception {
+        String xml = convert("spread", (doc, page, cs) -> {
+            // two 20 pt squares far apart, filled at once, in a group whose mask shows all of it: their box spans the
+            // page, but neither is a tint
+            PDFormXObject group = group(doc, page);
+            try (PDFormContentStream g = new PDFormContentStream(group)) {
+                g.setNonStrokingColor(0.1f, 0.6f, 0.2f);
+                g.addRect(60, 60, 20, 20);
+                g.addRect(480, 300, 20, 20);
+                g.fill();
+            }
+            PDFormXObject mask = group(doc, page);
+            try (PDFormContentStream m = new PDFormContentStream(mask)) {
+                m.setNonStrokingColor(1f, 1f, 1f);
+                m.addRect(0, 0, 612, 792);
+                m.fill();
+            }
+            COSDictionary smask = new COSDictionary();
+            smask.setItem(COSName.TYPE, COSName.MASK);
+            smask.setItem(COSName.S, COSName.LUMINOSITY);
+            smask.setItem(COSName.G, mask.getCOSObject());
+            PDExtendedGraphicsState state = new PDExtendedGraphicsState();
+            state.getCOSObject().setItem(COSName.SMASK, smask);
+            cs.saveGraphicsState();
+            cs.setGraphicsStateParameters(state);
+            cs.drawForm(group);
+            cs.restoreGraphicsState();
+            body(cs);
+        });
+        assertTrue(xml.contains("<a:srgbClr val=\"1A9933\"/>"), "the squares are still shapes");
+    }
+
+    @Test
     void aShapeInAHalfOpaqueGroupIsHalfOpaque() throws Exception {
         String xml = convert("faint", (doc, page, cs) -> {
             // a blue box in a group drawn at half opacity: on white paper, it shows half as strong
