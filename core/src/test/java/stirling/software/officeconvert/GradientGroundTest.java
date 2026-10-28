@@ -113,11 +113,32 @@ class GradientGroundTest {
         assertTrue(!extents(xml).contains("100x120"), "and it isn't placed again: " + extents(xml));
     }
 
+    @Test
+    void aPictureMostlyOffTheGroundWithPaintOverItIsTakenIn() throws Exception {
+        // the picture from 150 pt to 230 pt up the page, mostly off the tint, with a green box painted over its part on
+        // it, from 205 pt to 225 pt: placed above the ground, the picture would hide the box
+        Path docx = crossing("covered", 150, 80, cs -> {
+            cs.setNonStrokingColor(0.1f, 0.7f, 0.2f);
+            cs.addRect(320, 205, 60, 20);
+            cs.fill();
+        });
+        BufferedImage ground = picture(docx, W, 350);
+        // 350 pt across and 215 pt up the page: 285 pt below the ground's top, at 500 pt
+        Color shown = new Color(ground.getRGB(Math.round(350 / W * ground.getWidth()),
+                Math.round(285 / 350f * ground.getHeight())));
+        assertTrue(shown.getGreen() > 150 && shown.getRed() < 80, "the ground draws the box over the picture: " + shown);
+    }
+
     /**
      * The tint from 200 pt to 500 pt up the page under five lines of text, then a red picture at half opacity 100 pt
      * wide, {@code height} high from {@code bottom}, across its lower edge.
      */
     private Path crossing(String name, float bottom, float height) throws IOException {
+        return crossing(name, bottom, height, cs -> {});
+    }
+
+    /** As {@link #crossing(String, float, float)}, then {@code over} painted after the picture. */
+    private Path crossing(String name, float bottom, float height, Over over) throws IOException {
         return docx(name, (doc, cs) -> {
             band(cs, 200, 300, new float[] {0.85f, 0.9f, 1f}, new float[] {0.6f, 0.75f, 0.95f});
             body(cs, 72, 450);
@@ -134,7 +155,12 @@ class GradientGroundTest {
             cs.setGraphicsStateParameters(half);
             cs.drawImage(picture, 300, bottom, 100, height);
             cs.restoreGraphicsState();
+            over.paint(cs);
         });
+    }
+
+    private interface Over {
+        void paint(PDPageContentStream cs) throws IOException;
     }
 
     /** Whether the document has a picture behind its text of about {@code width} by {@code height} points. */
