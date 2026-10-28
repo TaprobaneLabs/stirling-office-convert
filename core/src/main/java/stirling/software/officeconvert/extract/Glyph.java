@@ -89,6 +89,25 @@ public final class Glyph {
         return x + width;
     }
 
+    /** This glyph with other text, everything else the same. */
+    public Glyph withText(String other) {
+        Glyph g = new Glyph(other, x, width, baseline, size, ascent, descent, font, rgb, seq, spaceWidth, bold, italic);
+        g.underline = underline;
+        g.strike = strike;
+        g.highlightRgb = highlightRgb;
+        g.boxRgb = boxRgb;
+        g.link = link;
+        g.footnote = footnote;
+        g.vertAlign = vertAlign;
+        g.hscale = hscale;
+        g.tracking = tracking;
+        g.upright = upright;
+        g.runsOffPage = runsOffPage;
+        g.invisible = invisible;
+        g.icon = icon;
+        return g;
+    }
+
     public float top() {
         return baseline - ascent;
     }

@@ -457,16 +457,18 @@ final class GlyphCollector extends PDFStreamEngine {
     }
 
     private void processTextPosition(TextPosition tp) {
-        String unicode = clean(recovery.text(tp, tp.getUnicode()));
+        PDGraphicsState gs = getGraphicsState();
+        RenderingMode mode = gs.getTextState().getRenderingMode();
+        boolean invisible = mode == RenderingMode.NEITHER || mode == RenderingMode.NEITHER_CLIP;
+        // Invisible text (an OCR layer's) draws nothing to recover its characters from: OCRmyPDF's glyphless font gives
+        // many characters one empty glyph, which turned Sinhala and Tamil letters into the first character mapped to it
+        String unicode = clean(invisible ? tp.getUnicode() : recovery.text(tp, tp.getUnicode()));
         if (unicode == null && outerActual != null) {
             unicode = HIDDEN;
         }
         if (unicode == null) {
             return;
         }
-        PDGraphicsState gs = getGraphicsState();
-        RenderingMode mode = gs.getTextState().getRenderingMode();
-        boolean invisible = mode == RenderingMode.NEITHER || mode == RenderingMode.NEITHER_CLIP;
         PDColor colour =
                 mode.isStroke() && !mode.isFill() ? gs.getStrokingColor() : gs.getNonStrokingColor();
         int rgb = toRgb(colour);
