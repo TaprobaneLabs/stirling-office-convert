@@ -95,3 +95,8 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.9` | Keep an OCR layer's vowel signs and the letters its font shares a glyph between (#71) | Not offered yet |
 | `0.2.2-fj.9` | Find a turned scan's rules and pictures (#70) | Not offered yet |
 | `0.2.2-fj.9` | Set an OCR layer's words out in Word's widths, each reaching to the next word (#72) | Not offered yet |
+| `0.2.2-fj.10` | Keep a transparency group's soft mask and opacity in its paint (#73) | Not offered yet |
+| `0.2.2-fj.10` | Judge a masked group's tint once its path is classified (#74) | Not offered yet |
+| `0.2.2-fj.10` | Keep an entry's row when a line off its baseline joins the row above (#77) | Not offered yet |
+| `0.2.2-fj.10` | Read an OCR layer's composite font through its ToUnicode CMap, and give a textless glyph's advance to its cluster (#75) | Not offered yet |
+| `0.2.2-fj.10` | Set an OCR layer's words in their script's widths, without the OCR font's stretch (#76) | Not offered yet |
