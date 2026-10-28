@@ -1270,9 +1270,14 @@ final class RunBuilder {
                 g.boxRgb);
     }
 
+    /**
+     * The character scale Word sets a glyph's run at, in whole percent. A scale within 3% of 100 is a PDF's noise, except
+     * in invisible text: an OCR word's scale takes it to where the next word starts (OcrWords), and Word's lines would
+     * otherwise end up to 3% from the scan's.
+     */
     static int scaleOf(Glyph g) {
         int pct = Math.round(g.hscale * 100f);
-        return Math.abs(pct - 100) < 3 ? 100 : Math.clamp(pct, 1, 600);
+        return Math.abs(pct - 100) < 3 && !g.invisible ? 100 : Math.clamp(pct, 1, 600);
     }
 
     static boolean isPrivateUse(String s) {

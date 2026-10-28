@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 
-final class SubstituteMetrics {
+public final class SubstituteMetrics {
 
     private static final Map<Standard14Fonts.FontName, Metrics> FONTS = new ConcurrentHashMap<>();
 
@@ -20,7 +20,7 @@ final class SubstituteMetrics {
 
     private SubstituteMetrics() {}
 
-    static float width(String text, String family, boolean bold, boolean italic, float size) {
+    public static float width(String text, String family, boolean bold, boolean italic, float size) {
         Standard14Fonts.FontName name = fontFor(family, bold, italic);
         if (name == null) {
             return Float.NaN;

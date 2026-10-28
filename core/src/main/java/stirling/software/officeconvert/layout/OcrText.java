@@ -24,7 +24,7 @@ public final class OcrText {
         if (!dominates(page)) {
             return page.glyphs();
         }
-        List<Glyph> out = glyphs(page.hidden());
+        List<Glyph> out = OcrWords.fit(glyphs(page.hidden()));
         Grid hidden = new Grid(page.hidden());
         for (Glyph g : page.glyphs()) {
             if (!hidden.covers(g.centreX(), g.baseline - g.size * 0.35f)) {
