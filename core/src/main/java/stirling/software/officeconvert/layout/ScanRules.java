@@ -28,7 +28,7 @@ final class ScanRules {
     private ScanRules() {}
 
     static List<Rule> find(ImageDraw scan) {
-        if (scan.quarterTurns() != 0 || scan.flipH() || scan.flipV() || !ImageBudget.affordable(scan.image())) {
+        if (!ImageBudget.affordable(scan.image())) {
             return List.of();
         }
         BufferedImage img;
@@ -39,6 +39,10 @@ final class ScanRules {
             return List.of();
         }
         if (img == null || img.getWidth() < 2 || img.getHeight() < 2) {
+            return List.of();
+        }
+        img = ScanImage.shown(img, scan);
+        if (img.getWidth() < 2 || img.getHeight() < 2) {
             return List.of();
         }
         int w = img.getWidth();
