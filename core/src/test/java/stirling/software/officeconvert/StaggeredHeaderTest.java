@@ -34,7 +34,9 @@ class StaggeredHeaderTest {
     private static final PDType1Font BOLD = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
     private static final PDType1Font PLAIN = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
     private static final float H = PDRectangle.LETTER.getHeight();
-    private static final float[] COLS = {51, 92, 120, 175, 255};
+    /** Where each column's header lines and figures start, as in 3052's Table 1: 10 pt or so between columns. */
+    private static final float[] HEADER_X = {41, 84, 122, 165, 255};
+    private static final float[] DATA_X = {51, 93, 120, 198, 268};
     /** Each column's header lines and the height (from the top of the header) its first line starts at. */
     private static final String[][] HEADER = {
         {"Porosity", "(percent)"},
@@ -179,13 +181,13 @@ class StaggeredHeaderTest {
                 float top = 82;
                 for (int c = 0; c < HEADER.length; c++) {
                     for (int i = 0; i < HEADER[c].length; i++) {
-                        text(cs, BOLD, 8, COLS[c], H - top - 8 - STARTS[c] - 11 * i, HEADER[c][i]);
+                        text(cs, BOLD, 8, HEADER_X[c], H - top - 8 - STARTS[c] - 11 * i, HEADER[c][i]);
                     }
                 }
                 rule(cs, 36, H - 136, 290);
                 for (int r = 0; r < ROWS.length; r++) {
                     for (int c = 0; c < ROWS[r].length; c++) {
-                        text(cs, PLAIN, 8, COLS[c] + (c == 2 ? 0 : 8), H - 148 - 13.8f * r, ROWS[r][c]);
+                        text(cs, PLAIN, 8, DATA_X[c], H - 148 - 13.8f * r, ROWS[r][c]);
                     }
                 }
                 rule(cs, 36, H - 148 - 13.8f * ROWS.length, 290);

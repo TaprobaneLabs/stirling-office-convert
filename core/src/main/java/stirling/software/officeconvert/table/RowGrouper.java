@@ -22,6 +22,9 @@ final class RowGrouper {
     /** Lines whose baselines are less than this share of their size apart are one line set a little off its baseline. */
     private static final float OFF_BASELINE = 0.35f;
 
+    /** Staggered header lines are one size, within this share of it. */
+    private static final float SAME_SIZE = 0.15f;
+
     private static final Set<String> CONNECTORS =
             Set.of(
                     "and", "or", "of", "the", "to", "for", "in", "on", "with", "a", "an", "by",
@@ -136,9 +139,10 @@ final class RowGrouper {
     /**
      * Lines set too close together to stand one under another share a row. A row's cells a point or two off one baseline
      * (a scan's OCR, cells of mixed sizes) are one row wherever they are. Above the table's first figure, its header, lines
-     * closer than their text's height run side by side, staggered across columns: USGS Fact Sheet 2024-3052's Table 1 sets
-     * its columns' header lines half a line apart, took a row in Word for each, none shorter than its text, and grew by two
-     * lines. Below that, such lines are rows of their own whose cells span two lines, or two tables side by side.
+     * of one size in different columns, closer than their text's height, run side by side, staggered: USGS Fact Sheet
+     * 2024-3052's Table 1 sets its columns' header lines half a line apart, took a row in Word for each, none shorter than
+     * its text, and grew by two lines. Elsewhere such lines are rows of their own whose cells span two lines or two tables
+     * side by side; a row's small second line close to the next row's label is another size and shares its columns.
      */
     private void joinStaggered() {
         int header = 0;
@@ -146,8 +150,12 @@ final class RowGrouper {
             header++;
         }
         for (int li = 1; li < lines.size(); li++) {
-            float size = Math.max(lines.get(li).line().fontSize(), lines.get(li - 1).line().fontSize());
-            boolean close = pitch(li) < OFF_BASELINE * size || li < header && pitch(li) < STAGGERED * size;
+            float above = lines.get(li - 1).line().fontSize();
+            float here = lines.get(li).line().fontSize();
+            float size = Math.max(above, here);
+            boolean staggered = li < header && Math.abs(above - here) <= SAME_SIZE * size
+                    && apart(lines.get(li - 1), lines.get(li)) && pitch(li) < STAGGERED * size;
+            boolean close = pitch(li) < OFF_BASELINE * size || staggered;
             if (rowOf[li] != rowOf[li - 1] && !ruledBefore[li] && close) {
                 int row = rowOf[li];
                 for (int m = li; m < lines.size() && rowOf[m] == row; m++) {
@@ -155,6 +163,16 @@ final class RowGrouper {
                 }
             }
         }
+    }
+
+    /** Whether two lines fill different columns. */
+    private static boolean apart(CellLine a, CellLine b) {
+        for (int c = 0; c < Math.min(a.columns(), b.columns()); c++) {
+            if (a.has(c) && b.has(c)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether a line holds a figure: a digit in any of its words. */
