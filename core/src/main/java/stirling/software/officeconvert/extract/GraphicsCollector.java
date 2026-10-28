@@ -548,11 +548,14 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         // A fill across much of the page in a soft-masked group is a tint, a fade or a soft shadow, which shows only
         // where the mask lets it: drawn as it is, it would be solid everywhere (USGS Fact Sheet 2023-3022's pages 2 and 3
         // mask blue rectangles the size of the page down to a faint tint over a photo of the sky), and as masked paint,
-        // a picture behind the page's shapes, it hid what those shapes cover (3029's map, over its shadow). So it is left
-        // out. Smaller paint in masked groups stays as it was: CMS's notices set their page thumbnails, text, rules and
-        // shadows, in them
+        // a picture behind the page's shapes, it hid what those shapes cover (3029's map, over its shadow). So the fill is
+        // left out; a stroke painted with it stays. Smaller paint in masked groups stays as it was: CMS's notices set their
+        // page thumbnails, text, rules and shadows, in them
         if (maskedGroups > 0 && fill && maskedTint()) {
-            return;
+            fill = false;
+            if (!stroke) {
+                return;
+            }
         }
         if (pointBudget <= 0) {
             pastBudget(fill, stroke);
