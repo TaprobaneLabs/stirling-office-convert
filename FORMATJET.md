@@ -47,3 +47,51 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.6` | Embed Caladea in Word documents whose PDF sets their text in it, so Word breaks lines as the PDF does instead of in its wider Cambria (#22) | Not offered yet |
 | `0.2.2-fj.7` | Apply clips in slide paint order, so a photo a presentation app crops is placed once instead of rendered again over itself (#23) | Not offered yet |
 | `0.2.2-fj.8` | Write private-use bullets in the symbol font Word draws them with, so a LibreOffice PDF's bullets aren't boxes in Word (#24) | Not offered yet |
+| `0.2.2-fj.9` | Fit paragraphs set in a stand-in face to their PDF lines (#25) | Not offered yet |
+| `0.2.2-fj.9` | Set rows of boxed panels as text boxes where the PDF has them (#26) | Not offered yet |
+| `0.2.2-fj.9` | Keep a figure's labels as text in Word documents (#27) | Not offered yet |
+| `0.2.2-fj.9` | Set a table and the text beside it in two columns (#28) | Not offered yet |
+| `0.2.2-fj.9` | Keep Indic text a PDF gives in logical order as it is (#29) | Not offered yet |
+| `0.2.2-fj.9` | Start a flowing column where the PDF's does behind a backdrop (#30) | Not offered yet |
+| `0.2.2-fj.9` | Keep a framed picture's frame and key out of tables and text boxes (#31) | Not offered yet |
+| `0.2.2-fj.9` | Set a figure's level text as labels when some of its text is turned (#32) | Not offered yet |
+| `0.2.2-fj.9` | End a labelled-rows table before the text boxes beside it (#33) | Not offered yet |
+| `0.2.2-fj.9` | Count the room above text under a box that fills its column from the box's foot (#34) | Not offered yet |
+| `0.2.2-fj.9` | Keep a zero-width break before the character drawn where it stands (#35) | Not offered yet |
+| `0.2.2-fj.9` | Count the room above text from the foot of a row of boxes it has no room beside (#36) | Not offered yet |
+| `0.2.2-fj.9` | End the line carrying shapes under a paragraph short of a row of boxes it has no room beside (#37) | Not offered yet |
+| `0.2.2-fj.9` | Fit a paragraph to its lines when the PDF embeds a face Word has, though the widths lack some of its characters (#38) | Not offered yet |
+| `0.2.2-fj.9` | Keep a paragraph's space above that reaches beside a float in a spacer of its own (#39) | Not offered yet |
+| `0.2.2-fj.9` | Keep a symbol's overlapping parts out of bullets (#41) | Not offered yet |
+| `0.2.2-fj.9` | Leave out text the page clips away whole (#40) | Not offered yet |
+| `0.2.2-fj.9` | Set a picture that hangs below its band on the page (#42) | Not offered yet |
+| `0.2.2-fj.9` | Set two tables side by side in a band of two columns (#43) | Not offered yet |
+| `0.2.2-fj.9` | Take a framed table's header rows only from below the tables above it (#44) | Not offered yet |
+| `0.2.2-fj.9` | Fit Korean text in a face Word has to its lines (#45) | Not offered yet |
+| `0.2.2-fj.9` | End lines the page cuts off where it does (#46) | Not offered yet |
+| `0.2.2-fj.9` | Count floats wholly inside a paragraph's space above as beside it (#47) | Not offered yet |
+| `0.2.2-fj.9` | Keep a hyphen between digits from breaking a line in Word (#48) | Not offered yet |
+| `0.2.2-fj.9` | Give an empty table column's room to the column before it (#49) | Not offered yet |
+| `0.2.2-fj.9` | Keep table words in their column and span titles over empty cells (#50) | Not offered yet |
+| `0.2.2-fj.9` | Indent text beside a float from the column when it sits past the float's edge (#51) | Not offered yet |
+| `0.2.2-fj.9` | Fit paragraphs in text boxes to their PDF lines (#52) | Not offered yet |
+| `0.2.2-fj.9` | Fit list items to their PDF lines (#53) | Not offered yet |
+| `0.2.2-fj.9` | Fit paragraphs beside a float on their left on single-column pages (#54) | Not offered yet |
+| `0.2.2-fj.9` | Fit paragraphs in a stand-in set with a character scale (#55) | Not offered yet |
+| `0.2.2-fj.9` | Keep a column pinned when its one-line paragraphs can't wrap (#56) | Not offered yet |
+| `0.2.2-fj.9` | Fit paragraphs beside a float on their right on single-column pages (#57) | Not offered yet |
+| `0.2.2-fj.9` | Keep slight expanded character spacing in body text set in a face Word has (#58) | Not offered yet |
+| `0.2.2-fj.9` | Wrap text round a picture only on the sides the PDF sets it, where columns don't flow (#59) | Not offered yet |
+| `0.2.2-fj.9` | Keep a ragged line's early break with the least character spacing that holds it (#60) | Not offered yet |
+| `0.2.2-fj.9` | Leave a list item's marker out of its sizes, so a larger bullet doesn't stretch its first line (#61) | Not offered yet |
+| `0.2.2-fj.9` | Keep a hyphenated word whole where the PDF moves it to the next line and spacing can't hold the break (#62) | Not offered yet |
+| `0.2.2-fj.9` | Fit ragged paragraphs that end in a note mark (#63) | Not offered yet |
+| `0.2.2-fj.9` | Leave room past the text ending beside a text box for the lines a fit widens (#64) | Not offered yet |
+| `0.2.2-fj.9` | Join a table's staggered header lines into one row (#65) | Not offered yet |
+| `0.2.2-fj.9` | Keep a hanging indent's first line at the room's edge from reading as centred (#66) | Not offered yet |
+| `0.2.2-fj.9` | Draw a gradient under text that no figure keeps as the text's ground (#68) | Not offered yet |
+| `0.2.2-fj.9` | Judge a scan's ink against its paper, so a phone photo's grey page isn't one picture (#67) | Not offered yet |
+| `0.2.2-fj.9` | Read invisible text a clip would hide: OCRmyPDF's text on a page it turns (#69) | Not offered yet |
+| `0.2.2-fj.9` | Keep an OCR layer's vowel signs and the letters its font shares a glyph between (#71) | Not offered yet |
+| `0.2.2-fj.9` | Find a turned scan's rules and pictures (#70) | Not offered yet |
+| `0.2.2-fj.9` | Set an OCR layer's words out in Word's widths, each reaching to the next word (#72) | Not offered yet |
