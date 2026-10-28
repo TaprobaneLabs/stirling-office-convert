@@ -22,6 +22,9 @@ final class ScanPaper {
     /** Luma levels on each side of a level that count for it, so the paper's noise makes one peak. */
     private static final int SPREAD = 3;
 
+    /** The share of the light grey pixels at or below the paper's level, at least: the paper is lighter than most of them. */
+    private static final float PAPER_SHARE = 0.6f;
+
     /** At most about this many pixels are read: every n-th pixel of every n-th row. */
     private static final int SAMPLES = 250_000;
 
@@ -29,8 +32,10 @@ final class ScanPaper {
 
     /**
      * How far the scan's paper is below {@link #WHITE}, or 0 when it is at least that light or can't be told. The
-     * paper is the most common luma among grey pixels at least {@link #DARKEST_PAPER} light: text and pictures cover
-     * less of a page than its paper does.
+     * paper is the most common luma among grey pixels at least {@link #DARKEST_PAPER} light (text and pictures cover
+     * less of a page than its paper does), or the level {@link #PAPER_SHARE} of them reach when that is lighter: a
+     * neutral-grey graphic can out-count paper whose light varies, spread over many levels, and the graphic would then
+     * no longer count as ink.
      */
     static int shift(BufferedImage img) {
         int w = img.getWidth();
@@ -66,6 +71,21 @@ final class ScanPaper {
                 best = near;
             }
         }
-        return paper < 0 ? 0 : Math.max(0, WHITE - paper);
+        if (paper < 0) {
+            return 0;
+        }
+        int total = 0;
+        for (int level = DARKEST_PAPER; level < 256; level++) {
+            total += counts[level];
+        }
+        int seen = 0;
+        for (int level = DARKEST_PAPER; level < 256; level++) {
+            seen += counts[level];
+            if (seen >= PAPER_SHARE * total) {
+                paper = Math.max(paper, level);
+                break;
+            }
+        }
+        return Math.max(0, WHITE - paper);
     }
 }

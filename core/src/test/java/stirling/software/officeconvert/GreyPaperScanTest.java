@@ -114,6 +114,37 @@ class GreyPaperScanTest {
         assertTrue(body.contains("an OCR layer line 6"), body);
     }
 
+    /**
+     * White paper whose light varies over many levels (luma 230 to 255) and a neutral-grey graphic (luma 180) over a
+     * third of the page: the graphic out-counts every one of the paper's levels, and is still a picture.
+     */
+    @Test
+    void aGreyGraphicOnUnevenWhitePaperStaysAPicture() throws Exception {
+        BufferedImage img = new BufferedImage(px(612), px(792), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = img.createGraphics();
+        for (int y = 0; y < img.getHeight(); y++) {
+            int level = 255 - 25 * y / img.getHeight();
+            g.setColor(new Color(level, level, level));
+            g.drawLine(0, y, img.getWidth(), y);
+        }
+        g.setColor(new Color(180, 180, 180));
+        g.fillRect(px(40), px(40), px(532), px(300));
+        g.setColor(new Color(30, 30, 30));
+        g.setFont(new Font(Font.SERIF, Font.PLAIN, 22));
+        for (int i = 0; i < 12; i++) {
+            g.drawString("Body text under the grey panel with an OCR layer line " + i, px(72), px(400 + i * 16));
+        }
+        g.dispose();
+        Path pdf = scan(img, cs -> {
+            for (int i = 0; i < 12; i++) {
+                hidden(cs, 72, 792 - (400 + i * 16), "Body text under the grey panel with an OCR layer line " + i);
+            }
+        });
+        String body = body(pdf);
+        assertTrue(body.contains("<w:drawing>"), body);
+        assertTrue(body.contains("an OCR layer line 6"), body);
+    }
+
     private interface Layer {
         void draw(PDPageContentStream cs) throws IOException;
     }
