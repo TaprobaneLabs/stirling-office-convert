@@ -179,6 +179,36 @@ class GradientGroundTest {
         assertTrue(shown.getRed() > 180 && shown.getGreen() < 80, "the ground keeps the draw on it: " + shown);
     }
 
+    @Test
+    void overlappingGroundsAreOneThatKeepsAnImageOnBoth() throws Exception {
+        Path docx = docx("overlap", (doc, cs) -> {
+            band(cs, 200, 300, new float[] {0.85f, 0.9f, 1f}, new float[] {0.6f, 0.75f, 0.95f});
+            body(cs, 72, 450);
+            // a second tint from 450 pt to 600 pt up the page over the first's top, with a heading on it
+            band(cs, 450, 150, new float[] {0.95f, 0.9f, 0.8f}, new float[] {0.9f, 0.8f, 0.6f});
+            text(cs, 72, 570, 16, "Volcanoes of the islands");
+            // a red picture from 430 pt to 460 pt up the page: inside the first tint, a third of it across the second's
+            // lower edge, so the second leaves it to the first; apart, its picture covered it where they overlap
+            BufferedImage red = new BufferedImage(40, 40, BufferedImage.TYPE_INT_RGB);
+            for (int y = 0; y < 40; y++) {
+                for (int x = 0; x < 40; x++) {
+                    red.setRGB(x, y, 0xD02020);
+                }
+            }
+            cs.drawImage(LosslessFactory.createFromImage(doc, red), 300, 430, 100, 30);
+        });
+        BufferedImage ground = picture(docx, W, 400);
+        // 350 pt across and 455 pt up the page, where the two tints overlap: 145 pt below the ground's top, at 600 pt
+        Color shown = new Color(ground.getRGB(Math.round(350 / W * ground.getWidth()),
+                Math.round(145 / 400f * ground.getHeight())));
+        assertTrue(shown.getRed() > 180 && shown.getGreen() < 80, "the one ground keeps the picture: " + shown);
+        String xml;
+        try (ZipFile zip = new ZipFile(docx.toFile())) {
+            xml = new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
+        }
+        assertTrue(!extents(xml).contains("612x150"), "no picture of the second tint covers it: " + extents(xml));
+    }
+
     /**
      * The tint from 200 pt to 500 pt up the page under five lines of text, then a red picture at half opacity 100 pt
      * wide, {@code height} high from {@code bottom}, across its lower edge.

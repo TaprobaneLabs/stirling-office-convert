@@ -893,10 +893,35 @@ public final class PageAnalyzer {
         }
         if (!grounds.isEmpty()) {
             List<Painted> painting = painting(page, gfx);
-            grounds.replaceAll(g -> new PageLayout.FigureItem(takingIn(g.box(), g.order(), painting), true, false,
-                    g.order()));
+            boolean merged = true;
+            while (merged) {
+                grounds.replaceAll(g -> new PageLayout.FigureItem(takingIn(g.box(), g.order(), painting), true, false,
+                        g.order()));
+                merged = mergeOverlapping(grounds);
+            }
         }
         return grounds;
+    }
+
+    /**
+     * Joins two grounds that overlap, or one grown over another, into one at the earlier painting, and says whether it
+     * did. Apart, the later one's opaque picture covered the earlier's where they overlap, and with it an image drawn
+     * only in the earlier one.
+     */
+    private static boolean mergeOverlapping(List<PageLayout.FigureItem> grounds) {
+        for (int i = 0; i < grounds.size(); i++) {
+            for (int j = i + 1; j < grounds.size(); j++) {
+                Box a = grounds.get(i).box();
+                Box b = grounds.get(j).box();
+                if (a.overlapArea(b) > 0 || Regions.insideAny(a, List.of(b), 2f) || Regions.insideAny(b, List.of(a), 2f)) {
+                    grounds.set(i, new PageLayout.FigureItem(a.union(b), true, false,
+                            Math.min(grounds.get(i).order(), grounds.get(j).order())));
+                    grounds.remove(j);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** One painting on the page but text: its box, its place in the paint order, and whether it's an image. */
