@@ -891,7 +891,27 @@ public final class PageAnalyzer {
                 grounds.set(under, new PageLayout.FigureItem(grounds.get(under).box(), true, false, order));
             }
         }
+        grounds.replaceAll(g -> new PageLayout.FigureItem(takingIn(g.box(), g.order(), gfx), true, false, g.order()));
         return grounds;
+    }
+
+    /**
+     * A ground's box grown over the images painted after its gradient that lie at least half in it, so its picture draws
+     * them with what the PDF paints over them. Placed on their own, above the picture, they hid that: GeoXO's second
+     * page sets its header's photo from the page's edge, 10 pt left of the gradient, and covered the logo and the fade
+     * into blue drawn over it.
+     */
+    private static Box takingIn(Box ground, int order, PageGraphics gfx) {
+        Box b = ground;
+        for (ImageDraw d : gfx.images()) {
+            Box shown = new Box(d.clipX(), d.clipTop(), d.clipRight(), d.clipBottom());
+            int painted = gfx.order(d);
+            if (painted != Integer.MAX_VALUE && painted > order && !Regions.insideAny(shown, List.of(ground), 2f)
+                    && shown.overlapArea(ground) >= 0.5f * shown.area()) {
+                b = b.union(shown);
+            }
+        }
+        return b;
     }
 
     /**

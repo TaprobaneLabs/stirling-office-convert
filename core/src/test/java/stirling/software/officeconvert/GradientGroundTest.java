@@ -2,6 +2,8 @@ package stirling.software.officeconvert;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -25,6 +27,9 @@ import org.apache.pdfbox.pdmodel.common.function.PDFunctionType2;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
 import org.apache.pdfbox.pdmodel.graphics.shading.PDShading;
 import org.apache.pdfbox.pdmodel.graphics.shading.PDShadingType2;
 import org.junit.jupiter.api.Test;
@@ -52,7 +57,7 @@ class GradientGroundTest {
 
     @Test
     void aTintBehindRunningTextIsDrawnBehindIt() throws Exception {
-        String xml = convert("tint", cs -> {
+        String xml = convert("tint", (doc, cs) -> {
             // a pale blue gradient from 200 pt to 500 pt up the page, five lines of body text on it
             band(cs, 200, 300, new float[] {0.85f, 0.9f, 1f}, new float[] {0.6f, 0.75f, 0.95f});
             body(cs, 72, 450);
@@ -64,7 +69,7 @@ class GradientGroundTest {
 
     @Test
     void aHeaderBandBesideAPageTallStripIsDrawnBehindItsTitle() throws Exception {
-        String xml = convert("header", cs -> {
+        String xml = convert("header", (doc, cs) -> {
             // a strip down the left edge, from 40 pt to 700 pt, that the header band below overlaps
             cs.setNonStrokingColor(0f, 0.58f, 0.79f);
             cs.addRect(0, 40, 60, 660);
@@ -80,18 +85,91 @@ class GradientGroundTest {
         assertTrue(xml.contains("Geostationary Observations"), "the title is still text");
     }
 
+    @Test
+    void aTranslucentPictureMostlyOffTheGroundIsPaintedOnce() throws Exception {
+        // the picture from 150 pt to 230 pt up the page, 30 of its 80 pt on the tint: placed on its own, above it
+        Path docx = crossing("off", 150, 80);
+        BufferedImage ground = picture(docx, W, 300);
+        // 350 pt across and 215 pt up the page, inside both: 285 pt below the tint's top
+        Color shown = new Color(ground.getRGB(Math.round(350 / W * ground.getWidth()),
+                Math.round(285 / 300f * ground.getHeight())));
+        assertTrue(shown.getGreen() > 190 && shown.getBlue() > 220,
+                "the ground shows only the tint where the picture, placed above it, crosses it: " + shown);
+    }
+
+    @Test
+    void aPictureMostlyOnTheGroundIsTakenIn() throws Exception {
+        // the picture from 180 pt to 300 pt up the page, 100 of its 120 pt on the tint: the ground grows to take it in
+        Path docx = crossing("on", 180, 120);
+        BufferedImage ground = picture(docx, W, 320);
+        // 350 pt across and 250 pt up the page: 250 pt below the ground's top, now at 500 pt
+        Color shown = new Color(ground.getRGB(Math.round(350 / W * ground.getWidth()),
+                Math.round(250 / 320f * ground.getHeight())));
+        assertTrue(shown.getRed() > 180 && shown.getGreen() < 170, "the ground draws the picture: " + shown);
+        String xml;
+        try (ZipFile zip = new ZipFile(docx.toFile())) {
+            xml = new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
+        }
+        assertTrue(!extents(xml).contains("100x120"), "and it isn't placed again: " + extents(xml));
+    }
+
+    /**
+     * The tint from 200 pt to 500 pt up the page under five lines of text, then a red picture at half opacity 100 pt
+     * wide, {@code height} high from {@code bottom}, across its lower edge.
+     */
+    private Path crossing(String name, float bottom, float height) throws IOException {
+        return docx(name, (doc, cs) -> {
+            band(cs, 200, 300, new float[] {0.85f, 0.9f, 1f}, new float[] {0.6f, 0.75f, 0.95f});
+            body(cs, 72, 450);
+            BufferedImage red = new BufferedImage(40, 40, BufferedImage.TYPE_INT_RGB);
+            for (int y = 0; y < 40; y++) {
+                for (int x = 0; x < 40; x++) {
+                    red.setRGB(x, y, 0xD02020);
+                }
+            }
+            PDImageXObject picture = LosslessFactory.createFromImage(doc, red);
+            PDExtendedGraphicsState half = new PDExtendedGraphicsState();
+            half.setNonStrokingAlphaConstant(0.5f);
+            cs.saveGraphicsState();
+            cs.setGraphicsStateParameters(half);
+            cs.drawImage(picture, 300, bottom, 100, height);
+            cs.restoreGraphicsState();
+        });
+    }
+
     /** Whether the document has a picture behind its text of about {@code width} by {@code height} points. */
     private static boolean behind(String xml, float width, float height) {
+        return groundAnchor(xml, width, height) != null;
+    }
+
+    private static String groundAnchor(String xml, float width, float height) {
         Matcher anchor = Pattern.compile("<wp:anchor[^>]*behindDoc=\"1\"[^>]*>.*?</wp:anchor>", Pattern.DOTALL).matcher(xml);
         while (anchor.find()) {
             Matcher e = Pattern.compile("<wp:extent cx=\"(\\d+)\" cy=\"(\\d+)\"").matcher(anchor.group());
             if (anchor.group().contains("<pic:pic") && e.find()
                     && Math.abs(Long.parseLong(e.group(1)) / 12700f - width) < 2
                     && Math.abs(Long.parseLong(e.group(2)) / 12700f - height) < 2) {
-                return true;
+                return anchor.group();
             }
         }
-        return false;
+        return null;
+    }
+
+    /** The picture of about {@code width} by {@code height} points behind the text of {@code docx}. */
+    private static BufferedImage picture(Path docx, float width, float height) throws IOException {
+        try (ZipFile zip = new ZipFile(docx.toFile())) {
+            String xml = new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
+            String anchor = groundAnchor(xml, width, height);
+            assertTrue(anchor != null, "a picture behind the text: " + extents(xml));
+            Matcher embed = Pattern.compile("r:embed=\"([^\"]+)\"").matcher(anchor);
+            assertTrue(embed.find(), "the picture's media");
+            String rels = new String(zip.getInputStream(zip.getEntry("word/_rels/document.xml.rels")).readAllBytes(),
+                    StandardCharsets.UTF_8);
+            Matcher target = Pattern.compile("<Relationship [^>]*Id=\"" + embed.group(1) + "\"[^>]*Target=\"([^\"]+)\"")
+                    .matcher(rels);
+            assertTrue(target.find(), "the picture's file");
+            return javax.imageio.ImageIO.read(zip.getInputStream(zip.getEntry("word/" + target.group(1))));
+        }
     }
 
     private static List<String> extents(String xml) {
@@ -104,21 +182,26 @@ class GradientGroundTest {
     }
 
     private interface Page {
-        void draw(PDPageContentStream cs) throws IOException;
+        void draw(PDDocument doc, PDPageContentStream cs) throws IOException;
     }
 
-    private String convert(String name, Page page) throws IOException {
+    private Path docx(String name, Page page) throws IOException {
         Path pdf = dir.resolve(name + ".pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage p = new PDPage(PDRectangle.LETTER);
             doc.addPage(p);
             try (PDPageContentStream cs = new PDPageContentStream(doc, p)) {
-                page.draw(cs);
+                page.draw(doc, cs);
             }
             doc.save(pdf.toFile());
         }
         Path docx = dir.resolve(name + ".docx");
         PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
+        return docx;
+    }
+
+    private String convert(String name, Page page) throws IOException {
+        Path docx = docx(name, page);
         try (ZipFile zip = new ZipFile(docx.toFile())) {
             return new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
         }

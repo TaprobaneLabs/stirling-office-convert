@@ -116,17 +116,51 @@ final class MediaPlacer {
             }
             return pic;
         }
+        if (item instanceof PageLayout.FigureItem fi && fi.ground()) {
+            MediaEncoder.Encoded enc = media.ground(document.getPage(page.index()), page.index(), toDisplay, fi.box(),
+                    placedAbove(fi, page, toDisplay));
+            Picture pic = enc == null ? null : stored(enc, fi.box());
+            if (pic != null) {
+                pic.paintOrder = fi.order();
+            }
+            return pic;
+        }
         if (item instanceof PageLayout.FigureItem fi) {
             Picture pic = figurePicture(fi.box(), page, toDisplay, !fi.backdrop());
             if (pic != null && !fi.backdrop()) {
                 pic.description = FigureWords.text(page, fi.box());
             }
-            if (pic != null && fi.backdrop() && fi.order() >= 0 && fi.order() != Integer.MAX_VALUE) {
-                pic.paintOrder = fi.order();
-            }
             return pic;
         }
         return null;
+    }
+
+    /**
+     * The images a ground's picture leaves out, by their bounds on the PDF page: those painted after its gradient that
+     * cross its edge. They are placed on their own above it ({@code PageAnalyzer.addImages} keeps only images inside a
+     * drawn region in its picture), so drawn in it too, a translucent one would be painted twice where they overlap.
+     * Images painted before it stay in: the picture is opaque and covers their own placing.
+     */
+    private static List<java.awt.geom.Rectangle2D> placedAbove(PageLayout.FigureItem ground, PageData page,
+            java.awt.geom.AffineTransform toDisplay) throws IOException {
+        Box g = ground.box();
+        List<java.awt.geom.Rectangle2D> above = new ArrayList<>();
+        try {
+            java.awt.geom.AffineTransform toPdf = toDisplay.createInverse();
+            for (ImageDraw d : page.graphics().images()) {
+                Box shown = new Box(d.clipX(), d.clipTop(), d.clipRight(), d.clipBottom());
+                boolean inside = shown.x() >= g.x() - 2 && shown.top() >= g.top() - 2 && shown.right() <= g.right() + 2
+                        && shown.bottom() <= g.bottom() + 2;
+                int order = page.graphics().order(d);
+                if (!inside && shown.overlapArea(g) > 0 && order != Integer.MAX_VALUE && order > ground.order()) {
+                    above.add(toPdf.createTransformedShape(new java.awt.geom.Rectangle2D.Float(d.x(), d.top(),
+                            d.right() - d.x(), d.bottom() - d.top())).getBounds2D());
+                }
+            }
+        } catch (java.awt.geom.NoninvertibleTransformException e) {
+            throw new IOException("The page's transform can't be inverted", e);
+        }
+        return above;
     }
 
     Picture veil(PageLayout.Veil veil, PageData page, List<Box> shown) throws IOException {

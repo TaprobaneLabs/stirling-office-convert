@@ -39,11 +39,16 @@ final class FigureRenderer extends PDFRenderer {
 
     private static final double PAPER_SPAN = 0.9;
 
+    /** An image left out is the one drawn within this many points of its bounds. */
+    private static final double SAME_IMAGE = 0.5;
+
     private final boolean text;
     private final boolean paper;
     /** Without text, the page's reading direction: glyphs set in another (turned text) are drawn all the same. */
     private final int turnedFrom;
     private Rectangle2D span;
+    /** Images the next render leaves out, by their bounds on the PDF page. */
+    private List<Rectangle2D> leftOut = List.of();
 
     FigureRenderer(PDDocument document, boolean text) {
         this(document, text, false);
@@ -94,9 +99,15 @@ final class FigureRenderer extends PDFRenderer {
         span = region;
     }
 
+    /** Leaves out of the next render the images drawn at {@code images}, their bounds on the PDF page. */
+    void leaveOut(List<Rectangle2D> images) {
+        leftOut = images;
+    }
+
     @Override
     protected PageDrawer createPageDrawer(PageDrawerParameters parameters) throws IOException {
         Rectangle2D target = span;
+        List<Rectangle2D> skipped = leftOut;
         return new PageDrawer(parameters) {
             private boolean painting;
             private final OperatorBudget budget = new OperatorBudget("rendering a figure");
@@ -186,7 +197,7 @@ final class FigureRenderer extends PDFRenderer {
 
             @Override
             public void drawImage(PDImage pdImage) throws IOException {
-                if ((!paper || painting) && ImageBudget.affordable(pdImage)) {
+                if ((!paper || painting) && ImageBudget.affordable(pdImage) && !leftOut()) {
                     super.drawImage(pdImage);
                 }
             }
@@ -207,6 +218,22 @@ final class FigureRenderer extends PDFRenderer {
                         : new Rectangle2D.Double(crop.getLowerLeftX(), crop.getLowerLeftY(), crop.getWidth(), crop.getHeight());
                 Rectangle2D on = r.createIntersection(t);
                 return on.getWidth() >= PAPER_SPAN * t.getWidth() && on.getHeight() >= PAPER_SPAN * t.getHeight();
+            }
+
+            private boolean leftOut() {
+                if (skipped.isEmpty()) {
+                    return false;
+                }
+                Rectangle2D b = getGraphicsState().getCurrentTransformationMatrix().createAffineTransform()
+                        .createTransformedShape(new Rectangle2D.Double(0, 0, 1, 1)).getBounds2D();
+                for (Rectangle2D r : skipped) {
+                    if (Math.abs(r.getMinX() - b.getMinX()) < SAME_IMAGE && Math.abs(r.getMinY() - b.getMinY()) < SAME_IMAGE
+                            && Math.abs(r.getMaxX() - b.getMaxX()) < SAME_IMAGE
+                            && Math.abs(r.getMaxY() - b.getMaxY()) < SAME_IMAGE) {
+                        return true;
+                    }
+                }
+                return false;
             }
 
             private Rectangle2D clipBounds() {

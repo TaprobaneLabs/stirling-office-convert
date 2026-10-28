@@ -135,6 +135,11 @@ public record PageLayout(
             return backdrop;
         }
 
+        /** Whether this is a gradient's ground ({@code PageAnalyzer.grounds}): a backdrop layered at its first painting. */
+        public boolean ground() {
+            return backdrop && !paper && order >= 0 && order != Integer.MAX_VALUE;
+        }
+
         public float top() {
             return box.top();
         }
