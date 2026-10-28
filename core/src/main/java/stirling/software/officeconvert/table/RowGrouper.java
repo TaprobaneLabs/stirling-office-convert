@@ -16,6 +16,12 @@ final class RowGrouper {
 
     private static final float DENSE_ROW_EM = 1.6f;
 
+    /** Lines whose baselines are less than this share of their size apart sit side by side, not one under another. */
+    private static final float STAGGERED = 0.75f;
+
+    /** Lines whose baselines are less than this share of their size apart are one line set a little off its baseline. */
+    private static final float OFF_BASELINE = 0.35f;
+
     private static final Set<String> CONNECTORS =
             Set.of(
                     "and", "or", "of", "the", "to", "for", "in", "on", "with", "a", "an", "by",
@@ -113,6 +119,8 @@ final class RowGrouper {
             i = runEnd + 1;
         }
 
+        joinStaggered();
+
         List<LineRange> rows = new ArrayList<>();
         int first = 0;
         for (int li = 1; li < n; li++) {
@@ -123,6 +131,42 @@ final class RowGrouper {
         }
         rows.add(new LineRange(first, n - 1));
         return rows;
+    }
+
+    /**
+     * Lines set too close together to stand one under another share a row. A row's cells a point or two off one baseline
+     * (a scan's OCR, cells of mixed sizes) are one row wherever they are. Above the table's first figure, its header, lines
+     * closer than their text's height run side by side, staggered across columns: USGS Fact Sheet 2024-3052's Table 1 sets
+     * its columns' header lines half a line apart, took a row in Word for each, none shorter than its text, and grew by two
+     * lines. Below that, such lines are rows of their own whose cells span two lines, or two tables side by side.
+     */
+    private void joinStaggered() {
+        int header = 0;
+        while (header < lines.size() && !hasFigures(lines.get(header))) {
+            header++;
+        }
+        for (int li = 1; li < lines.size(); li++) {
+            float size = Math.max(lines.get(li).line().fontSize(), lines.get(li - 1).line().fontSize());
+            boolean close = pitch(li) < OFF_BASELINE * size || li < header && pitch(li) < STAGGERED * size;
+            if (rowOf[li] != rowOf[li - 1] && !ruledBefore[li] && close) {
+                int row = rowOf[li];
+                for (int m = li; m < lines.size() && rowOf[m] == row; m++) {
+                    rowOf[m] = rowOf[li - 1];
+                }
+            }
+        }
+    }
+
+    /** Whether a line holds a figure: a digit in any of its words. */
+    private static boolean hasFigures(CellLine l) {
+        for (int c = 0; c < l.columns(); c++) {
+            for (PdfWord w : l.has(c) ? l.cell(c) : List.<PdfWord>of()) {
+                if (w.text().chars().anyMatch(Character::isDigit)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void attachRun(int from, int to) {
