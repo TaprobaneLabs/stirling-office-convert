@@ -122,7 +122,7 @@ final class RowGrouper {
             i = runEnd + 1;
         }
 
-        joinStaggered();
+        joinStaggered(anchor);
 
         List<LineRange> rows = new ArrayList<>();
         int first = 0;
@@ -143,9 +143,12 @@ final class RowGrouper {
      * staggered: USGS Fact Sheet 2024-3052's Table 1 sets its columns' header lines half a line apart, took a row in Word
      * for each, none shorter than its text, and grew by two lines. Elsewhere such lines are rows of their own whose cells
      * span two lines or two tables side by side, and a row's small second line can sit that close above the next row's
-     * larger label.
+     * larger label. A line off its row's baseline takes the lines grouped with it along unless they hold an entry of
+     * their own, a full line with a figure in a column of figures: a scan's OCR set each date of a bank statement a few
+     * points below the rest of its row, the date was taken for the start of the row below, and taking that row along ran
+     * the rows together, three to five to a cell. Lines of a table's text, such as NIST SP 800-218's, still go together.
      */
-    private void joinStaggered() {
+    private void joinStaggered(boolean[] anchor) {
         int header = 0;
         while (header < lines.size() && !hasFigures(lines.get(header))) {
             header++;
@@ -156,14 +159,36 @@ final class RowGrouper {
             float size = Math.max(above, here);
             boolean staggered = li < header && Math.abs(above - here) <= SAME_SIZE * size
                     && pitch(li) < STAGGERED * size;
-            boolean close = pitch(li) < OFF_BASELINE * size || staggered;
-            if (rowOf[li] != rowOf[li - 1] && !ruledBefore[li] && close) {
-                int row = rowOf[li];
+            boolean offBaseline = pitch(li) < OFF_BASELINE * size;
+            if (rowOf[li] == rowOf[li - 1] || ruledBefore[li]) {
+                continue;
+            }
+            int row = rowOf[li];
+            boolean restIsRow = false;
+            for (int m = li + 1; m < lines.size() && rowOf[m] == row; m++) {
+                restIsRow |= anchor[m] && fillsFigureColumn(lines.get(m));
+            }
+            if (offBaseline && restIsRow) {
+                rowOf[li] = rowOf[li - 1];
+            } else if (offBaseline || staggered) {
                 for (int m = li; m < lines.size() && rowOf[m] == row; m++) {
                     rowOf[m] = rowOf[li - 1];
                 }
             }
         }
+    }
+
+    /**
+     * Whether a line sets a figure in one of the table's columns of figures. The column alone isn't enough: a header's
+     * second line, such as "(USD)" under "Price", sits in one too.
+     */
+    private boolean fillsFigureColumn(CellLine l) {
+        for (int c = 0; c < l.columns(); c++) {
+            if (l.has(c) && columns.numeric()[c] && NumericValue.looksNumeric(TextLine.joinWords(l.cell(c)))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether a line holds a figure: a digit in any of its words. */

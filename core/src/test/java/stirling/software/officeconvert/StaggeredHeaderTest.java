@@ -101,6 +101,129 @@ class StaggeredHeaderTest {
         }
     }
 
+    /**
+     * A bank statement's OCR layer, nine rows of it as read from a scan turned a little: each row's words fall about 4.5 pt
+     * from its balance on the right to its date on the left, so the date's half of a row is a line 3 pt below the
+     * other half, and was taken for the start of the row below. Joined to its own row with the lines grouped with it,
+     * it took that row along, and the rows ran together three to five to a cell.
+     */
+    private static final List<Word> STATEMENT = List.of(
+        new Word("Description", 150.8f, 175.7f, 9.0f),
+        new Word("Paid", 253.1f, 174.6f, 9.0f),
+        new Word("out", 275.8f, 174.4f, 9.0f),
+        new Word("Balance", 457.9f, 172.5f, 9.0f),
+        new Word("01", 48.6f, 188.6f, 9.0f),
+        new Word("Jan", 61.6f, 188.5f, 9.0f),
+        new Word("Refund", 151.2f, 187.6f, 9.0f),
+        new Word("85.53", 525.3f, 183.9f, 9.0f),
+        new Word("01", 48.6f, 200.5f, 9.0f),
+        new Word("Jan", 61.5f, 200.4f, 9.0f),
+        new Word("Direct", 151.2f, 199.5f, 9.0f),
+        new Word("debit,", 178.2f, 199.2f, 9.0f),
+        new Word("utilities", 204.5f, 199.0f, 9.0f),
+        new Word("516.62", 418.0f, 196.9f, 9.0f),
+        new Word("602.15", 520.2f, 195.9f, 9.0f),
+        new Word("02", 48.9f, 212.8f, 11.0f),
+        new Word("Jan", 61.9f, 212.6f, 11.0f),
+        new Word("|", 145.1f, 211.7f, 11.0f),
+        new Word("ATM", 150.8f, 211.7f, 11.0f),
+        new Word("withdrawal", 173.2f, 211.4f, 11.0f),
+        new Word("|", 247.0f, 210.7f, 11.0f),
+        new Word("325.75", 315.7f, 209.9f, 11.0f),
+        new Word("|", 349.2f, 209.6f, 11.0f),
+        new Word("|", 451.4f, 208.5f, 11.0f),
+        new Word("276.40", 520.2f, 207.8f, 11.0f),
+        new Word("02", 48.9f, 224.6f, 9.0f),
+        new Word("Jan", 61.9f, 224.5f, 9.0f),
+        new Word("Card", 151.2f, 223.6f, 9.0f),
+        new Word("payment,", 174.6f, 223.4f, 9.0f),
+        new Word("213.18", 316.1f, 222.0f, 9.0f),
+        new Word("63.22", 525.6f, 219.9f, 9.0f),
+        new Word("_grocery", 147.2f, 234.0f, 10.0f),
+        new Word("03", 49.3f, 247.3f, 11.0f),
+        new Word("Jan", 62.3f, 247.2f, 11.0f),
+        new Word("|", 145.1f, 246.4f, 11.0f),
+        new Word("Salary", 151.5f, 246.3f, 11.0f),
+        new Word("|", 247.3f, 245.4f, 11.0f),
+        new Word("|", 349.6f, 244.4f, 11.0f),
+        new Word("494.17", 418.0f, 243.7f, 11.0f),
+        new Word("|", 451.8f, 243.3f, 11.0f),
+        new Word("557.39", 520.6f, 242.7f, 11.0f),
+        new Word("03", 49.3f, 259.2f, 11.0f),
+        new Word("Jan", 62.3f, 259.1f, 11.0f),
+        new Word("Refund", 151.9f, 258.2f, 11.0f),
+        new Word("280.19", 316.4f, 256.6f, 11.0f),
+        new Word("277.20", 520.9f, 254.5f, 11.0f),
+        new Word("04", 49.3f, 271.1f, 11.0f),
+        new Word("Jan", 62.3f, 270.9f, 11.0f),
+        new Word("|", 145.1f, 270.1f, 11.0f),
+        new Word("ATM", 151.5f, 270.0f, 11.0f),
+        new Word("withdrawal", 173.9f, 269.8f, 11.0f),
+        new Word("|", 247.7f, 269.0f, 11.0f),
+        new Word("|", 349.9f, 267.9f, 11.0f),
+        new Word("822.11", 418.7f, 267.2f, 11.0f),
+        new Word("|", 452.2f, 266.8f, 11.0f),
+        new Word("1,099.31", 513.4f, 266.2f, 11.0f),
+        new Word("04", 49.3f, 283.0f, 11.0f),
+        new Word("Jan", 62.6f, 282.8f, 11.0f),
+        new Word("Refund", 151.9f, 281.9f, 11.0f),
+        new Word("2,064.50", 410.8f, 279.4f, 11.0f),
+        new Word("3,163.81", 513.0f, 278.4f, 11.0f),
+        new Word("05", 49.7f, 294.8f, 11.0f),
+        new Word("Jan", 62.6f, 294.7f, 11.0f),
+        new Word("|", 145.8f, 293.8f, 11.0f),
+        new Word("Transfer", 151.5f, 293.8f, 11.0f),
+        new Word("in", 190.1f, 293.4f, 11.0f),
+        new Word("|", 248.0f, 292.7f, 11.0f),
+        new Word("|", 350.3f, 291.7f, 11.0f),
+        new Word("1,130.49", 411.1f, 291.0f, 11.0f),
+        new Word("|", 452.5f, 290.6f, 11.0f),
+        new Word("4,294.30", 513.0f, 289.9f, 11.0f)
+    );
+
+    private record Word(String text, float x, float baseline, float size) {}
+
+    @Test
+    void aTiltedScansRowsKeepTheirOwnDates() throws Exception {
+        String xml = convert(cs -> {
+            for (Word w : STATEMENT) {
+                text(cs, PLAIN, w.size(), w.x(), H - w.baseline(), w.text());
+            }
+        });
+        List<String> found = rows(xml, "Description");
+        long entries = found.stream().filter(r -> r.contains("Jan")).count();
+        assertEquals(9, entries, "a row for each entry: " + found);
+        for (String row : found) {
+            assertTrue(row.split("Jan", -1).length <= 2, "one date to a row: " + row);
+        }
+    }
+
+    @Test
+    void aHeadersSecondLineOverFiguresStaysInTheHeader() throws Exception {
+        String[][] rows = {
+            {"Widget", "Small blue widget", "12.50"}, {"Gadget", "Folding gadget", "8.75"},
+            {"Bracket", "Steel wall bracket", "4.20"}, {"Hinge", "Brass door hinge", "3.10"},
+            {"Clamp", "Bench clamp", "15.00"},
+        };
+        String xml = convert(cs -> {
+            // "Product" and "Price" in 12 pt, "Description" 3.5 pt below them in 8 pt, "(USD)" under "Price" 13.5 pt
+            // below them: "(USD)" sits in the column of prices but holds no figure, so it stays with the header
+            text(cs, BOLD, 12, 72, H - 100, "Product");
+            text(cs, BOLD, 12, 400, H - 100, "Price");
+            text(cs, BOLD, 8, 180, H - 103.5f, "Description");
+            text(cs, BOLD, 8, 400, H - 113.5f, "(USD)");
+            for (int r = 0; r < rows.length; r++) {
+                text(cs, PLAIN, 10, 72, H - 135 - 15 * r, rows[r][0]);
+                text(cs, PLAIN, 10, 180, H - 135 - 15 * r, rows[r][1]);
+                text(cs, PLAIN, 10, 400, H - 135 - 15 * r, rows[r][2]);
+            }
+        });
+        List<String> found = rows(xml, "Product");
+        String header = found.getFirst();
+        assertTrue(header.contains("Product") && header.contains("Description") && header.contains("Price")
+                && header.contains("(USD)"), "the header's lines share its row: " + found);
+    }
+
     @Test
     void aHeadingOverDatesKeepsItsOwnRow() throws Exception {
         String[] dates = {"Aug 20", "Aug 27", "Sep 03", "Sep 10"};
