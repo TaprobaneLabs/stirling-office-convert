@@ -10,12 +10,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HexFormat;
 
+import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.documentinterchange.markedcontent.PDPropertyList;
 import org.apache.pdfbox.pdmodel.font.PDTrueTypeFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
@@ -38,33 +40,48 @@ class OcrUnmappedCodesTest {
 
     @Test
     void aCodeTheOcrLayersMapLeavesOutIsPartOfTheLetterBefore() throws Exception {
-        String text = convert(RenderingMode.NEITHER);
+        String text = convert("ab$cd efgh", null);
         assertTrue(text.contains("abcd efgh"), text);
         assertFalse(text.contains("$"), text);
     }
 
+    @Test
+    void actualTextStillReplacesGlyphsTheMapLeavesOut() throws Exception {
+        // A span's ActualText replaces its glyphs even when the CMap maps none of them
+        String text = convert("$$", "Total");
+        assertTrue(text.contains("Total"), text);
+    }
+
     /**
-     * "ab$cd efgh" in LiberationSans as a composite font, with a ToUnicode CMap that maps every code but the dollar
-     * sign's, as OCRmyPDF leaves out its separators' codes.
+     * {@code line} as invisible text in LiberationSans as a composite font, with a ToUnicode CMap that maps every code
+     * but the dollar sign's, as OCRmyPDF leaves out a cluster's later glyphs; in a span with {@code actual} as its
+     * ActualText when that isn't null.
      */
-    private String convert(RenderingMode mode) throws Exception {
-        String line = "ab$cd efgh";
-        Path pdf = dir.resolve("unmapped-" + mode + ".pdf");
+    private String convert(String line, String actual) throws Exception {
+        Path pdf = dir.resolve("unmapped-" + (actual == null ? "plain" : "actual") + ".pdf");
         try (PDDocument doc = new PDDocument(); InputStream ttf = PDTrueTypeFont.class.getResourceAsStream(FONT)) {
             PDPage page = new PDPage(PDRectangle.A4);
             doc.addPage(page);
             PDType0Font font = PDType0Font.load(doc, ttf, false);
             try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                if (actual != null) {
+                    COSDictionary span = new COSDictionary();
+                    span.setString(COSName.ACTUAL_TEXT, actual);
+                    cs.beginMarkedContent(COSName.getPDFName("Span"), PDPropertyList.create(span));
+                }
                 cs.beginText();
-                cs.setRenderingMode(mode);
+                cs.setRenderingMode(RenderingMode.NEITHER);
                 cs.setFont(font, 14);
                 cs.newLineAtOffset(72, 720);
                 cs.showText(line);
                 cs.endText();
+                if (actual != null) {
+                    cs.endMarkedContent();
+                }
             }
             StringBuilder chars = new StringBuilder();
             int mapped = 0;
-            for (char c : line.toCharArray()) {
+            for (char c : (line + "ab").toCharArray()) {
                 String code = HexFormat.of().withUpperCase().formatHex(font.encode(String.valueOf(c)));
                 if (c != '$' && chars.indexOf("<" + code + ">") < 0) {
                     chars.append('<').append(code).append("> <").append(String.format("%04X", (int) c)).append(">\n");
@@ -81,7 +98,7 @@ class OcrUnmappedCodesTest {
             font.getCOSObject().setItem(COSName.TO_UNICODE, map);
             doc.save(pdf.toFile());
         }
-        Path txt = dir.resolve("unmapped-" + mode + ".txt");
+        Path txt = dir.resolve("unmapped-" + (actual == null ? "plain" : "actual") + ".txt");
         PdfToText.convert(pdf, txt, PdfToDocx.Options.defaults());
         return Files.readString(txt, StandardCharsets.UTF_8);
     }

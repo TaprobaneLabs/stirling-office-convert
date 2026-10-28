@@ -462,7 +462,8 @@ final class GlyphCollector extends PDFStreamEngine {
         boolean invisible = mode == RenderingMode.NEITHER || mode == RenderingMode.NEITHER_CLIP;
         // Invisible text (an OCR layer's) draws nothing to recover its characters from: OCRmyPDF's glyphless font gives
         // many characters one empty glyph, which turned Sinhala and Tamil letters into the first character mapped to it
-        if (invisible && tp.getUnicode() != null && tp.getUnicode().isEmpty()) {
+        // Inside a span with ActualText the glyph stays, as a placeholder that text replaces
+        if (invisible && outerActual == null && tp.getUnicode() != null && tp.getUnicode().isEmpty()) {
             carry(tp);
             return;
         }
