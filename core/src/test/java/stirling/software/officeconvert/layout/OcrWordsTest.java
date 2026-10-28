@@ -1,6 +1,7 @@
 package stirling.software.officeconvert.layout;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -65,6 +66,19 @@ class OcrWordsTest {
         for (int i = 0; i < glyphs.size(); i++) {
             assertSame(glyphs.get(i), out.get(i));
         }
+    }
+
+    @Test
+    void ocrFontsAreKnownByTheirNamesStart() {
+        assertTrue(OcrWords.ocrText(glyph("a", 72, 5, NOTO, 0)));
+        assertTrue(OcrWords.ocrText(glyph("a", 72, 5, font("GlyphLessFont"), 0)));
+        assertTrue(OcrWords.ocrText(glyph("a", 72, 5, font("ABCDEF+Occulta"), 0)));
+        assertFalse(OcrWords.ocrText(glyph("a", 72, 5, font("ABCDEF+Helvetica"), 0)));
+        assertFalse(OcrWords.ocrText(glyph("a", 72, 5, font("ABCDEF+MyNotoSans"), 0)));
+    }
+
+    private static FontInfo font(String ps) {
+        return new FontInfo("Arial", false, false, false, false, false, ps, true);
     }
 
     /** A word drawn as OCRmyPDF draws it: equal letters across {@code width}, then a space; returns where it ends. */

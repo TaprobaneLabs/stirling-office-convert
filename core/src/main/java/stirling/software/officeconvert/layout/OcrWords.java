@@ -2,7 +2,6 @@ package stirling.software.officeconvert.layout;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 import stirling.software.officeconvert.build.SubstituteMetrics;
 import stirling.software.officeconvert.extract.Glyph;
@@ -41,14 +40,25 @@ final class OcrWords {
 
     private OcrWords() {}
 
-    /** Whether a glyph is an OCR tool's invisible text: OCRmyPDF's NotoSans and Occulta, Tesseract's GlyphLessFont. */
+    /** The fonts OCR tools draw their text in: OCRmyPDF's NotoSans and Occulta, Tesseract's GlyphLessFont. */
+    private static final String[] OCR_FONTS = {"notosans", "occulta", "glyphless"};
+
+    /**
+     * Whether a glyph is an OCR tool's invisible text, by its font's name after a subset tag (six letters and a plus).
+     * Only the name's start is compared, in place: the name comes from the PDF, and this runs for every glyph.
+     */
     static boolean ocrText(Glyph g) {
-        if (!g.invisible || g.font.postScriptName() == null) {
+        String ps = g.font.postScriptName();
+        if (!g.invisible || ps == null) {
             return false;
         }
-        String ps = g.font.postScriptName();
-        String base = ps.substring(ps.indexOf('+') + 1).toLowerCase(Locale.ROOT);
-        return base.startsWith("glyphless") || base.startsWith("occulta") || base.startsWith("notosans");
+        int start = ps.length() > 7 && ps.charAt(6) == '+' ? 7 : 0;
+        for (String name : OCR_FONTS) {
+            if (ps.regionMatches(true, start, name, 0, name.length())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A word's letters and the space drawn right after it (-1 when none), as indexes into the glyphs. */
