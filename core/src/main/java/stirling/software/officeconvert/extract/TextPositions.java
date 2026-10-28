@@ -4,13 +4,19 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.Map;
+import java.util.Optional;
 import java.util.WeakHashMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.fontbox.cmap.CMap;
+import org.apache.fontbox.cmap.CMapParser;
 import org.apache.fontbox.ttf.TrueTypeFont;
 import org.apache.fontbox.util.BoundingBox;
 import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSStream;
+import org.apache.pdfbox.io.RandomAccessRead;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDCIDFont;
@@ -23,6 +29,7 @@ import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType3Font;
 import org.apache.pdfbox.pdmodel.font.encoding.GlyphList;
 import org.apache.pdfbox.pdmodel.graphics.state.PDGraphicsState;
+import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
 import org.apache.pdfbox.text.TextPosition;
 import org.apache.pdfbox.util.Matrix;
 import org.apache.pdfbox.util.Vector;
@@ -34,6 +41,8 @@ final class TextPositions {
     private static final GlyphList GLYPHS = glyphs();
 
     private final Map<COSDictionary, Float> fontHeights = new WeakHashMap<>();
+    // Composite fonts' ToUnicode CMaps, read for invisible text (unicode())
+    private final Map<COSDictionary, Optional<CMap>> textMaps = new WeakHashMap<>();
     private int pageRotation;
     private PDRectangle pageSize;
     private Matrix translateMatrix;
@@ -99,7 +108,7 @@ final class TextPositions {
             spaceWidthText = 1.0f;
         }
         float spaceWidthDisplay = spaceWidthText * trm.getScalingFactorX();
-        String unicode = font.toUnicode(code, GLYPHS);
+        String unicode = unicode(state, font, code);
         if (unicode == null) {
             if (!(font instanceof PDSimpleFont)) {
                 return null;
@@ -115,6 +124,41 @@ final class TextPositions {
         return new TextPosition(pageRotation, pageSize.getWidth(), pageSize.getHeight(), translated, nextX, nextY,
                 Math.abs(dyDisplay), dxDisplay, Math.abs(spaceWidthDisplay), unicode, new int[] {code}, font, fontSize,
                 (int) (fontSize * textMatrix.getScalingFactorX()));
+    }
+
+    /**
+     * The text a glyph stands for. Invisible text in a composite font with a ToUnicode CMap, as OCR layers are written,
+     * is read through that CMap alone, and a code it leaves out is part of the cluster before it: an empty string, whose
+     * advance GlyphCollector gives that cluster. OCRmyPDF 17 shapes Sinhala and Tamil text in its glyphless Occulta and
+     * maps a cluster's text to its first glyph only, with no advance, so a later glyph carries the advance and no text.
+     * For such a code PDFBox falls back to the embedded font's cmap (PDFBOX-5324), whose first character for Occulta's
+     * shared empty glyph came out inside the words: "$" all through Tamil text and "&" through Sinhala.
+     */
+    private String unicode(PDGraphicsState state, PDFont font, int code) throws IOException {
+        RenderingMode mode = state.getTextState().getRenderingMode();
+        if (font instanceof PDType0Font && (mode == RenderingMode.NEITHER || mode == RenderingMode.NEITHER_CLIP)) {
+            CMap map = textMaps.computeIfAbsent(font.getCOSObject(), f -> Optional.ofNullable(textMap(f)))
+                    .orElse(null);
+            if (map != null) {
+                String text = map.toUnicode(code);
+                return text == null ? "" : text;
+            }
+        }
+        return font.toUnicode(code, GLYPHS);
+    }
+
+    /** A font's own ToUnicode CMap when it maps codes to text, else null (PDFBox's own reading then applies). */
+    private static CMap textMap(COSDictionary font) {
+        if (!(font.getDictionaryObject(COSName.TO_UNICODE) instanceof COSStream stream)) {
+            return null;
+        }
+        try (RandomAccessRead in = stream.createView()) {
+            CMap map = new CMapParser().parse(in);
+            return map != null && map.hasUnicodeMappings() ? map : null;
+        } catch (IOException | RuntimeException e) {
+            LOG.debug("Unreadable ToUnicode CMap", e);
+            return null;
+        }
     }
 
     private static float fontHeight(PDFont font) throws IOException {
