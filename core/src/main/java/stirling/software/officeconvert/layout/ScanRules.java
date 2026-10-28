@@ -43,12 +43,14 @@ final class ScanRules {
         }
         int w = img.getWidth();
         int h = img.getHeight();
+        // Grey paper (a phone's photo of the page) lowers the limit by as much as it is darker than white.
+        int limit = DARK - ScanPaper.shift(img);
         boolean[] dark = new boolean[w * h];
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 int rgb = img.getRGB(x, y);
                 int lum = (((rgb >> 16) & 0xFF) * 299 + ((rgb >> 8) & 0xFF) * 587 + (rgb & 0xFF) * 114) / 1000;
-                dark[y * w + x] = lum < DARK;
+                dark[y * w + x] = lum < limit;
             }
         }
         float sx = (scan.right() - scan.x()) / w;
