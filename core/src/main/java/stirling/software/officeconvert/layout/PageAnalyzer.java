@@ -210,7 +210,13 @@ public final class PageAnalyzer {
             }
             return label;
         });
-        List<Box> drawn = concat(figures, backdrops);
+        List<Box> kept = new ArrayList<>(concat(figures, backdrops));
+        for (PageGraphics.VectorMark p : papers) {
+            kept.add(new Box(p.x(), p.top(), p.right(), p.bottom()));
+        }
+        List<PageLayout.FigureItem> grounds = grounds(page, marks, kept, concat(segments, furnitureLines), gfx);
+        List<Box> groundBoxes = grounds.stream().map(PageLayout.FigureItem::box).toList();
+        List<Box> drawn = concat(concat(figures, backdrops), groundBoxes);
         addImages(page, gfx.images(), drawn, ocr, segments, blocks);
         List<List<PageLayout.TextBoxItem>> labelled = figureLabels && !ocr
                 ? labelsOf(page, figures, concat(segments, boxedLabels), tables, bullets)
@@ -222,6 +228,7 @@ public final class PageAnalyzer {
         for (Box b : backdrops) {
             blocks.add(new PageLayout.FigureItem(b, true));
         }
+        blocks.addAll(grounds);
         PageGraphics.VectorMark paper = paintedPaper(page, art);
         if (paper != null) {
             papers.addFirst(paper);
@@ -240,11 +247,13 @@ public final class PageAnalyzer {
         List<PageLayout.Decoration> decorations =
                 new ArrayList<>(Decorations.leftovers(freeFills, freeRules, dots, drawn, tableBoxes, tinted, gfx::order));
         for (TextBoxFinder.Container c : containers) {
-            if (!boxes.claimed().contains(c) && (c.line() >= 0 || c.fill() >= 0) && !Regions.insideAny(c.box(), wholeDrawings, 2f)) {
+            if (!boxes.claimed().contains(c) && (c.line() >= 0 || c.fill() >= 0)
+                    && !Regions.insideAny(c.box(), concat(wholeDrawings, groundBoxes), 2f)) {
                 decorations.add(new PageLayout.Decoration(c.box(), c.fill(), c.line(), c.lineWidth(), c.rounded(), false,
                         gfx.order(c.mark())));
             }
         }
+        unfillGrounded(bands, groundBoxes);
         unfillHolders(bands, boxes, decorations, gfx);
         List<PageLayout.TextBoxItem> furniture = placed.rows(concat(furnitureLines, sideNotes), page.width());
         for (RotatedText.Block b : turned) {
@@ -843,6 +852,66 @@ public final class PageAnalyzer {
             }
         }
         return Integer.MAX_VALUE;
+    }
+
+    /**
+     * Gradients painted with the {@code sh} operator under text, across at least {@link #PANEL_WIDTH} of the page, that
+     * no figure, backdrop or panel draws, each the ground of the text on it: a band behind a header or footer, a tint
+     * behind a column, an illustration's backdrop. Each is drawn with everything else painted in its box but the text as
+     * one picture behind the text, layered where its first painting is. The figure finder left such a gradient out as
+     * prose once it held running text or met a page-tall strip: NOAA's GeoXO fact sheet lost its header and footer
+     * bands, leaving white type on white and its logos a grey box, and USGS Fact Sheet 2023-3022 an illustration drawn
+     * over one and the tint behind its introduction. A gradient inside another's ground is part of it; a page-sized one
+     * is painted paper.
+     */
+    private static List<PageLayout.FigureItem> grounds(PageData page, List<PageGraphics.VectorMark> marks, List<Box> kept,
+            List<Line> lines, PageGraphics gfx) {
+        List<PageGraphics.VectorMark> gradients = marks.stream().filter(PageGraphics.VectorMark::shadingOperator)
+                .sorted(Comparator.comparingDouble(m -> -(double) m.width() * m.height())).toList();
+        List<PageLayout.FigureItem> grounds = new ArrayList<>();
+        for (PageGraphics.VectorMark m : gradients) {
+            Box b = new Box(Math.max(0, m.x()), Math.max(0, m.top()), Math.min(page.width(), m.right()),
+                    Math.min(page.height(), m.bottom()));
+            if (b.width() < PANEL_WIDTH * page.width() || b.height() <= 0
+                    || b.width() >= 0.9f * page.width() && b.height() >= 0.9f * page.height()
+                    || Regions.insideAny(b, kept, 2f)
+                    || lines.stream().noneMatch(l -> b.contains(l.centre(), Regions.wordY(l)))) {
+                continue;
+            }
+            int order = gfx.order(m);
+            int under = -1;
+            for (int i = 0; i < grounds.size() && under < 0; i++) {
+                if (Regions.insideAny(b, List.of(grounds.get(i).box()), 2f)) {
+                    under = i;
+                }
+            }
+            if (under < 0) {
+                grounds.add(new PageLayout.FigureItem(b, true, false, order));
+            } else if (order < grounds.get(under).order()) {
+                grounds.set(under, new PageLayout.FigureItem(grounds.get(under).box(), true, false, order));
+            }
+        }
+        return grounds;
+    }
+
+    /**
+     * Text boxes on a gradient's ground keep only their text: the ground's picture paints their fill and border, and what
+     * the PDF draws over them, which a fill above the picture would hide (USGS 3022's map: its relief and outlines lie on
+     * the blue box holding the map's labels).
+     */
+    private static void unfillGrounded(List<PageLayout.Band> bands, List<Box> grounds) {
+        if (grounds.isEmpty()) {
+            return;
+        }
+        for (PageLayout.Band band : bands) {
+            for (PageLayout.Column c : band.columns()) {
+                c.items().replaceAll(it -> it instanceof PageLayout.TextBoxItem tb
+                        && (tb.fillRgb() >= 0 || tb.lineRgb() >= 0) && Regions.insideAny(tb.box(), grounds, 2f)
+                        ? new PageLayout.TextBoxItem(tb.box(), -1, tb.textLeft(), tb.textRight(), tb.paras(), tb.gap(),
+                                -1, 0, false, tb.overlay(), tb.turn(), tb.groundRgb())
+                        : it);
+            }
+        }
     }
 
     private static PageGraphics.VectorMark paintedPaper(PageData page, List<PageGraphics.VectorMark> marks) {

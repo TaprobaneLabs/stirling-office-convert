@@ -121,6 +121,9 @@ final class MediaPlacer {
             if (pic != null && !fi.backdrop()) {
                 pic.description = FigureWords.text(page, fi.box());
             }
+            if (pic != null && fi.backdrop() && fi.order() >= 0 && fi.order() != Integer.MAX_VALUE) {
+                pic.paintOrder = fi.order();
+            }
             return pic;
         }
         return null;

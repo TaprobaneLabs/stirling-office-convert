@@ -134,5 +134,13 @@ public record PageGraphics(
         public float height() {
             return bottom - top;
         }
+
+        /**
+         * Whether this mark is a gradient the {@code sh} operator painted over its clip, rather than a path filled with
+         * one: {@code GraphicsCollector.shadingFill} records it as a single curved, filled segment.
+         */
+        public boolean shadingOperator() {
+            return shading && segments == 1 && curved;
+        }
     }
 }
