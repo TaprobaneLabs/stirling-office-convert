@@ -161,7 +161,7 @@ final class ParagraphFactory {
                 p.indentRight -= Math.min(5f, slack * widest);
             }
         }
-        if (fitting && flow && !(fitted && runs.exactFit()) && !keepsItsLine(d, p, markerTab, colLeft, colRight)) {
+        if (fitting && flow && !(fitted && runs.exactFit()) && !keepsItsLine(d, p, skip, markerTab, colLeft, colRight)) {
             misses++;
         }
 
@@ -271,12 +271,14 @@ final class ParagraphFactory {
      * and is ended where the PDF's ends; unfitted headings and labels in stand-in faces had let every such column flow on,
      * and Word pulled the next column's lines into it.
      *
-     * <p>A numbered heading ("III. DATASETS", "B. Public Dataset") is a list item whose number is Word's, set from its first
-     * line's indent: its line is measured from there, number included. Turned down as lists, such headings held every
-     * column of an IEEE paper they were in unpinned.
+     * <p>A numbered heading ("III. DATASETS", "B. Public Dataset") is a list item whose number is Word's, followed by its
+     * numbering tab: its text is measured from where Word starts it, the list's text indent, and the number left out (after
+     * Codex's review: measured from the number, the gap after it counted as a space, not the tab). Turned down as lists,
+     * such headings held every column of an IEEE paper they were in unpinned.
      */
-    private boolean keepsItsLine(ParaDraft d, Paragraph p, boolean markerTab, float colLeft, float colRight) {
-        if (d.lines.size() != 1 || markerTab || p.bidi) {
+    private boolean keepsItsLine(ParaDraft d, Paragraph p, int skip, boolean markerTab, float colLeft, float colRight) {
+        boolean listed = skip > 0 && p.list != null;
+        if (d.lines.size() != 1 || markerTab || p.bidi || skip > 0 && !listed) {
             return false;
         }
         Line l = d.first();
@@ -284,12 +286,13 @@ final class ParagraphFactory {
         if (l.narrowedRight || l.narrowed && !fromStart) {
             return false;
         }
-        float width = runs.knownWidth(l);
+        float width = runs.knownWidth(l, listed ? Marker.nextIndex(l) : 0);
         if (Float.isNaN(width)) {
             return false;
         }
         float indent = colLeft + p.indentLeft + p.indentFirst;
-        float room = colRight - p.indentRight - (fromStart ? Math.max(l.x, indent) : indent);
+        float start = listed ? colLeft + d.markerTextX : fromStart ? Math.max(l.x, indent) : indent;
+        float room = colRight - p.indentRight - start;
         return width + Math.max(ONE_LINE_MARGIN, 0.02f * width) <= room;
     }
 

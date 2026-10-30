@@ -1084,19 +1084,27 @@ final class RunBuilder {
      * known all the same.
      */
     float knownWidth(Line l) {
-        for (int wi = 1; wi < l.words.size(); wi++) {
+        return knownWidth(l, 0);
+    }
+
+    /** As {@link #knownWidth(Line)}, for the line's words from {@code from} on (a list item's text after its number). */
+    float knownWidth(Line l, int from) {
+        if (from >= l.words.size()) {
+            return Float.NaN;
+        }
+        for (int wi = from + 1; wi < l.words.size(); wi++) {
             if (l.gaps[wi] != Line.SPACE) {
                 return Float.NaN;
             }
         }
-        for (Word w : l.words) {
-            for (Glyph g : w.glyphs) {
+        for (int wi = from; wi < l.words.size(); wi++) {
+            for (Glyph g : l.words.get(wi).glyphs) {
                 if (g.vertAlign != 0 || unmeasured(g) || modeled(g) != null || !wordKnows(g)) {
                     return Float.NaN;
                 }
             }
         }
-        return natural(l, 0, 0f);
+        return natural(l, from, 0f);
     }
 
     private float natural(Line l, int from, float t) {

@@ -30,34 +30,41 @@ class NumberedHeadingPinTest {
     void aColumnWithANumberedHeadingIsStillPinned() throws Exception {
         // An IEEE paper's two columns: the left one holds numbered section headings, centred ("I. INTRODUCTION"), which
         // are list items; the right one starts a paragraph of its own at the top
+        String xml = convert((cs, times, h) -> {
+            float y = 80;
+            y = heading(cs, times, "I. INTRODUCTION", CENTRE, y, h);
+            y = paragraph(cs, times, 54, 246, y, 20, 0, h);
+            y = heading(cs, times, "II. PROPOSED SYSTEM", CENTRE, y + 6, h);
+            y = paragraph(cs, times, 54, 246, y, 21, 7, h);
+            y = heading(cs, times, "III. DATASETS", CENTRE, y + 6, h);
+            paragraph(cs, times, 54, 246, y, 7, 3, h);
+            paragraph(cs, times, 318, 246, 80, 52, 5, h);
+        });
+        int datasets = xml.indexOf("DATASETS");
+        assertTrue(datasets >= 0);
+        assertTrue(xml.indexOf("<w:br w:type=\"column\"/>", datasets) >= 0,
+                "a column break ends the left column after its last heading, so Word can't pull the right column's lines into it");
+    }
+
+    private interface Drawing {
+        void draw(PDPageContentStream cs, PDType1Font times, float h) throws IOException;
+    }
+
+    private String convert(Drawing drawing) throws Exception {
         Path pdf = dir.resolve("paper.pdf");
-        float h = PDRectangle.LETTER.getHeight();
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
             doc.addPage(page);
-            PDType1Font times = new PDType1Font(Standard14Fonts.FontName.TIMES_ROMAN);
             try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
-                float y = 80;
-                y = heading(cs, times, "I. INTRODUCTION", CENTRE, y, h);
-                y = paragraph(cs, times, 54, 246, y, 20, 0, h);
-                y = heading(cs, times, "II. PROPOSED SYSTEM", CENTRE, y + 6, h);
-                y = paragraph(cs, times, 54, 246, y, 21, 7, h);
-                y = heading(cs, times, "III. DATASETS", CENTRE, y + 6, h);
-                paragraph(cs, times, 54, 246, y, 7, 3, h);
-                paragraph(cs, times, 318, 246, 80, 52, 5, h);
+                drawing.draw(cs, new PDType1Font(Standard14Fonts.FontName.TIMES_ROMAN), PDRectangle.LETTER.getHeight());
             }
             doc.save(pdf.toFile());
         }
         Path docx = dir.resolve("paper.docx");
         PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
-        String xml;
         try (ZipFile zip = new ZipFile(docx.toFile())) {
-            xml = new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
+            return new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
         }
-        int datasets = xml.indexOf("DATASETS");
-        assertTrue(datasets >= 0);
-        assertTrue(xml.indexOf("<w:br w:type=\"column\"/>", datasets) >= 0,
-                "a column break ends the left column after its last heading, so Word can't pull the right column's lines into it");
     }
 
     /** A numbered heading, its number half an em before its text as IEEE sets them, which makes it a list item. */
