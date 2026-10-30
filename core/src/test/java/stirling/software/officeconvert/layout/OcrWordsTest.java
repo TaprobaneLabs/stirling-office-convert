@@ -135,6 +135,65 @@ class OcrWordsTest {
         assertFalse(OcrWords.ocrText(glyph("a", 72, 5, font("ABCDEF+MyNotoSans"), 0)));
     }
 
+    /** Hangul syllables Tesseract boxed apart, each with the space its PDF writes after a box (the sandwich renderer). */
+    private static List<Glyph> syllables(String text, float gap, FontInfo font) {
+        List<Glyph> glyphs = new ArrayList<>();
+        float x = 72;
+        for (int i = 0; i < text.length(); i++) {
+            glyphs.add(glyph(String.valueOf(text.charAt(i)), x, SIZE, font, glyphs.size()));
+            glyphs.add(glyph(" ", x + SIZE, 0.26f * SIZE, font, glyphs.size()));
+            x += SIZE + 0.26f * SIZE + gap;
+        }
+        return glyphs;
+    }
+
+    @Test
+    void hangulSyllablesDrawnCloseMakeOneWord() {
+        List<Glyph> glyphs = syllables("지원", 0.1f * SIZE, GLYPHLESS);
+
+        List<Glyph> joined = OcrWords.joinSyllables(glyphs);
+
+        assertEquals(3, joined.size(), "the space between the syllables goes, the one after the word stays");
+        assertEquals("지", joined.get(0).text);
+        assertEquals(glyphs.get(2).x, joined.get(0).right(), 1e-3, "the first syllable reaches the second");
+        assertEquals("원", joined.get(1).text);
+        assertTrue(joined.get(2).isSpace());
+    }
+
+    @Test
+    void fitSetsCloseSyllablesAsOneWord() {
+        List<Glyph> out = OcrWords.fit(syllables("지원", 0.1f * SIZE, GLYPHLESS));
+
+        List<String> text = out.stream().map(g -> g.text).toList();
+        assertEquals(List.of("지", "원", " "), text, "no space inside the word");
+    }
+
+    @Test
+    void hangulSyllablesFurtherApartStayTwoWords() {
+        List<Glyph> glyphs = syllables("지원", 0.5f * SIZE, GLYPHLESS);
+        assertSame(glyphs, OcrWords.joinSyllables(glyphs));
+    }
+
+    @Test
+    void onlyHangulOcrTextIsJoined() {
+        List<Glyph> latin = syllables("ab", 0.1f * SIZE, GLYPHLESS);
+        assertSame(latin, OcrWords.joinSyllables(latin), "Latin letters keep their spaces");
+        List<Glyph> drawn = syllables("지원", 0.1f * SIZE, HELVETICA);
+        assertSame(drawn, OcrWords.joinSyllables(drawn), "text in a real face isn't an OCR layer's");
+    }
+
+    @Test
+    void onlyTesseractsOwnTextIsJoined() {
+        // OCRmyPDF's own layers can give a space the whole gap to the next word: two words, however close the next
+        List<Glyph> occulta = syllables("지원", 0.1f * SIZE, OCCULTA);
+        assertSame(occulta, OcrWords.joinSyllables(occulta));
+        List<Glyph> noto = syllables("지원", 0.1f * SIZE, NOTO);
+        assertSame(noto, OcrWords.joinSyllables(noto));
+        assertTrue(OcrWords.tesseractText(glyph("지", 72, SIZE, font("GlyphLessFont"), 0)));
+        assertTrue(OcrWords.tesseractText(glyph("지", 72, SIZE, font("ABCDEF+GlyphLessFont"), 0)));
+        assertFalse(OcrWords.tesseractText(glyph("지", 72, SIZE, font("ABCDEF+Occulta"), 0)));
+    }
+
     private static FontInfo font(String ps) {
         return new FontInfo("Arial", false, false, false, false, false, ps, true);
     }
