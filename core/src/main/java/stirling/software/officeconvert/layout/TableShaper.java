@@ -304,6 +304,11 @@ final class TableShaper {
     /**
      * {@code under}: the frame's top is the foot of another table found in it, whose rows aren't this table's header, so
      * no line above it is taken either.
+     *
+     * <p>The table starts at the frame's top only when every line between them is a header row. Otherwise it starts at
+     * its first header row: a running header's rule, with the same ends as the rules of a table lower on the page, makes
+     * a frame of them, and the prose between them isn't the table's (the Federal Register's three columns over its
+     * table of cultural property, which took the page's top half into the table).
      */
     static TableDetection.Found addFrameHeader(TableDetection.Found t, Box frame, List<Line> segments, boolean under) {
         List<Line> edgeAbove = under ? List.of() : FrameEdgeRows.above(frame, t.colEdges(), segments);
@@ -315,7 +320,8 @@ final class TableShaper {
             }
         }
         List<Line> above = new ArrayList<>(FrameEdgeRows.headerAbove(inside, t.top(), t.colEdges()));
-        if (above.size() == inside.size()) {
+        boolean fromFrameTop = above.size() == inside.size();
+        if (fromFrameTop) {
             above.addAll(edgeAbove);
         } else {
             edgeAbove = List.of();
@@ -334,7 +340,7 @@ final class TableShaper {
                     c.borderTop(), c.borderBottom(), c.borderLeft(), c.borderRight(), c.fill(), c.hAlign(), c.vAlign(), c.text()));
         }
         addRows(cells, trail, t.rows() + k, t, frame);
-        float top = lead.isEmpty() ? t.top() : frame.top() + 0.5f;
+        float top = lead.isEmpty() ? t.top() : fromFrameTop ? frame.top() + 0.5f : lead.getFirst().top() - 1;
         if (!edgeAbove.isEmpty()) {
             top = Math.min(top, lead.getFirst().top() - 1);
         }
