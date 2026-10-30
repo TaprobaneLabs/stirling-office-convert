@@ -49,7 +49,11 @@ final class TableFinder {
                     TableDetection.Found kept = f.gridded() ? TableShaper.addBandHeader(t, segments, fills)
                             : TableShaper.addFrameHeader(t, room, segments, room.top() > f.box().top());
                     found.add(kept);
-                    claimed.add(f.gridded() ? boxOf(kept) : b);
+                    // A table's header rows are its own, so no other table is found in their lines. A scanned
+                    // statement's frame held one table, found under its first 25 rows, which became its header rows;
+                    // with only the rows under them claimed, the column pass found those lines again as a table of
+                    // 21 rows, emptied as their text was already the frame table's, and Word gave them a page.
+                    claimed.add(boxOf(kept));
                 }
             }
         }
