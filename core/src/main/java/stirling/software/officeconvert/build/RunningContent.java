@@ -38,11 +38,14 @@ final class RunningContent {
         List<RunningLine> headers = hf.headers();
         List<RunningLine> footers = hf.footers();
         boolean split = paritySplit(headers) || paritySplit(footers);
+        // Word picks a page's odd or even header by its number, not its place: when the numbers start even, the PDF's
+        // first, third… pages are Word's even ones
+        int odd = pageNumberStart() % 2 == 0 ? 1 : 0;
         return new DocSink.HeaderFooterSet(
-                running(split ? onParity(headers, 0) : headers, colLeft, colRight),
-                running(split ? onParity(footers, 0) : footers, colLeft, colRight),
-                split ? running(onParity(headers, 1), colLeft, colRight) : List.of(),
-                split ? running(onParity(footers, 1), colLeft, colRight) : List.of(),
+                running(split ? onParity(headers, odd) : headers, colLeft, colRight),
+                running(split ? onParity(footers, odd) : footers, colLeft, colRight),
+                split ? running(onParity(headers, 1 - odd), colLeft, colRight) : List.of(),
+                split ? running(onParity(footers, 1 - odd), colLeft, colRight) : List.of(),
                 hf.firstPageDiffers());
     }
 
@@ -206,7 +209,9 @@ final class RunningContent {
             Matcher m = Pattern.compile("[0-9]+").matcher(s);
             int last = 0;
             while (m.find()) {
-                boolean page = run < r.pageOffsets.length && r.pageOffsets[run] != Integer.MIN_VALUE;
+                // Word numbers pages one way: a run counting them from another start stays as the PDF's text
+                boolean page = run < r.pageOffsets.length && r.pageOffsets[run] != Integer.MIN_VALUE
+                        && r.pageOffsets[run] == pageNumberStart();
                 boolean total = run < r.totalPages.length && r.totalPages[run] && !page;
                 if (page || total) {
                     if (m.start() > last) {
@@ -223,22 +228,36 @@ final class RunningContent {
         }
     }
 
+    /**
+     * The number Word's pages start from: a footer's page number, else a header's. A number written with leading zeros
+     * comes last: Word's page field prints none, and such a run counts something else in step with the pages. The Federal
+     * Register's white printer's line at each page's foot ("Frm 00002") counts its frames from another start than the
+     * page number in its header (13688), and taking it first numbered every page from 2, on the wrong side.
+     */
     public int pageNumberStart() {
-        HeaderFooter hf = stats.headerFooterInfo();
-        for (RunningLine r : hf.footers()) {
-            for (int off : r.pageOffsets) {
-                if (off != Integer.MIN_VALUE) {
-                    return off;
+        if (start == null) {
+            HeaderFooter hf = stats.headerFooterInfo();
+            Integer found = offset(hf.footers(), false);
+            found = found != null ? found : offset(hf.headers(), false);
+            found = found != null ? found : offset(hf.footers(), true);
+            found = found != null ? found : offset(hf.headers(), true);
+            start = found != null ? found : 1;
+        }
+        return start;
+    }
+
+    private Integer start;
+
+    private static Integer offset(List<RunningLine> lines, boolean padded) {
+        for (RunningLine r : lines) {
+            List<String> runs = DIGIT_RUN.matcher(r.sample().text()).results().map(MatchResult::group).toList();
+            for (int k = 0; k < r.pageOffsets.length; k++) {
+                boolean zeros = k < runs.size() && runs.get(k).length() > 1 && runs.get(k).startsWith("0");
+                if (r.pageOffsets[k] != Integer.MIN_VALUE && zeros == padded) {
+                    return r.pageOffsets[k];
                 }
             }
         }
-        for (RunningLine r : hf.headers()) {
-            for (int off : r.pageOffsets) {
-                if (off != Integer.MIN_VALUE) {
-                    return off;
-                }
-            }
-        }
-        return 1;
+        return null;
     }
 }
