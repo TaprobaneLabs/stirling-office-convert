@@ -3,6 +3,7 @@ package stirling.software.officeconvert.layout;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Pattern;
 
 final class FrameEdgeRows {
 
@@ -37,6 +38,9 @@ final class FrameEdgeRows {
                 rows.add(new ArrayList<>(List.of(l)));
             }
         }
+        if (amountRowsAbove(rows, tableTop, edges) > MAX_HEADER_ROWS) {
+            return List.of();
+        }
         List<Line> out = new ArrayList<>();
         float below = tableTop;
         for (List<Line> row : rows) {
@@ -52,6 +56,42 @@ final class FrameEdgeRows {
             below = top;
         }
         return out;
+    }
+
+    /**
+     * How many rows of amounts run on, one close above the next, from the table up. More than a header has are another
+     * table's rows: on a scanned bank statement found as two tables, the lower one, in a frame of the scan's rules, took
+     * the upper one's last row ("11 Mar Interest 135.90 11,450.68") as its header, which Word would repeat on every page
+     * the table runs onto, and the upper table kept an empty last row. One or two under a title are this table's first
+     * rows, which the detection left out (the CFPB loan estimate's "Total Closing Costs (J) $8,791").
+     */
+    private static int amountRowsAbove(List<List<Line>> rows, float tableTop, float[] edges) {
+        int n = 0;
+        float below = tableTop;
+        for (List<Line> row : rows) {
+            float bottom = row.stream().map(l -> l.bottom).max(Float::compare).orElseThrow();
+            if (below - bottom >= (n == 0 ? 2.5f : 1.8f) * row.getFirst().size || !fits(row, edges) || !holdsAmounts(row)) {
+                break;
+            }
+            n++;
+            below = row.stream().map(l -> l.top).min(Float::compare).orElseThrow();
+        }
+        return n;
+    }
+
+    /** An amount: digits with a decimal point or thousands commas ("135.90", "11,450.68", "$2,081.84"), not a year. */
+    private static final Pattern AMOUNT = Pattern.compile(
+            "[-−(]?[$€£]?(?:\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\)?%?");
+
+    static boolean holdsAmounts(List<Line> row) {
+        for (Line l : row) {
+            for (Word w : l.words) {
+                if (AMOUNT.matcher(w.text).matches()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean straddles(List<Line> row, float[] edges) {
