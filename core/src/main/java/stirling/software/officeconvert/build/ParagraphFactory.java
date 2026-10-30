@@ -161,7 +161,7 @@ final class ParagraphFactory {
                 p.indentRight -= Math.min(5f, slack * widest);
             }
         }
-        if (fitting && flow && !(fitted && runs.exactFit()) && !keepsItsLine(d, p, skip, markerTab, colLeft, colRight)) {
+        if (fitting && flow && !(fitted && runs.exactFit()) && !keepsItsLine(d, p, markerTab, colLeft, colRight)) {
             misses++;
         }
 
@@ -270,9 +270,13 @@ final class ParagraphFactory {
      * (2 pt, or 2% of its width) inside its room. Such a line can't wrap, so a column holding one still keeps its PDF lines
      * and is ended where the PDF's ends; unfitted headings and labels in stand-in faces had let every such column flow on,
      * and Word pulled the next column's lines into it.
+     *
+     * <p>A numbered heading ("III. DATASETS", "B. Public Dataset") is a list item whose number is Word's, set from its first
+     * line's indent: its line is measured from there, number included. Turned down as lists, such headings held every
+     * column of an IEEE paper they were in unpinned.
      */
-    private boolean keepsItsLine(ParaDraft d, Paragraph p, int skip, boolean markerTab, float colLeft, float colRight) {
-        if (d.lines.size() != 1 || skip > 0 || markerTab || p.bidi) {
+    private boolean keepsItsLine(ParaDraft d, Paragraph p, boolean markerTab, float colLeft, float colRight) {
+        if (d.lines.size() != 1 || markerTab || p.bidi) {
             return false;
         }
         Line l = d.first();
