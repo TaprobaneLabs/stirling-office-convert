@@ -89,13 +89,23 @@ final class GutterSide {
         if (rows.size() < MIN_ROWS) {
             return false;
         }
-        float[] starts = new float[rows.size()];
+        float em = medianHeight(rows);
+        if (!leftOfGutter) {
+            return textColumnFrom(rows, em, textWidth);
+        }
+        // From the rows ending at the gutter, else from them all: a column's few short lines can reach past its prose
+        List<Item> ending = endingAtEdge(em);
+        return textColumnFrom(ending, em, textWidth) || ending != rows && textColumnFrom(rows, em, textWidth);
+    }
+
+    /** Whether the side is a column of text, its start the median start of {@code starting}. */
+    private boolean textColumnFrom(List<Item> starting, float em, float textWidth) {
+        float[] starts = new float[starting.size()];
         for (int i = 0; i < starts.length; i++) {
-            starts[i] = rows.get(i).x();
+            starts[i] = starting.get(i).x();
         }
         Arrays.sort(starts);
         float medianStart = starts[starts.length / 2];
-        float em = medianHeight(rows);
         List<Item> own = new ArrayList<>();
         for (Item it : rows) {
             boolean adjacent = leftOfGutter
@@ -124,6 +134,24 @@ final class GutterSide {
             }
         }
         return full >= Math.max(2, Math.round(0.4f * kept.size())) && prose * 2 >= kept.size();
+    }
+
+    /**
+     * The rows that end within three ems of the gutter, or all of them when fewer than {@link #MIN_ROWS} do. Left of a
+     * page's second gutter, the rows nearest it come from two columns when the middle column's lines sit off the first
+     * column's baselines (a heading moved them): the first column then gives the rows their median start, and the side
+     * is judged as one column as wide as both. The column beside the gutter is the one whose lines end at it. A ragged
+     * column's few short lines set further right than its prose end there too, and judged alone they're no column, so
+     * the side is then judged from all its rows, as before.
+     */
+    private List<Item> endingAtEdge(float em) {
+        List<Item> ending = new ArrayList<>();
+        for (Item it : rows) {
+            if (edge - it.right() <= 3f * em) {
+                ending.add(it);
+            }
+        }
+        return ending.size() >= MIN_ROWS ? ending : rows;
     }
 
     private List<Item> withoutWrapEdge(List<Item> own, float width) {
