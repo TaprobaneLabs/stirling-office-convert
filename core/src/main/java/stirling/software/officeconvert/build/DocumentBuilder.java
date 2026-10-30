@@ -185,7 +185,13 @@ public final class DocumentBuilder {
             if (footBand(layout, band)) {
                 for (PageLayout.Column c : band.columns()) {
                     for (PageLayout.Item item : c.items()) {
-                        floats.add(placer.textBox(placed((PageLayout.ParaItem) item, c)));
+                        if (item instanceof PageLayout.ParaItem pi) {
+                            // A logo band's lines start beside its picture, well in from its one column's edge
+                            float left = band.columns().size() == 1 ? logoTextLeft(pi, c) : c.left();
+                            floats.add(placer.textBox(placed(pi, left, c.right())));
+                        } else {
+                            placeOutOfFlow(item, layout, toDisplay);
+                        }
                     }
                 }
                 continue;
@@ -512,7 +518,9 @@ public final class DocumentBuilder {
 
     private static boolean footBand(PageLayout layout, PageLayout.Band band) {
         List<PageLayout.Band> bands = layout.bands();
-        if (band.columns().size() < 2 || band.top() < FOOT_ZONE * layout.page().height()) {
+        float zone = FOOT_ZONE * layout.page().height();
+        boolean logo = band.columns().size() == 1 && logoBlock(band.columns().getFirst(), zone);
+        if (!logo && (band.columns().size() < 2 || band.top() < zone)) {
             return false;
         }
         for (int i = bands.indexOf(band) + 1; i < bands.size(); i++) {
@@ -523,6 +531,9 @@ public final class DocumentBuilder {
         for (PageLayout.Column c : band.columns()) {
             int lines = 0;
             for (PageLayout.Item it : c.items()) {
+                if (logo && it instanceof PageLayout.FloatItem) {
+                    continue;
+                }
                 if (!(it instanceof PageLayout.ParaItem pi)) {
                     return false;
                 }
@@ -535,9 +546,56 @@ public final class DocumentBuilder {
         return true;
     }
 
-    private static PageLayout.TextBoxItem placed(PageLayout.ParaItem pi, PageLayout.Column c) {
+    /**
+     * A one-column band at the page's foot that is a picture with its lines beside it: a publisher's logo and name (MMWR's
+     * first page sets HHS's and CDC's names beside their logos). Flowing, its lines kept the room above them as space
+     * before, and the text above, a little longer in Word, pushed the last one onto a page of its own. Every item starts
+     * in the foot zone, and every line sits beside the picture.
+     */
+    private static boolean logoBlock(PageLayout.Column c, float zone) {
+        List<PageLayout.FloatItem> pictures = new ArrayList<>();
+        int lines = 0;
+        for (PageLayout.Item it : c.items()) {
+            if (it.top() < zone) {
+                return false;
+            }
+            if (it instanceof PageLayout.FloatItem f) {
+                pictures.add(f);
+            } else if (it instanceof PageLayout.ParaItem) {
+                lines++;
+            } else {
+                return false;
+            }
+        }
+        if (pictures.isEmpty() || lines == 0) {
+            return false;
+        }
+        for (PageLayout.Item it : c.items()) {
+            if (it instanceof PageLayout.ParaItem pi
+                    && pictures.stream().noneMatch(f -> f.top() < pi.bottom() && f.bottom() > pi.top()
+                            && (f.right() <= pi.x() || f.x() >= pi.right()))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Where a logo band's text box starts its text: where the line's indents are measured from, the room beside the logo,
+     * so a line set in from the one above it keeps its inset once (Codex's finding). A centred or right-aligned line is
+     * measured from the column's edges.
+     */
+    private static float logoTextLeft(PageLayout.ParaItem pi, PageLayout.Column c) {
         ParaDraft d = pi.para();
-        Box box = new Box(c.left() - 1, pi.top() - 1, c.right() + 1, pi.bottom() + 2);
+        if (d.align != Align.LEFT && d.align != Align.JUSTIFY) {
+            return c.left();
+        }
+        return d.first().x - (d.left + d.roomShift + d.first);
+    }
+
+    private static PageLayout.TextBoxItem placed(PageLayout.ParaItem pi, float left, float right) {
+        ParaDraft d = pi.para();
+        Box box = new Box(left - 1, pi.top() - 1, right + 1, pi.bottom() + 2);
         return new PageLayout.TextBoxItem(box, -1, d.colLeft, d.colRight, List.of(d), 0f, -1, 0f, false, true);
     }
 
