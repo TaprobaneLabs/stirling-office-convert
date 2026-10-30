@@ -161,7 +161,10 @@ public final class PageAnalyzer {
         List<TableDetection.Found> tables = detectTables
                 ? tableFinder.find(page, frame.textLeft(), frame.textRight(), segments, rules, fills, concat(strong, pictures))
                 : new ArrayList<>();
-        tables.removeIf(t -> TableShaper.looksLikeList(t, TableShaper.assign(t, TableFinder.wordsInside(segments, t))));
+        tables.removeIf(t -> {
+            List<List<Word>> cellWords = TableShaper.assign(t, TableFinder.wordsInside(segments, t));
+            return TableShaper.looksLikeList(t, cellWords) || TableShaper.looksLikeChart(t, cellWords);
+        });
         if (detectTables) {
             addKeyValueTables(tables, outside(segments, pictures), frame, boxes.boxes());
         }
