@@ -52,6 +52,27 @@ class ColumnFinderTest {
     }
 
     @Test
+    void aColumnsShortLinesPastItsProseKeepItsGutter() {
+        // A ragged left column whose three short lines are set further right than its prose (Codex's case): they alone end
+        // at the gutter, and judged alone they're no column
+        List<ColumnFinder.Item> items = new ArrayList<>();
+        for (int i = 0; i < 15; i++) {
+            float baseline = 100f + 12f * i;
+            items.add(new ColumnFinder.Item(50f, baseline - 8f, 200f, baseline + 2f, baseline, true, 36));
+            items.add(new ColumnFinder.Item(300f, baseline - 8f, 500f, baseline + 2f, baseline, true, 40));
+            if (i >= 6 && i < 9) {
+                items.add(new ColumnFinder.Item(210f, baseline - 8f, 260f, baseline + 2f, baseline, true, 8));
+            }
+        }
+
+        List<ColumnFinder.Band> bands = ColumnFinder.find(items, 50f, 500f, 792f, 10f);
+
+        for (float y : new float[] {120f, 180f, 250f}) {
+            assertEquals(2, bandAt(bands, y).columns().size(), "columns at y=" + y);
+        }
+    }
+
+    @Test
     void twoColumnsOnTheirOwnBaselinesStayTwo() {
         List<ColumnFinder.Item> items = new ArrayList<>();
         column(items, LEFT, 140f, 30);
