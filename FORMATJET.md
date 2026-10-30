@@ -100,3 +100,6 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.10` | Keep an entry's row when a line off its baseline joins the row above (#77) | Not offered yet |
 | `0.2.2-fj.10` | Read an OCR layer's composite font through its ToUnicode CMap, and give a textless glyph's advance to its cluster (#75) | Not offered yet |
 | `0.2.2-fj.10` | Set an OCR layer's words in their script's widths, without the OCR font's stretch (#76) | Not offered yet |
+| `0.2.2-fj.11` | Judge a gutter's left side by the column that ends at it (#78) | Not offered yet |
+| `0.2.2-fj.11` | Start a frame's table at its header when prose sits above it (#79) | Not offered yet |
+| `0.2.2-fj.11` | Join Hangul syllables Tesseract boxed apart into their words (#81) | Not offered yet |
