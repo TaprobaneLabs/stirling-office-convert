@@ -69,7 +69,8 @@ final class OcrWords {
     private record Word(List<Integer> letters, int space) {}
 
     /** {@code glyphs} (an OCR layer's, in drawing order) with each OCR word set out again. */
-    static List<Glyph> fit(List<Glyph> glyphs) {
+    static List<Glyph> fit(List<Glyph> drawn) {
+        List<Glyph> glyphs = joinSyllables(drawn);
         List<Word> words = words(glyphs);
         if (words.isEmpty()) {
             return glyphs;
@@ -90,6 +91,59 @@ final class OcrWords {
             set(glyphs, out, w, next);
         }
         return out;
+    }
+
+    /**
+     * How close, in their size, two Hangul syllables Tesseract boxed apart are drawn when they belong to one word.
+     * Tesseract boxes Korean text syllable by syllable, and its PDF (OCRmyPDF's sandwich renderer, which the engine uses
+     * for Korean) writes every box as a word with a space after it: "지원합니다." came out "지 원 합 니다.", and a Korean
+     * scan kept 38% of its words in Word where Tesseract's own text holds 78%. The gaps inside words and between them
+     * overlap; joining syllables drawn closer than this took the copier's Korean scan to 53% and the phone's from 53% to
+     * 56%.
+     */
+    static final float JOIN_HANGUL = 0.3f;
+
+    /**
+     * {@code glyphs} with the space between two Hangul OCR syllables dropped when they're drawn closer than
+     * JOIN_HANGUL of their size on one line, the first widened to reach the second, so words() makes them one word.
+     */
+    static List<Glyph> joinSyllables(List<Glyph> glyphs) {
+        List<Glyph> out = null;
+        for (int i = 0; i + 2 < glyphs.size(); i++) {
+            Glyph g = glyphs.get(i);
+            Glyph space = glyphs.get(i + 1);
+            Glyph next = glyphs.get(i + 2);
+            if (!ocrText(g) || !hangul(g.text) || !ocrText(space) || !space.isSpace() || !ocrText(next)
+                    || !hangul(next.text)) {
+                continue;
+            }
+            float near = TOUCHING * Math.max(g.size, next.size) + TOUCHING_PT;
+            // Tesseract stretches a word and the space after it over the word's box: the box ends where the space does
+            float gap = next.x - space.right();
+            if (Math.abs(next.baseline - g.baseline) > near || gap < -near || gap >= JOIN_HANGUL * g.size) {
+                continue;
+            }
+            if (out == null) {
+                out = new ArrayList<>(glyphs);
+            }
+            out.set(i, g.withWidth(next.x - g.x));
+            out.set(i + 1, null);
+        }
+        if (out == null) {
+            return glyphs;
+        }
+        out.removeIf(java.util.Objects::isNull);
+        return out;
+    }
+
+    private static boolean hangul(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c >= '가' && c <= '힣') {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** OCR words: runs of letters drawn edge to edge on a line, each with the space drawn right after it, if any. */
