@@ -1,5 +1,6 @@
 package stirling.software.officeconvert;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.Color;
@@ -8,6 +9,8 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipFile;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -43,7 +46,8 @@ class FootLogoTest {
                 }
                 cs.drawImage(image(doc), 144, h - 757, 105, 59.5f);
                 text(cs, sans, 10, 257.4f, h - 722, "U.S. Department of Health and Human Services");
-                text(cs, plain, 10, 257.4f, h - 734.5f, "Centers for Disease Control and Prevention");
+                // Set in from the line above (Codex's case): its inset counts once
+                text(cs, plain, 10, 269.4f, h - 734.5f, "Centers for Disease Control and Prevention");
             }
             doc.save(pdf.toFile());
         }
@@ -53,7 +57,10 @@ class FootLogoTest {
         try (ZipFile zip = new ZipFile(docx.toFile())) {
             xml = new String(zip.getInputStream(zip.getEntry("word/document.xml")).readAllBytes(), StandardCharsets.UTF_8);
         }
-        for (String line : new String[] {"Department of Health and Human Services", "Centers for Disease Control and Prevention"}) {
+        String[] lines = {"Department of Health and Human Services", "Centers for Disease Control and Prevention"};
+        float[] starts = {257.4f, 269.4f};
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
             int at = xml.indexOf(line);
             assertTrue(at >= 0, line);
             int box = xml.lastIndexOf("<w:txbxContent", at);
@@ -61,9 +68,24 @@ class FootLogoTest {
                     "\"" + line + "\" is placed in a text box at the foot, not in the flow under the columns");
             String h = "<wp:positionH relativeFrom=\"page\"><wp:posOffset>";
             int pos = xml.lastIndexOf(h, box) + h.length();
-            float left = Long.parseLong(xml.substring(pos, xml.indexOf('<', pos))) / 12700f;
-            assertTrue(left > 249 && left < 258, "\"" + line + "\" starts beside the logo, not at the column's edge: " + left);
+            float text = Long.parseLong(xml.substring(pos, xml.indexOf('<', pos))) / 12700f + indent(xml, box, at);
+            assertEquals(starts[i], text, 2f, "\"" + line + "\" starts where the PDF sets it, beside the logo");
         }
+    }
+
+    /** Where a paragraph's first line starts inside its text box, in points, from its {@code w:ind}. */
+    private static float indent(String xml, int box, int at) {
+        int ind = xml.lastIndexOf("<w:ind ", at);
+        if (ind < box) {
+            return 0;
+        }
+        String tag = xml.substring(ind, xml.indexOf('>', ind));
+        return (twips(tag, "w:left") + twips(tag, "w:firstLine") - twips(tag, "w:hanging")) / 20f;
+    }
+
+    private static int twips(String tag, String attribute) {
+        Matcher m = Pattern.compile(attribute + "=\"(-?\\d+)\"").matcher(tag);
+        return m.find() ? Integer.parseInt(m.group(1)) : 0;
     }
 
     private static PDImageXObject image(PDDocument doc) throws IOException {

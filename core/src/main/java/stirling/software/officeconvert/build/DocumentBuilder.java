@@ -187,7 +187,7 @@ public final class DocumentBuilder {
                     for (PageLayout.Item item : c.items()) {
                         if (item instanceof PageLayout.ParaItem pi) {
                             // A logo band's lines start beside its picture, well in from its one column's edge
-                            float left = band.columns().size() == 1 ? pi.x() : c.left();
+                            float left = band.columns().size() == 1 ? logoTextLeft(pi, c) : c.left();
                             floats.add(placer.textBox(placed(pi, left, c.right())));
                         } else {
                             placeOutOfFlow(item, layout, toDisplay);
@@ -578,6 +578,19 @@ public final class DocumentBuilder {
             }
         }
         return true;
+    }
+
+    /**
+     * Where a logo band's text box starts its text: where the line's indents are measured from, the room beside the logo,
+     * so a line set in from the one above it keeps its inset once (Codex's finding). A centred or right-aligned line is
+     * measured from the column's edges.
+     */
+    private static float logoTextLeft(PageLayout.ParaItem pi, PageLayout.Column c) {
+        ParaDraft d = pi.para();
+        if (d.align != Align.LEFT && d.align != Align.JUSTIFY) {
+            return c.left();
+        }
+        return d.first().x - (d.left + d.roomShift + d.first);
     }
 
     private static PageLayout.TextBoxItem placed(PageLayout.ParaItem pi, float left, float right) {
