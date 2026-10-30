@@ -76,4 +76,34 @@ class FrameHeaderTest {
         assertEquals(3, kept.rows());
         assertEquals(370.5f, kept.top(), 0.01f);
     }
+
+    @Test
+    void anotherTablesRowsOfAmountsAboveAreNoHeader() {
+        // A scanned bank statement found as two tables: the lower one, in a frame of the scan's rules, has the upper one's
+        // rows just above it, which fit its columns as header rows would
+        Box frame = new Box(43f, 300f, 569f, 431f);
+        List<Line> segments = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            float baseline = 390f - 12f * i;
+            segments.add(line((10 - i) + " Mar Interest", 50, baseline));
+            segments.add(line("135.90", 260, baseline));
+            segments.add(line("11,450.68", 450, baseline));
+        }
+
+        TableDetection.Found kept = TableShaper.addFrameHeader(table(400f), frame, segments, false);
+
+        assertEquals(2, kept.rows(), "the other table's rows stay out of this one's header");
+        assertEquals(400f, kept.top(), 0.01f);
+    }
+
+    @Test
+    void aRowOfAmountsJustAboveIsStillTheTablesFirst() {
+        // The CFPB loan estimate's "Total Closing Costs (J) $8,791", a row the detection left out of its table
+        Box frame = new Box(43f, 370f, 569f, 431f);
+        List<Line> segments = List.of(line("Total Closing Costs", 50, 390f), line("$8,791", 450, 390f));
+
+        TableDetection.Found kept = TableShaper.addFrameHeader(table(400f), frame, segments, false);
+
+        assertEquals(3, kept.rows());
+    }
 }
