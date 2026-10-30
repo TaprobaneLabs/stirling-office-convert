@@ -186,7 +186,9 @@ public final class DocumentBuilder {
                 for (PageLayout.Column c : band.columns()) {
                     for (PageLayout.Item item : c.items()) {
                         if (item instanceof PageLayout.ParaItem pi) {
-                            floats.add(placer.textBox(placed(pi, c)));
+                            // A logo band's lines start beside its picture, well in from its one column's edge
+                            float left = band.columns().size() == 1 ? pi.x() : c.left();
+                            floats.add(placer.textBox(placed(pi, left, c.right())));
                         } else {
                             placeOutOfFlow(item, layout, toDisplay);
                         }
@@ -578,9 +580,9 @@ public final class DocumentBuilder {
         return true;
     }
 
-    private static PageLayout.TextBoxItem placed(PageLayout.ParaItem pi, PageLayout.Column c) {
+    private static PageLayout.TextBoxItem placed(PageLayout.ParaItem pi, float left, float right) {
         ParaDraft d = pi.para();
-        Box box = new Box(c.left() - 1, pi.top() - 1, c.right() + 1, pi.bottom() + 2);
+        Box box = new Box(left - 1, pi.top() - 1, right + 1, pi.bottom() + 2);
         return new PageLayout.TextBoxItem(box, -1, d.colLeft, d.colRight, List.of(d), 0f, -1, 0f, false, true);
     }
 

@@ -59,6 +59,10 @@ class FootLogoTest {
             int box = xml.lastIndexOf("<w:txbxContent", at);
             assertTrue(box >= 0 && xml.indexOf("</w:txbxContent>", box) > at,
                     "\"" + line + "\" is placed in a text box at the foot, not in the flow under the columns");
+            String h = "<wp:positionH relativeFrom=\"page\"><wp:posOffset>";
+            int pos = xml.lastIndexOf(h, box) + h.length();
+            float left = Long.parseLong(xml.substring(pos, xml.indexOf('<', pos))) / 12700f;
+            assertTrue(left > 249 && left < 258, "\"" + line + "\" starts beside the logo, not at the column's edge: " + left);
         }
     }
 
