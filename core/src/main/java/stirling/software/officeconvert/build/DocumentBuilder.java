@@ -185,7 +185,11 @@ public final class DocumentBuilder {
             if (footBand(layout, band)) {
                 for (PageLayout.Column c : band.columns()) {
                     for (PageLayout.Item item : c.items()) {
-                        floats.add(placer.textBox(placed((PageLayout.ParaItem) item, c)));
+                        if (item instanceof PageLayout.ParaItem pi) {
+                            floats.add(placer.textBox(placed(pi, c)));
+                        } else {
+                            placeOutOfFlow(item, layout, toDisplay);
+                        }
                     }
                 }
                 continue;
@@ -512,7 +516,9 @@ public final class DocumentBuilder {
 
     private static boolean footBand(PageLayout layout, PageLayout.Band band) {
         List<PageLayout.Band> bands = layout.bands();
-        if (band.columns().size() < 2 || band.top() < FOOT_ZONE * layout.page().height()) {
+        float zone = FOOT_ZONE * layout.page().height();
+        boolean logo = band.columns().size() == 1 && logoBlock(band.columns().getFirst(), zone);
+        if (!logo && (band.columns().size() < 2 || band.top() < zone)) {
             return false;
         }
         for (int i = bands.indexOf(band) + 1; i < bands.size(); i++) {
@@ -523,12 +529,49 @@ public final class DocumentBuilder {
         for (PageLayout.Column c : band.columns()) {
             int lines = 0;
             for (PageLayout.Item it : c.items()) {
+                if (logo && it instanceof PageLayout.FloatItem) {
+                    continue;
+                }
                 if (!(it instanceof PageLayout.ParaItem pi)) {
                     return false;
                 }
                 lines += pi.para().lines.size();
             }
             if (lines > FOOT_LINES) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * A one-column band at the page's foot that is a picture with its lines beside it: a publisher's logo and name (MMWR's
+     * first page sets HHS's and CDC's names beside their logos). Flowing, its lines kept the room above them as space
+     * before, and the text above, a little longer in Word, pushed the last one onto a page of its own. Every item starts
+     * in the foot zone, and every line sits beside the picture.
+     */
+    private static boolean logoBlock(PageLayout.Column c, float zone) {
+        List<PageLayout.FloatItem> pictures = new ArrayList<>();
+        int lines = 0;
+        for (PageLayout.Item it : c.items()) {
+            if (it.top() < zone) {
+                return false;
+            }
+            if (it instanceof PageLayout.FloatItem f) {
+                pictures.add(f);
+            } else if (it instanceof PageLayout.ParaItem) {
+                lines++;
+            } else {
+                return false;
+            }
+        }
+        if (pictures.isEmpty() || lines == 0) {
+            return false;
+        }
+        for (PageLayout.Item it : c.items()) {
+            if (it instanceof PageLayout.ParaItem pi
+                    && pictures.stream().noneMatch(f -> f.top() < pi.bottom() && f.bottom() > pi.top()
+                            && (f.right() <= pi.x() || f.x() >= pi.right()))) {
                 return false;
             }
         }
