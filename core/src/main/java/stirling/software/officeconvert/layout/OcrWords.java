@@ -52,17 +52,30 @@ final class OcrWords {
      * Only the name's start is compared, in place: the name comes from the PDF, and this runs for every glyph.
      */
     static boolean ocrText(Glyph g) {
-        String ps = g.font.postScriptName();
-        if (!g.invisible || ps == null) {
+        if (!g.invisible || g.font.postScriptName() == null) {
             return false;
         }
-        int start = ps.length() > 7 && ps.charAt(6) == '+' ? 7 : 0;
         for (String name : OCR_FONTS) {
-            if (ps.regionMatches(true, start, name, 0, name.length())) {
+            if (named(g, name)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * OCR text in Tesseract's own GlyphLessFont, as its PDF renderer draws it (OCRmyPDF's sandwich renderer passes it
+     * on): each word box with a space after it, the two stretched over the box.
+     */
+    static boolean tesseractText(Glyph g) {
+        return ocrText(g) && named(g, "glyphless");
+    }
+
+    /** Whether the glyph's font is named {@code name}, after any subset prefix, ignoring case. */
+    private static boolean named(Glyph g, String name) {
+        String ps = g.font.postScriptName();
+        int start = ps.length() > 7 && ps.charAt(6) == '+' ? 7 : 0;
+        return ps.regionMatches(true, start, name, 0, name.length());
     }
 
     /** A word's letters and the space drawn right after it (-1 when none), as indexes into the glyphs. */
@@ -106,6 +119,8 @@ final class OcrWords {
     /**
      * {@code glyphs} with the space between two Hangul OCR syllables dropped when they're drawn closer than
      * JOIN_HANGUL of their size on one line, the first widened to reach the second, so words() makes them one word.
+     * Only in Tesseract's own text: in OCRmyPDF's NotoSans and Occulta layers a space's advance can reach the next
+     * word, so the gap after it says nothing about the gap between the words.
      */
     static List<Glyph> joinSyllables(List<Glyph> glyphs) {
         List<Glyph> out = null;
@@ -113,8 +128,8 @@ final class OcrWords {
             Glyph g = glyphs.get(i);
             Glyph space = glyphs.get(i + 1);
             Glyph next = glyphs.get(i + 2);
-            if (!ocrText(g) || !hangul(g.text) || !ocrText(space) || !space.isSpace() || !ocrText(next)
-                    || !hangul(next.text)) {
+            if (!tesseractText(g) || !hangul(g.text) || !tesseractText(space) || !space.isSpace()
+                    || !tesseractText(next) || !hangul(next.text)) {
                 continue;
             }
             float near = TOUCHING * Math.max(g.size, next.size) + TOUCHING_PT;

@@ -182,6 +182,18 @@ class OcrWordsTest {
         assertSame(drawn, OcrWords.joinSyllables(drawn), "text in a real face isn't an OCR layer's");
     }
 
+    @Test
+    void onlyTesseractsOwnTextIsJoined() {
+        // OCRmyPDF's own layers can give a space the whole gap to the next word: two words, however close the next
+        List<Glyph> occulta = syllables("지원", 0.1f * SIZE, OCCULTA);
+        assertSame(occulta, OcrWords.joinSyllables(occulta));
+        List<Glyph> noto = syllables("지원", 0.1f * SIZE, NOTO);
+        assertSame(noto, OcrWords.joinSyllables(noto));
+        assertTrue(OcrWords.tesseractText(glyph("지", 72, SIZE, font("GlyphLessFont"), 0)));
+        assertTrue(OcrWords.tesseractText(glyph("지", 72, SIZE, font("ABCDEF+GlyphLessFont"), 0)));
+        assertFalse(OcrWords.tesseractText(glyph("지", 72, SIZE, font("ABCDEF+Occulta"), 0)));
+    }
+
     private static FontInfo font(String ps) {
         return new FontInfo("Arial", false, false, false, false, false, ps, true);
     }
