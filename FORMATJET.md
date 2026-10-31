@@ -103,3 +103,4 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.11` | Judge a gutter's left side by the column that ends at it (#78) | Not offered yet |
 | `0.2.2-fj.11` | Start a frame's table at its header when prose sits above it (#79) | Not offered yet |
 | `0.2.2-fj.11` | Join Hangul syllables Tesseract boxed apart into their words (#81) | Not offered yet |
+| `0.2.2-fj.13` | Find a scanned table's faded and broken rules, and its cells' short sides (#92) | Not offered yet |
