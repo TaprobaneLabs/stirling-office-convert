@@ -66,8 +66,26 @@ class ScanRulesTest {
         for (int x = 0; x < 100; x++) {
             luma[85 * 100 + x] = (byte) 120;
         }
-        assertFalse(ScanRules.contrasted(luma, 100, 100, true, new int[] {5, 94, 50, 50}, 4));
-        assertTrue(ScanRules.contrasted(luma, 100, 100, true, new int[] {5, 94, 85, 85}, 4));
+        assertFalse(ScanRules.contrasted(luma, 100, 100, true, new int[] {5, 94, 50, 50}));
+        assertTrue(ScanRules.contrasted(luma, 100, 100, true, new int[] {5, 94, 85, 85}));
+    }
+
+    @Test
+    void aRuleAcrossATiltedPageIsNoFilledBand() {
+        // 400 by 100 pixels at a point each: a rule two pixels thick dropping 12 pixels across the page, and a band
+        // 12 pixels tall filled with ink
+        boolean[] dark = new boolean[400 * 100];
+        for (int x = 0; x < 400; x++) {
+            int y = 20 + x * 12 / 400;
+            dark[y * 400 + x] = dark[(y + 1) * 400 + x] = true;
+            for (int b = 60; b < 72; b++) {
+                dark[b * 400 + x] = true;
+            }
+        }
+        assertTrue(ScanRules.tiltedLine(dark, 400, new int[] {0, 399, 20, 32}, 1f));
+        assertFalse(ScanRules.tiltedLine(dark, 400, new int[] {0, 399, 60, 71}, 1f));
+        // A rule thin enough to be one isn't judged
+        assertFalse(ScanRules.tiltedLine(dark, 400, new int[] {0, 399, 20, 22}, 1f));
     }
 
     @Test

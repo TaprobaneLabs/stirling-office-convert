@@ -67,13 +67,15 @@ final class ScanRules {
         float sx = (scan.right() - scan.x()) / w;
         float sy = (scan.bottom() - scan.top()) / h;
         List<Rule> out = new ArrayList<>();
+        boolean tilted = false;
         for (int[] g : groups(dark, w, h, true, Math.round(MIN_LENGTH / sx))) {
-            if (contrasted(luma, w, h, true, g, Math.round(MAX_THICKNESS / sy))) {
+            if (contrasted(luma, w, h, true, g)) {
                 add(out, true, g, scan.top(), sy, scan.x(), sx);
+                tilted |= tiltedLine(dark, w, g, sy);
             }
         }
         for (int[] g : groups(dark, w, h, false, Math.round(MIN_LENGTH / sy))) {
-            if (contrasted(luma, w, h, false, g, Math.round(MAX_THICKNESS / sx))) {
+            if (contrasted(luma, w, h, false, g)) {
                 add(out, false, g, scan.x(), sx, scan.top(), sy);
             }
         }
@@ -90,7 +92,8 @@ final class ScanRules {
                 kept.add(r);
             }
         }
-        List<Rule> sides = cellSides(kept, ink);
+        // A tilted page's rules are read as the edges of bands, not rows: sides between them made a grid of none
+        List<Rule> sides = tilted ? List.of() : cellSides(kept, ink);
         if (sides.isEmpty()) {
             return kept;
         }
@@ -273,6 +276,28 @@ final class ScanRules {
         return out;
     }
 
+    /** A band thicker than a rule whose box holds under this share of dark pixels is a tilted rule, not a fill. */
+    static final float BAND_FILL = 0.5f;
+
+    /**
+     * Whether a group of horizontal runs too thick for a rule is a rule drawn across a tilted page: its runs step down
+     * (or up) along it, so its box is mostly paper, where a filled band's is mostly ink. A scan tilted by half a degree
+     * moves a rule across a page by four points or more.
+     */
+    static boolean tiltedLine(boolean[] dark, int w, int[] g, float sy) {
+        int lines = g[3] - g[2] + 1;
+        if (lines * sy <= MAX_THICKNESS || lines * sy > BAND) {
+            return false;
+        }
+        long inked = 0;
+        for (int y = g[2]; y <= g[3]; y++) {
+            for (int x = g[0]; x <= g[1]; x++) {
+                inked += dark[y * w + x] ? 1 : 0;
+            }
+        }
+        return inked < BAND_FILL * (long) lines * (g[1] - g[0] + 1);
+    }
+
     /** The tallest row whose cells' sides are looked for. */
     static final float MAX_ROW = 60f;
 
@@ -348,12 +373,12 @@ final class ScanRules {
 
     /**
      * Whether a run of dark pixels is darker than the scan a few pixels beyond it on both sides, as a rule or a filled
-     * band is against its paper: a thin run's darkest line, a thicker one's lines on average. Shading as grey as
-     * {@link #DARK} (a table's banded rows) has patches a little darker than its own grey wherever the noise lines up,
-     * and their edges made rules through the middle of a row: the row's text was then split between two rows.
+     * band is against its paper, judged by its darkest line at each step along it: a slightly tilted rule spans a few
+     * points of height, and on average it is nearly as light as its paper. Shading as grey as {@link #DARK} (a table's
+     * banded rows) has patches a little darker than its own grey wherever the noise lines up, which made rules through
+     * the middle of a row.
      */
-    static boolean contrasted(byte[] luma, int w, int h, boolean horizontal, int[] g, int thin) {
-        boolean band = g[3] - g[2] + 1 > thin;
+    static boolean contrasted(byte[] luma, int w, int h, boolean horizontal, int[] g) {
         int lines = horizontal ? h : w;
         int before = g[2] - 3;
         int after = g[3] + 3;
@@ -366,13 +391,10 @@ final class ScanRules {
         int n = 0;
         for (int k = g[0]; k <= g[1]; k += 2) {
             int darkest = 255;
-            int sum = 0;
             for (int line = g[2]; line <= g[3]; line++) {
-                int v = lum(luma, w, horizontal, line, k);
-                darkest = Math.min(darkest, v);
-                sum += v;
+                darkest = Math.min(darkest, lum(luma, w, horizontal, line, k));
             }
-            own += band ? sum / (g[3] - g[2] + 1) : darkest;
+            own += darkest;
             above += lum(luma, w, horizontal, before, k);
             below += lum(luma, w, horizontal, after, k);
             n++;
