@@ -67,19 +67,24 @@ final class ScanRules {
         float sx = (scan.right() - scan.x()) / w;
         float sy = (scan.bottom() - scan.top()) / h;
         List<Rule> out = new ArrayList<>();
+        // Every candidate counts towards MAX_RULES, the faint ones too: a page of shading and halftone panels (a designed
+        // fact sheet) gives up on rules as before, and its panels' edges don't make a table of the page
+        List<Rule> candidates = new ArrayList<>();
         boolean tilted = false;
         for (int[] g : groups(dark, w, h, true, Math.round(MIN_LENGTH / sx))) {
+            add(candidates, true, g, scan.top(), sy, scan.x(), sx);
             if (contrasted(luma, w, h, true, g)) {
                 add(out, true, g, scan.top(), sy, scan.x(), sx);
                 tilted |= tiltedLine(dark, w, g, sy);
             }
         }
         for (int[] g : groups(dark, w, h, false, Math.round(MIN_LENGTH / sy))) {
+            add(candidates, false, g, scan.x(), sx, scan.top(), sy);
             if (contrasted(luma, w, h, false, g)) {
                 add(out, false, g, scan.x(), sx, scan.top(), sy);
             }
         }
-        if (out.size() > MAX_RULES) {
+        if (candidates.size() > MAX_RULES) {
             return List.of();
         }
         // A light rule comes out in pieces, and parts of it not at all: its pieces are joined and its missing parts
