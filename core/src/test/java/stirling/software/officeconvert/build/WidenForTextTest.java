@@ -78,6 +78,30 @@ class WidenForTextTest {
     }
 
     @Test
+    void aLineThatFitsTheWidthTheColumnNeedsAnywayStays() {
+        // A centred line of 100 pt makes the column 102 pt wide whatever moves; the other line fits that where it is
+        // (from Codex's review)
+        Paragraph set = paragraph(Align.LEFT, 20f, 50f);
+        Paragraph wide = paragraph(Align.CENTER, 0f, 100f);
+        Table t = table(64f, 60f, set, wide, paragraph(Align.CENTER, 0f, 30f));
+        TableBuilder.widenForText(t, 0f);
+        assertEquals(20f, set.indentLeft, 0.01f, "the set-in line keeps its place");
+        assertEquals(102f, t.columnWidths.get(0), 0.01f, "the column grows for the centred line");
+    }
+
+    @Test
+    void aLineMovesOnlyAsFarAsTheWidthTheColumnNeeds() {
+        // A line that can move only 10 pt makes the column 72 pt wide; the other moves only to fit that
+        Paragraph set = paragraph(Align.LEFT, 40f, 50f);
+        Paragraph item = paragraph(Align.LEFT, 10f, 70f);
+        Table t = table(64f, 60f, set, item, paragraph(Align.CENTER, 0f, 30f));
+        TableBuilder.widenForText(t, 0f);
+        assertEquals(20f, set.indentLeft, 0.01f, "the set-in line moves 20 pt, to end at 72 pt, not 40");
+        assertEquals(0f, item.indentLeft, 0.01f, "the other moves as far as it can");
+        assertEquals(72f, t.columnWidths.get(0), 0.01f);
+    }
+
+    @Test
     void aLineSetAtATabStopMovesWithItsTabs() {
         Paragraph tabbed = paragraph(Align.LEFT, 20f, 50f);
         tabbed.tabs.add(new Paragraph.TabStop(40f, Paragraph.TabStop.Kind.RIGHT, '.'));

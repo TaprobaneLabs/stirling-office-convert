@@ -438,25 +438,37 @@ final class TableBuilder {
      * how much wider than that the column must still grow. A table grown past the page's edge has its last columns cut
      * off there: the Federal Reserve's H.4.1 release and OPM's SF 15 lost figures that way. A line moves whole: no
      * further than where its first line starts, so a marker it hangs from (a negative first-line indent) stays in the
-     * cell, and its tab stops with it, so the text after a tab keeps its place in the line (from Codex's review).
+     * cell, and its tab stops with it, so the text after a tab keeps its place in the line (from Codex's review). Lines
+     * move only to fit the width the column needs anyway: a line that can't move as far as the rest makes the column
+     * that wide, and a line that already fits there stays (also from Codex's review).
      */
     private static float moveIn(List<Paragraph> column, Table t, float width) {
-        float need = 0;
+        float least = width;
         for (Paragraph p : column) {
-            if (p.sourceLines != 1) {
-                continue;
+            if (p.sourceLines == 1) {
+                least = Math.max(least, taken(p, t) - movable(p));
             }
-            float w = Math.max(0, p.indentLeft) + p.textWidth + t.cellMarginLeft + t.cellMarginRight + 2f;
-            float start = p.indentLeft + Math.min(0, p.indentFirst);
-            if (w > width && start > 0 && (p.align == Align.LEFT || p.align == Align.JUSTIFY)) {
-                float move = Math.min(start, w - width);
+        }
+        for (Paragraph p : column) {
+            float w = taken(p, t);
+            if (p.sourceLines == 1 && w > least && movable(p) > 0) {
+                float move = Math.min(movable(p), w - least);
                 p.indentLeft -= move;
                 p.tabs.replaceAll(s -> new Paragraph.TabStop(Math.max(0, s.pos() - move), s.kind(), s.leader()));
-                w -= move;
             }
-            need = Math.max(need, w);
         }
-        return Math.max(0, need - width);
+        return least - width;
+    }
+
+    /** The room a one-line paragraph takes in its cell. */
+    private static float taken(Paragraph p, Table t) {
+        return Math.max(0, p.indentLeft) + p.textWidth + t.cellMarginLeft + t.cellMarginRight + 2f;
+    }
+
+    /** How far a left-aligned line can move left: to where its first line starts at the cell's edge. */
+    private static float movable(Paragraph p) {
+        return p.align == Align.LEFT || p.align == Align.JUSTIFY ? Math.max(0, p.indentLeft + Math.min(0, p.indentFirst))
+                : 0;
     }
 
     private static void borders(Table.Cell cell, TableDetection.FoundCell c, List<Rule> rules, boolean ruled) {
