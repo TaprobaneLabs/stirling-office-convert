@@ -103,4 +103,4 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.11` | Judge a gutter's left side by the column that ends at it (#78) | Not offered yet |
 | `0.2.2-fj.11` | Start a frame's table at its header when prose sits above it (#79) | Not offered yet |
 | `0.2.2-fj.11` | Join Hangul syllables Tesseract boxed apart into their words (#81) | Not offered yet |
-| Unreleased | Show a scan's OCR text on its slide instead of the scan, as Word documents do, so PowerPoint has text to read and edit (#91) | Not offered yet: reverses upstream's choice for slides |
+| Unreleased | Show a scan's OCR text on its slide instead of the scan, as Word documents do, at the size that fills its words' boxes rather than letter-spaced (#91) | Not offered yet: reverses upstream's choice for slides |
