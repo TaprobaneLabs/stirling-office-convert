@@ -363,7 +363,12 @@ final class TableBuilder {
     /** How near the page's edge a table may grow: Word draws one into the margin, and cuts it off at the edge. */
     private static final float PAGE_EDGE = 18f;
 
-    /** Widens columns for their one-line text; {@code roomRight} is how far the table may grow on the right. */
+    /**
+     * Widens columns for their one-line text; {@code roomRight} is how far the table may grow on the right. A column
+     * first takes the room the next column's lines leave on their left, moving them left by as much, so they keep their
+     * place on the page; then the table grows, as far as the page's edge; then its own lines move left
+     * ({@link #moveIn}).
+     */
     static void widenForText(Table t, float roomRight) {
         int n = t.columnWidths.size();
         float[] need = new float[n];
@@ -371,32 +376,35 @@ final class TableBuilder {
         Arrays.fill(freeLeft, Float.MAX_VALUE);
         // Whether any cell starting in a column holds text, spanning or not
         boolean[] holdsText = new boolean[n];
+        // Whether a rule or a change of shading marks the boundary after a column in some row
+        boolean[] drawn = new boolean[n];
         List<List<Paragraph>> byColumn = new ArrayList<>();
+        // The paragraphs of cells that start in a column and span on: they move with its own
+        List<List<Paragraph>> spanning = new ArrayList<>();
         for (int c = 0; c < n; c++) {
             byColumn.add(new ArrayList<>());
+            spanning.add(new ArrayList<>());
         }
-        int cellIndex = 0;
         for (Table.Row row : t.rows) {
             int col = 0;
+            Table.Cell before = null;
             for (Table.Cell cell : row.cells) {
                 if (col < n) {
+                    if (before != null) {
+                        drawn[col - 1] |= !before.right.equals(Table.Border.NONE)
+                                || !cell.left.equals(Table.Border.NONE) || before.shading != cell.shading;
+                    }
                     for (Paragraph p : cell.paragraphs) {
                         holdsText[col] |= p.sourceLines > 0;
-                    }
-                }
-                if (cell.gridSpan == 1 && col < n) {
-                    for (Paragraph p : cell.paragraphs) {
-                        byColumn.get(col).add(p);
-                        freeLeft[col] = Math.min(freeLeft[col], p.align == Align.LEFT || p.align == Align.JUSTIFY
-                                ? Math.max(0, p.indentLeft) : 0);
-                        if (p.sourceLines == 1) {
-                            float w = Math.max(0, p.indentLeft) + p.textWidth + t.cellMarginLeft + t.cellMarginRight + 2f;
-                            need[col] = Math.max(need[col], w);
+                        (cell.gridSpan == 1 ? byColumn : spanning).get(col).add(p);
+                        freeLeft[col] = Math.min(freeLeft[col], movable(p));
+                        if (cell.gridSpan == 1 && p.sourceLines == 1) {
+                            need[col] = Math.max(need[col], taken(p, t));
                         }
                     }
                 }
+                before = cell;
                 col += cell.gridSpan;
-                cellIndex++;
             }
         }
         float spare = Math.max(0, roomRight);
@@ -410,15 +418,24 @@ final class TableBuilder {
             // table 94 pt past the page's edge, the amounts with it
             boolean empty = c + 1 < n && !holdsText[c + 1];
             if (c + 1 < n && (freeLeft[c + 1] != Float.MAX_VALUE || empty)) {
+                // Every line of the next column moves left by what it gives, so it needs that much less: MMWR's Table 1
+                // (cont.) gave its label only 16 of the 79 pt its 2018 figures leave, and ran 12 pt past the page's
+                // edge. Where a rule or a change of shading marks the boundary, it moves no further than the next
+                // column's lines leave it room (the boundary is drawn there)
                 float room = empty ? t.columnWidths.get(c + 1) - MIN_COLUMN
-                        : Math.min(freeLeft[c + 1], t.columnWidths.get(c + 1) - need[c + 1]);
+                        : drawn[c] ? Math.min(freeLeft[c + 1], t.columnWidths.get(c + 1) - need[c + 1])
+                        : Math.min(freeLeft[c + 1], t.columnWidths.get(c + 1) - MIN_COLUMN);
                 float take = Math.min(deficit, room);
                 if (take > 0) {
                     t.columnWidths.set(c, t.columnWidths.get(c) + take);
                     t.columnWidths.set(c + 1, t.columnWidths.get(c + 1) - take);
                     freeLeft[c + 1] -= take;
+                    need[c + 1] = Math.max(0, need[c + 1] - take);
                     for (Paragraph p : byColumn.get(c + 1)) {
-                        p.indentLeft = Math.max(0, p.indentLeft - take);
+                        moveLeft(p, take);
+                    }
+                    for (Paragraph p : spanning.get(c + 1)) {
+                        moveLeft(p, take);
                     }
                     deficit -= take;
                 }
@@ -452,12 +469,16 @@ final class TableBuilder {
         for (Paragraph p : column) {
             float w = taken(p, t);
             if (p.sourceLines == 1 && w > least && movable(p) > 0) {
-                float move = Math.min(movable(p), w - least);
-                p.indentLeft -= move;
-                p.tabs.replaceAll(s -> new Paragraph.TabStop(Math.max(0, s.pos() - move), s.kind(), s.leader()));
+                moveLeft(p, Math.min(movable(p), w - least));
             }
         }
         return least - width;
+    }
+
+    /** Moves a paragraph left in its cell, its tab stops with it. */
+    private static void moveLeft(Paragraph p, float by) {
+        p.indentLeft = Math.max(0, p.indentLeft - by);
+        p.tabs.replaceAll(s -> new Paragraph.TabStop(Math.max(0, s.pos() - by), s.kind(), s.leader()));
     }
 
     /** The room a one-line paragraph takes in its cell. */
