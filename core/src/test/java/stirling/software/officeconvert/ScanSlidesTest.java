@@ -121,10 +121,10 @@ class ScanSlidesTest {
 
     /**
      * A ruled table on a scan whose cells' words are stretched by different amounts, as OCR boxes vary: every cell takes
-     * the page's size, so the rows don't jump from one size to another.
+     * the table's size, so the rows don't jump from one size to another, and no cell's letters are spread apart.
      */
     @Test
-    void aScannedTablesCellsShareTheirPagesSize() throws Exception {
+    void aScannedTablesCellsShareOneSize() throws Exception {
         float left = 72;
         float top = 150;
         float[] cols = {0, 60, 260, 340};
@@ -169,7 +169,62 @@ class ScanSlidesTest {
         while (run.find()) {
             sizes.add(run.group(1));
         }
-        assertEquals(java.util.Set.of("1100"), sizes, "8 points at the page's 137%: " + table);
+        assertEquals(java.util.Set.of("1100"), sizes, "8 points at the table's 137%: " + table);
+        Matcher spc = Pattern.compile(" spc=\"\\d+\"").matcher(table);
+        assertFalse(spc.find(), "a cell's letters aren't spread: " + table);
+    }
+
+    /** A table printed on a page whose other text is an OCR layer keeps its sizes: only OCR text is grown. */
+    @Test
+    void aPrintedTableOnAnOcrPageKeepsItsSize() throws Exception {
+        float left = 72;
+        float top = 450;
+        float[] cols = {0, 60, 260, 340};
+        float row = 20;
+        Path pdf = dir.resolve("printed-table.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LETTER);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.drawImage(LosslessFactory.createFromImage(doc, textOnly()), 0, 0, 612, 792);
+                for (int i = 0; i < 20; i++) {
+                    stretched(cs, 72, 792 - (120 + i * 16), 1.37f, line(i));
+                }
+                cs.setLineWidth(1);
+                for (int r = 0; r <= 4; r++) {
+                    cs.moveTo(left, 792 - (top + r * row));
+                    cs.lineTo(left + cols[3], 792 - (top + r * row));
+                }
+                for (float c : cols) {
+                    cs.moveTo(left + c, 792 - top);
+                    cs.lineTo(left + c, 792 - (top + 4 * row));
+                }
+                cs.stroke();
+                for (int r = 0; r < 4; r++) {
+                    float base = 792 - (top + r * row + 14);
+                    String[] cells = {String.valueOf(r + 1), "Printed item " + (r + 1), (r + 1) * 10 + ".00"};
+                    for (int c = 0; c < 3; c++) {
+                        cs.beginText();
+                        cs.setFont(FONT, 9);
+                        cs.newLineAtOffset(left + cols[c] + 4, base);
+                        cs.showText(cells[c]);
+                        cs.endText();
+                    }
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        String slide = slide(pdf);
+        assertTrue(slide.contains("<a:tbl>"), slide);
+        String table = slide.substring(slide.indexOf("<a:tbl>"), slide.indexOf("</a:tbl>"));
+        assertTrue(table.contains("Printed item 3"), table);
+        Matcher run = Pattern.compile("<a:rPr[^>]*\\bsz=\"(\\d+)\"").matcher(table);
+        java.util.Set<String> sizes = new java.util.TreeSet<>();
+        while (run.find()) {
+            sizes.add(run.group(1));
+        }
+        assertEquals(java.util.Set.of("900"), sizes, "the printed table's 9 points: " + table);
+        assertTrue(slide.contains("sz=\"1100\""), "the OCR text around it is still grown: " + slide);
     }
 
     private static void stretched(PDPageContentStream cs, float x, float y, float scale, String s) throws IOException {

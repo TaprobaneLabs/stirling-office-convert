@@ -32,17 +32,9 @@ final class TextFrames {
     private final PlacedContent content;
     private final float slideWidth;
 
-    /** What the page's OCR text is grown by ({@link OcrSizes}); 1 on other pages. */
-    private float ocrGrow = 1f;
-
     TextFrames(PlacedContent content, float slideWidth) {
         this.content = content;
         this.slideWidth = slideWidth;
-    }
-
-    /** Starts a page whose OCR text is grown by {@code k}. */
-    void page(float k) {
-        ocrGrow = k;
     }
 
     /** {@code grow}: what an OCR paragraph's size is grown by ({@link OcrSizes}), 1 for other text. */
@@ -229,7 +221,7 @@ final class TextFrames {
             }
         }
         boolean ocr = unseen(d);
-        float grow = ocr ? ocrGrow : 1f;
+        float grow = ocr ? OcrSizes.factor(d) : 1f;
         float size = OcrSizes.grown(firstLineSize(first), grow);
         float pitch = d.pitch > 0 ? d.pitch : 1.2f * size;
         float lineHeight = LineBoxes.settle(Math.clamp(pitch, 0.7f * size, 3f * size), size);
@@ -363,7 +355,7 @@ final class TextFrames {
                 OfficeFonts.restore(runs, g.d);
                 iconsOut(runs, g.d, null);
             }
-            OcrSizes.apply(runs, g.grow);
+            OcrSizes.apply(runs, g.grow, true);
             Bullet bullet = listed ? g.bullet : null;
             out.add(new TextPara(runs, align, marginLeft, indent, marginRight, g.lineHeight, spaceBefore,
                     g.firstBaseline() - top, g.lastBaseline() - top, g.size, bullet, linkLines(g.d, runs)));

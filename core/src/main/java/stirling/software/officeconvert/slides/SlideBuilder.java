@@ -70,8 +70,6 @@ final class SlideBuilder {
         final List<Box> textPictures = new ArrayList<>();
         int background = -1;
         int backgroundOrder = -1;
-        /** What the page's OCR text is grown by ({@link OcrSizes}). */
-        float ocrGrow = 1f;
 
         Stack(PaintOrder paint, Set<Glyph> text) {
             this.paint = paint;
@@ -124,8 +122,6 @@ final class SlideBuilder {
         try {
             PageData page = layout.page();
             Stack stack = new Stack(paint, FigureText.placed(layout));
-            stack.ocrGrow = layout.ocrText() ? OcrSizes.factor(stack.text) : 1f;
-            frames.page(stack.ocrGrow);
             bulletDots(page, stack);
             List<SlideShape> icons = new ArrayList<>();
             for (PageLayout.Band band : layout.bands()) {
@@ -218,7 +214,9 @@ final class SlideBuilder {
 
     private void table(PageLayout.TableItem ti, PageLayout layout, AffineTransform toDisplay, Stack stack) {
         Table cells = content.table(ti, layout);
-        OcrSizes.apply(cells, stack.ocrGrow);
+        if (OcrSizes.unseen(ti.cellParas())) {
+            OcrSizes.apply(cells, OcrSizes.factor(ti.cellParas()));
+        }
         TableShape t = new TableShape(ti.x(), ti.top(), cells);
         Box area = box(frameOf(t));
         int order = stack.paint.lastInside(area, Kind.FILL, Kind.STROKE, Kind.TEXT);
