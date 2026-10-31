@@ -1249,6 +1249,10 @@ final class RunBuilder {
         return true;
     }
 
+    /**
+     * {@code g}'s run style. Text the PDF never paints (an OCR layer's) is set in black: its colour was never seen, and
+     * an OCR tool may leave it white, which shown on white paper, once its scan is left out, would read as a blank page.
+     */
     static RunStyle styleOf(Glyph g, float hostSize) {
         float size = g.size;
         if (g.vertAlign != 0) {
@@ -1268,7 +1272,7 @@ final class RunBuilder {
                 g.italic,
                 g.underline,
                 g.strike,
-                g.rgb,
+                g.invisible ? 0 : g.rgb,
                 g.highlightRgb,
                 g.vertAlign,
                 symbol,

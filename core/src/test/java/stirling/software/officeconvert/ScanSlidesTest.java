@@ -81,6 +81,20 @@ class ScanSlidesTest {
         assertTrue(widths.getFirst() > SLIDE_WIDTH * 9 / 10, "the page's picture: " + widths);
     }
 
+    /** An OCR layer left white: never seen over its scan, it would be white on white without it. */
+    @Test
+    void anOcrLayerLeftWhiteComesOutBlack() throws Exception {
+        Path pdf = page(textOnly(), true, 120, 20, Color.WHITE);
+        String slide = slide(pdf);
+        assertTrue(slide.contains("readable OCR layer line 3"), slide);
+        assertFalse(slide.contains("FFFFFF"), slide);
+        Path docx = dir.resolve("out.docx");
+        PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
+        String body = entry(docx, "word/document.xml");
+        assertTrue(body.contains("readable OCR layer line 3"), body);
+        assertFalse(body.contains("FFFFFF"), body);
+    }
+
     @Test
     void impressSlidesLeaveTheScanOutToo() throws Exception {
         Path pdf = page(textOnly(), true);
@@ -132,14 +146,19 @@ class ScanSlidesTest {
         return page(img, ocr, 120, 20);
     }
 
-    /** The scan, and its lines as text: invisible over it when {@code ocr}, else drawn. */
     private Path page(BufferedImage img, boolean ocr, float top, int count) throws IOException {
+        return page(img, ocr, top, count, Color.BLACK);
+    }
+
+    /** The scan, and its lines as text in {@code colour}: invisible over it when {@code ocr}, else drawn. */
+    private Path page(BufferedImage img, boolean ocr, float top, int count, Color colour) throws IOException {
         Path pdf = dir.resolve(ocr ? "scan.pdf" : "picture.pdf");
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.LETTER);
             doc.addPage(page);
             try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
                 cs.drawImage(LosslessFactory.createFromImage(doc, img), 0, 0, 612, 792);
+                cs.setNonStrokingColor(colour);
                 for (int i = 0; i < count; i++) {
                     cs.beginText();
                     cs.setRenderingMode(ocr ? RenderingMode.NEITHER : RenderingMode.FILL);
