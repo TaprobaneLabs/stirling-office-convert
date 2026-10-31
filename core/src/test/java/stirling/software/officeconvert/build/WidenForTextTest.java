@@ -113,6 +113,78 @@ class WidenForTextTest {
         assertEquals(64f, t.columnWidths.get(0), 0.01f, "the column keeps its width");
     }
 
+    @Test
+    void aColumnTakesAllTheRoomTheNextColumnsLinesLeave() {
+        // MMWR's Table 1 (cont.): a label wider than its column, and figures set in from the next column's edge. The
+        // figures move left by what their column gives, so they keep their place on the page and need that much less
+        Paragraph label = paragraph(Align.LEFT, 0f, 80f);
+        Paragraph figure = paragraph(Align.LEFT, 30f, 20f);
+        Paragraph total = paragraph(Align.LEFT, 25f, 30f);
+        total.tabs.add(new Paragraph.TabStop(50f, Paragraph.TabStop.Kind.RIGHT, '.'));
+        Table t = grid(new float[] {64f, 60f}, row(cell(label), cell(figure)),
+                row(cell(paragraph(Align.LEFT, 0f, 0f)), cell(total)));
+        TableBuilder.widenForText(t, 0f);
+        assertEquals(82f, t.columnWidths.get(0), 0.01f, "the label's column takes the 18 pt it needs");
+        assertEquals(42f, t.columnWidths.get(1), 0.01f, "from the next column, which doesn't grow back");
+        assertEquals(12f, figure.indentLeft, 0.01f, "the figures move left by as much");
+        assertEquals(7f, total.indentLeft, 0.01f);
+        assertEquals(32f, total.tabs.getFirst().pos(), 0.01f, "their tab stops with them");
+    }
+
+    @Test
+    void aBoundaryDrawnBetweenTheColumnsMovesNoFurtherThanBefore() {
+        // A rule between the columns: the next column gives only the room its widest line leaves it
+        Paragraph label = paragraph(Align.LEFT, 0f, 80f);
+        Paragraph figure = paragraph(Align.LEFT, 30f, 20f);
+        Paragraph total = paragraph(Align.LEFT, 25f, 30f);
+        Table.Cell ruled = cell(label);
+        ruled.right = new Table.Border(0.5f, 0);
+        Table t = grid(new float[] {64f, 60f}, row(ruled, cell(figure)),
+                row(cell(paragraph(Align.LEFT, 0f, 0f)), cell(total)));
+        TableBuilder.widenForText(t, 0f);
+        assertEquals(57f, t.columnWidths.get(1), 0.01f, "the next column gives 3 pt, as its widest line needs 57");
+        assertEquals(82f, t.columnWidths.get(0), 0.01f, "and the label's column grows for the rest");
+    }
+
+    @Test
+    void aCellSpanningOnFromTheNextColumnMovesWithIt() {
+        Paragraph label = paragraph(Align.LEFT, 0f, 80f);
+        Paragraph figure = paragraph(Align.LEFT, 30f, 20f);
+        Paragraph heading = paragraph(Align.LEFT, 12f, 60f);
+        Table.Cell across = cell(heading);
+        across.gridSpan = 2;
+        Table t = grid(new float[] {64f, 60f, 50f},
+                row(cell(label), cell(figure), cell(paragraph(Align.CENTER, 0f, 20f))),
+                row(cell(paragraph(Align.LEFT, 0f, 0f)), across));
+        TableBuilder.widenForText(t, 0f);
+        assertEquals(48f, t.columnWidths.get(1), 0.01f, "the spanning heading leaves only 12 pt to take");
+        assertEquals(0f, heading.indentLeft, 0.01f, "and moves left with the column it starts in");
+        assertEquals(18f, figure.indentLeft, 0.01f);
+    }
+
+    private static Table grid(float[] widths, Table.Row... rows) {
+        Table t = new Table();
+        t.cellMarginLeft = 0;
+        t.cellMarginRight = 0;
+        for (float w : widths) {
+            t.columnWidths.add(w);
+        }
+        t.rows.addAll(java.util.List.of(rows));
+        return t;
+    }
+
+    private static Table.Row row(Table.Cell... cells) {
+        Table.Row row = new Table.Row();
+        row.cells.addAll(java.util.List.of(cells));
+        return row;
+    }
+
+    private static Table.Cell cell(Paragraph p) {
+        Table.Cell cell = new Table.Cell();
+        cell.paragraphs.add(p);
+        return cell;
+    }
+
     /** Two rows: {@code first} then {@code second} in the first column, {@code next} in the second, no cell margins. */
     private static Table table(float width, float nextWidth, Paragraph first, Paragraph second, Paragraph next) {
         Table t = new Table();
