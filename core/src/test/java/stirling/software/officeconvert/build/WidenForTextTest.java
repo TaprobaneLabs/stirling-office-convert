@@ -55,6 +55,27 @@ class WidenForTextTest {
         assertEquals(37f, spill.indentLeft, 0.01f, "and the line moves left by the other 25");
     }
 
+    @Test
+    void aLineHangingFromItsMarkerStays() {
+        // "• Store #4" with its bullet at the cell's edge and its text 10 pt in (from Codex's review)
+        Paragraph item = paragraph(Align.LEFT, 10f, 70f);
+        item.indentFirst = -10f;
+        Table t = table(64f, 60f, item, paragraph(Align.CENTER, 0f, 30f), paragraph(Align.CENTER, 0f, 30f));
+        TableBuilder.widenForText(t, 0f);
+        assertEquals(10f, item.indentLeft, 0.01f, "the marker stays in its cell");
+        assertEquals(82f, t.columnWidths.get(0), 0.01f, "the column grows instead");
+    }
+
+    @Test
+    void aLineSetAtATabStopStays() {
+        Paragraph tabbed = paragraph(Align.LEFT, 20f, 50f);
+        tabbed.tabs.add(new Paragraph.TabStop(40f, Paragraph.TabStop.Kind.LEFT, (char) 0));
+        Table t = table(64f, 60f, tabbed, paragraph(Align.CENTER, 0f, 30f), paragraph(Align.CENTER, 0f, 30f));
+        TableBuilder.widenForText(t, 0f);
+        assertEquals(20f, tabbed.indentLeft, 0.01f, "the text after its tab wouldn't move with it");
+        assertEquals(72f, t.columnWidths.get(0), 0.01f, "the column grows instead");
+    }
+
     /** Two rows: {@code first} then {@code second} in the first column, {@code next} in the second, no cell margins. */
     private static Table table(float width, float nextWidth, Paragraph first, Paragraph second, Paragraph next) {
         Table t = new Table();

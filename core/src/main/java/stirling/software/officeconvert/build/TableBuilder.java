@@ -436,7 +436,9 @@ final class TableBuilder {
     /**
      * Moves a column's lines left in their cells, as far as their indents allow, until they fit {@code width}, and returns
      * how much wider than that the column must still grow. A table grown past the page's edge has its last columns cut
-     * off there: the Federal Reserve's H.4.1 release and OPM's SF 15 lost figures that way.
+     * off there: the Federal Reserve's H.4.1 release and OPM's SF 15 lost figures that way. A line that hangs from its
+     * marker (a negative first-line indent) or sets text at tab stops stays: its marker would leave the cell, or the text
+     * after its tab wouldn't move with it (from Codex's review).
      */
     private static float moveIn(List<Paragraph> column, Table t, float width) {
         float need = 0;
@@ -445,7 +447,8 @@ final class TableBuilder {
                 continue;
             }
             float w = Math.max(0, p.indentLeft) + p.textWidth + t.cellMarginLeft + t.cellMarginRight + 2f;
-            if (w > width && p.indentLeft > 0 && (p.align == Align.LEFT || p.align == Align.JUSTIFY)) {
+            boolean whole = p.indentFirst >= 0 && p.tabs.isEmpty();
+            if (w > width && p.indentLeft > 0 && whole && (p.align == Align.LEFT || p.align == Align.JUSTIFY)) {
                 float move = Math.min(p.indentLeft, w - width);
                 p.indentLeft -= move;
                 w -= move;
