@@ -25,6 +25,7 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
+import org.apache.pdfbox.util.Matrix;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -79,6 +80,43 @@ class ScanSlidesTest {
         List<Long> widths = pictureWidths(slide);
         assertEquals(1, widths.size(), slide);
         assertTrue(widths.getFirst() > SLIDE_WIDTH * 9 / 10, "the page's picture: " + widths);
+    }
+
+    /**
+     * An OCR layer set smaller than the scan's type and stretched to its word boxes (8 points at 137%, as OCRmyPDF's
+     * come out after OcrWords): its words take that stretch as size, not as letter spacing.
+     */
+    @Test
+    void aStretchedOcrLayerTakesItsStretchAsSize() throws Exception {
+        Path pdf = dir.resolve("stretched.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LETTER);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.drawImage(LosslessFactory.createFromImage(doc, textOnly()), 0, 0, 612, 792);
+                for (int i = 0; i < 20; i++) {
+                    cs.beginText();
+                    cs.setRenderingMode(RenderingMode.NEITHER);
+                    cs.setFont(FONT, 8);
+                    cs.setTextMatrix(new Matrix(1.37f, 0, 0, 1, 72, 792 - (120 + i * 16)));
+                    cs.showText(line(i));
+                    cs.endText();
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        String slide = slide(pdf);
+        assertTrue(slide.contains("readable OCR layer line 3"), slide);
+        Matcher run = Pattern.compile("<a:rPr[^>]*\\bsz=\"(\\d+)\"[^>]*>").matcher(slide);
+        int runs = 0;
+        while (run.find()) {
+            runs++;
+            assertEquals("1100", run.group(1), "8 points stretched 137% set at 11: " + run.group());
+            Matcher spc = Pattern.compile(" spc=\"(-?\\d+)\"").matcher(run.group());
+            assertTrue(!spc.find() || Math.abs(Integer.parseInt(spc.group(1))) < 30,
+                    "no letter spacing to speak of: " + run.group());
+        }
+        assertTrue(runs > 0, slide);
     }
 
     /** An OCR layer left white: never seen over its scan, it would be white on white without it. */

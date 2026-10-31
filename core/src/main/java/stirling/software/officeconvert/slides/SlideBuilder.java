@@ -27,6 +27,7 @@ import stirling.software.officeconvert.layout.PageLayout;
 import stirling.software.officeconvert.layout.ParaDraft;
 import stirling.software.officeconvert.layout.ParagraphBuilder;
 import stirling.software.officeconvert.model.Picture;
+import stirling.software.officeconvert.model.Table;
 import stirling.software.officeconvert.slides.PaintOrder.Kind;
 
 final class SlideBuilder {
@@ -212,7 +213,11 @@ final class SlideBuilder {
     }
 
     private void table(PageLayout.TableItem ti, PageLayout layout, AffineTransform toDisplay, Stack stack) {
-        TableShape t = new TableShape(ti.x(), ti.top(), content.table(ti, layout));
+        Table cells = content.table(ti, layout);
+        if (layout.ocrText()) {
+            OcrSizes.apply(cells);
+        }
+        TableShape t = new TableShape(ti.x(), ti.top(), cells);
         Box area = box(frameOf(t));
         int order = stack.paint.lastInside(area, Kind.FILL, Kind.STROKE, Kind.TEXT);
         stack.add(t, order, false);

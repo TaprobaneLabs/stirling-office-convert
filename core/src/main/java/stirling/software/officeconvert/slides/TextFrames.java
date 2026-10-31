@@ -37,15 +37,16 @@ final class TextFrames {
         this.slideWidth = slideWidth;
     }
 
+    /** {@code grow}: what an OCR paragraph's size is grown by ({@link OcrSizes}), 1 for other text. */
     private record Draft(ParaDraft d, Bullet bullet, Align align, float left, float right, float firstX, float restX,
-            float size, float lineHeight, String font, int order, boolean hidden, boolean ocr) {
+            float size, float lineHeight, String font, int order, boolean hidden, boolean ocr, float grow) {
 
         Draft aligned(Align a) {
-            return new Draft(d, bullet, a, left, right, firstX, restX, size, lineHeight, font, order, hidden, ocr);
+            return new Draft(d, bullet, a, left, right, firstX, restX, size, lineHeight, font, order, hidden, ocr, grow);
         }
 
         Draft withLineHeight(float h) {
-            return new Draft(d, bullet, align, left, right, firstX, restX, size, h, font, order, hidden, ocr);
+            return new Draft(d, bullet, align, left, right, firstX, restX, size, h, font, order, hidden, ocr, grow);
         }
 
         float firstBaseline() {
@@ -219,7 +220,9 @@ final class TextFrames {
                 restX = Math.min(restX, d.lines.get(i).x);
             }
         }
-        float size = firstLineSize(first);
+        boolean ocr = unseen(d);
+        float grow = ocr ? OcrSizes.factor(d) : 1f;
+        float size = grow == 1f ? firstLineSize(first) : OcrSizes.grown(firstLineSize(first), grow);
         float pitch = d.pitch > 0 ? d.pitch : 1.2f * size;
         float lineHeight = LineBoxes.settle(Math.clamp(pitch, 0.7f * size, 3f * size), size);
         boolean rtl = Marker.startIndex(first) > 0;
@@ -233,7 +236,7 @@ final class TextFrames {
             hidden = order >= 0 && paint.covered(new Box(left, d.top(), right, d.bottom()), order);
         }
         return new Draft(d, bullet, align, left, right, firstX, restX, size, lineHeight, fontOf(first), order, hidden,
-                unseen(d));
+                ocr, grow);
     }
 
     private static boolean unseen(ParaDraft d) {
@@ -352,6 +355,7 @@ final class TextFrames {
                 OfficeFonts.restore(runs, g.d);
                 iconsOut(runs, g.d, null);
             }
+            OcrSizes.apply(runs, g.grow);
             Bullet bullet = listed ? g.bullet : null;
             out.add(new TextPara(runs, align, marginLeft, indent, marginRight, g.lineHeight, spaceBefore,
                     g.firstBaseline() - top, g.lastBaseline() - top, g.size, bullet, linkLines(g.d, runs)));
