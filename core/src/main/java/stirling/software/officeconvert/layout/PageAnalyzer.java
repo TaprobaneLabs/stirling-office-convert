@@ -116,8 +116,12 @@ public final class PageAnalyzer {
         }
         PageFrame frame = stats.frame(page.width(), page.height());
         List<Box> pictures = pictureAreas(page, gfx.images(), segments, rules, gfx.marks());
+        // Maps and diagrams whose text is labels, decided once: no text box takes their panel, and they stay figures
+        List<Box> labelledDrawings =
+                FigureFinder.labelledDrawings(unused(art, usedMarks), segments, page.width(), page.height());
         TextBoxFinder.Result boxes = textBoxFinder.find(fills, containers, segments, frame.textLeft(), frame.textRight(),
-                TextBoxFinder.panelArt(page.height(), gfx.images(), unused(art, usedMarks), fills, rules), pictures);
+                TextBoxFinder.panelArt(page.height(), gfx.images(), unused(art, usedMarks), fills, rules), pictures,
+                labelledDrawings);
         for (PageLayout.TextBoxItem tb : boxes.boxes()) {
             fills.removeIf(f -> Math.abs(f.x() - tb.box().x()) < 0.5f && Math.abs(f.top() - tb.box().top()) < 0.5f
                     && Math.abs(f.right() - tb.box().right()) < 0.5f);
@@ -144,7 +148,7 @@ public final class PageAnalyzer {
         }
         List<Box> strong = new ArrayList<>(MathFinder.displayMath(segments, stats.bodySize));
         for (Box b : FigureFinder.strongRegions(unused(art, usedMarks), page.width(), page.height())) {
-            if (!FigureFinder.isProse(b, segments)) {
+            if (!FigureFinder.isProse(b, segments) || FigureFinder.labelled(b, labelledDrawings)) {
                 strong.add(b);
             }
         }
@@ -187,7 +191,8 @@ public final class PageAnalyzer {
         List<Box> figures = new ArrayList<>();
         List<Box> backdrops = new ArrayList<>(FigureFinder.cluster(concat(shaped, drawnBehind), 1f));
         List<PageGraphics.VectorMark> marks = unused(art, usedMarks);
-        for (Box f : FigureFinder.figures(strong, freeFills, freeRules, segments, marks, page.width(), page.height())) {
+        for (Box f : FigureFinder.figures(strong, freeFills, freeRules, segments, marks, labelledDrawings, stats.bodySize,
+                page.width(), page.height())) {
             if (!Regions.overlapsMostly(f, tableBoxes) || cellArt(f, tableBoxes)) {
                 (Backdrops.isBackdrop(f, segments) ? backdrops : figures).add(f);
             }
