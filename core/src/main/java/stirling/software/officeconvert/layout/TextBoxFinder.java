@@ -88,8 +88,13 @@ final class TextBoxFinder {
         return new PanelArt(pageHeight, pictures, drawings);
     }
 
+    /**
+     * The boxes holding text on this page, outside any of the labelled drawings: a box half covered by one is the drawing's
+     * panel and its lines are the drawing's labels (USGS Fact Sheet 2024-3029's map of Africa on its light panel, whose 33
+     * place names became a text box while the map was dropped).
+     */
     Result find(List<Fill> fills, List<Container> containers, List<Line> flow, float frameLeft, float frameRight,
-            PanelArt panelArt, List<Box> pictures) {
+            PanelArt panelArt, List<Box> pictures, List<Box> labelledDrawings) {
         List<PageLayout.TextBoxItem> out = new ArrayList<>();
         List<Container> claimed = new ArrayList<>();
         float colWidth = frameRight - frameLeft;
@@ -100,7 +105,8 @@ final class TextBoxFinder {
             }
         }
         candidates.removeIf(c -> c.box().width() > colWidth * 0.85f || c.box().width() < 36 || c.box().height() < 18
-                || Backdrops.isBackdrop(c.box(), flow) || framesPicture(c.box(), pictures));
+                || Backdrops.isBackdrop(c.box(), flow) || framesPicture(c.box(), pictures)
+                || coveredByDrawing(c.box(), labelledDrawings));
         List<Container> holding = new ArrayList<>();
         for (Container cand : candidates) {
             if (panel(cand, flow, panelArt)) {
@@ -160,6 +166,17 @@ final class TextBoxFinder {
     }
 
     private static final float PICTURE_FRAME = 0.8f;
+
+    private static boolean coveredByDrawing(Box box, List<Box> drawings) {
+        for (Box d : drawings) {
+            if (box.overlapArea(d) >= DRAWING_COVER * box.area()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final float DRAWING_COVER = 0.5f;
 
     private static boolean holds(Box box, Line l) {
         return l.x >= box.x() - 1 && l.right <= box.right() + 1 && l.top >= box.top() - 2 && l.bottom <= box.bottom() + 2;
