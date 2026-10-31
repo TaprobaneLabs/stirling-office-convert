@@ -725,11 +725,7 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         inkPoints += points;
         PDGraphicsState gs = getGraphicsState();
         Path2D path = outline();
-        Shape clip = clipShape(mark);
-        List<PageGraphics.Outline> out = new ArrayList<>(2);
-        if (fillRgb >= 0) {
-            out.add(new PageGraphics.Outline(clipped(path, clip), fillRgb, (float) Math.min(1, fillAlpha)));
-        }
+        Shape outlined = null;
         if (stroke) {
             float width = lineWidth();
             float scale = gs.getLineWidth() > 0 ? width / gs.getLineWidth() : 1f;
@@ -748,21 +744,34 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
             }
             java.awt.BasicStroke pen = new java.awt.BasicStroke(Math.max(0.1f, width), Math.clamp(gs.getLineCap(), 0, 2),
                     Math.clamp(gs.getLineJoin(), 0, 2), Math.max(1f, gs.getMiterLimit()), dashes, phase);
-            out.add(new PageGraphics.Outline(clipped(pen.createStrokedShape(path), clip),
-                    toRgb(gs.getStrokingColor(), 0), (float) Math.min(1, strokeAlpha)));
+            outlined = pen.createStrokedShape(path);
+        }
+        // The clip is tested against what the mark paints: its box is already cut to the clip's box
+        Rectangle2D painted = path.getBounds2D();
+        if (outlined != null) {
+            painted = painted.createUnion(outlined.getBounds2D());
+        }
+        Shape clip = clipShape(painted);
+        List<PageGraphics.Outline> out = new ArrayList<>(2);
+        if (fillRgb >= 0) {
+            out.add(new PageGraphics.Outline(clipped(path, clip), fillRgb, (float) Math.min(1, fillAlpha)));
+        }
+        if (outlined != null) {
+            out.add(new PageGraphics.Outline(clipped(outlined, clip), toRgb(gs.getStrokingColor(), 0),
+                    (float) Math.min(1, strokeAlpha)));
         }
         if (!out.isEmpty()) {
             ink.put(mark, out);
         }
     }
 
-    /** The page's clip in page space, or null when it is a rectangle holding the whole mark. */
-    private Shape clipShape(VectorMark mark) {
+    /** The page's clip in page space, or null when it is rectangles holding everything a mark paints. */
+    private Shape clipShape(Rectangle2D painted) {
         float[] box = clipBox();
         List<Path2D> clips = getGraphicsState().getCurrentClippingPaths();
         boolean rectangles = clips.stream().allMatch(GraphicsCollector::rectangle);
-        if (rectangles && mark.x() >= box[0] - 0.5f && mark.top() >= box[1] - 0.5f && mark.right() <= box[2] + 0.5f
-                && mark.bottom() <= box[3] + 0.5f) {
+        if (rectangles && painted.getMinX() >= box[0] - 0.5f && painted.getMinY() >= box[1] - 0.5f
+                && painted.getMaxX() <= box[2] + 0.5f && painted.getMaxY() <= box[3] + 0.5f) {
             return null;
         }
         java.awt.geom.Area area = null;

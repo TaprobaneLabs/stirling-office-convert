@@ -56,6 +56,7 @@ class StrayMarksTest {
         assertTrue(xml.contains("behindDoc=\"1\""), "it's behind the text");
         assertTrue(picture != null && has(picture, 0x005BAA) && has(picture, 0xFFFFFF), "it draws the blue disc and the white digit");
         assertTrue(has(picture, 0x8CB3D9), "and the pointer to it");
+        assertTrue(has(picture, 0x990000), "and the disc's border, beside its see-through fill (from Codex's review)");
         assertTrue(xml.contains("Your Claims for Part B"), "the heading stays text");
     }
 
@@ -113,10 +114,18 @@ class StrayMarksTest {
                 cs.moveTo(480, H - 240);
                 cs.lineTo(157, H - 128);
                 cs.stroke();
-                // The callout's disc, and its digit drawn as a white shape
+                // The callout's disc, slightly see-through and bordered, and its digit drawn as a white shape
+                cs.saveGraphicsState();
+                org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState faint =
+                        new org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState();
+                faint.setNonStrokingAlphaConstant(0.9f);
+                cs.setGraphicsStateParameters(faint);
                 cs.setNonStrokingColor(0f, 0x5B / 255f, 0xAA / 255f);
+                cs.setStrokingColor(0.6f, 0f, 0f);
+                cs.setLineWidth(1.5f);
                 circle(cs, 150, 125, 7);
-                cs.fill();
+                cs.fillAndStroke();
+                cs.restoreGraphicsState();
                 cs.setNonStrokingColor(1f);
                 cs.moveTo(148, H - 122);
                 cs.lineTo(150.5f, H - 119.5f);
