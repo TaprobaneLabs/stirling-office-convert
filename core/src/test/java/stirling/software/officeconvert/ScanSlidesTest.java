@@ -119,6 +119,68 @@ class ScanSlidesTest {
         assertTrue(runs > 0, slide);
     }
 
+    /**
+     * A ruled table on a scan whose cells' words are stretched by different amounts, as OCR boxes vary: every cell takes
+     * the page's size, so the rows don't jump from one size to another.
+     */
+    @Test
+    void aScannedTablesCellsShareTheirPagesSize() throws Exception {
+        float left = 72;
+        float top = 150;
+        float[] cols = {0, 60, 260, 340};
+        float row = 20;
+        BufferedImage img = whitePaper();
+        Graphics2D g = img.createGraphics();
+        g.setColor(new Color(40, 40, 38));
+        g.setStroke(new java.awt.BasicStroke(3));
+        for (int r = 0; r <= 6; r++) {
+            g.drawLine(px(left), px(top + r * row), px(left + cols[3]), px(top + r * row));
+        }
+        for (float c : cols) {
+            g.drawLine(px(left + c), px(top), px(left + c), px(top + 6 * row));
+        }
+        g.dispose();
+        float[] stretch = {1.2f, 1.37f, 1.55f};
+        Path pdf = dir.resolve("table.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LETTER);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.drawImage(LosslessFactory.createFromImage(doc, img), 0, 0, 612, 792);
+                for (int r = 0; r < 6; r++) {
+                    float base = 792 - (top + r * row + 14);
+                    String[] cells = {String.valueOf(r + 1), "Service item " + (r + 1), (r + 1) * 10 + ".00"};
+                    for (int c = 0; c < 3; c++) {
+                        stretched(cs, left + cols[c] + 4, base, stretch[(r + c) % 3], cells[c]);
+                    }
+                }
+                for (int i = 0; i < 10; i++) {
+                    stretched(cs, 72, 792 - (330 + i * 16), 1.37f, line(i));
+                }
+            }
+            doc.save(pdf.toFile());
+        }
+        String slide = slide(pdf);
+        assertTrue(slide.contains("<a:tbl>"), slide);
+        assertTrue(slide.contains("Service item 3"), slide);
+        String table = slide.substring(slide.indexOf("<a:tbl>"), slide.indexOf("</a:tbl>"));
+        Matcher run = Pattern.compile("<a:rPr[^>]*\\bsz=\"(\\d+)\"").matcher(table);
+        java.util.Set<String> sizes = new java.util.TreeSet<>();
+        while (run.find()) {
+            sizes.add(run.group(1));
+        }
+        assertEquals(java.util.Set.of("1100"), sizes, "8 points at the page's 137%: " + table);
+    }
+
+    private static void stretched(PDPageContentStream cs, float x, float y, float scale, String s) throws IOException {
+        cs.beginText();
+        cs.setRenderingMode(RenderingMode.NEITHER);
+        cs.setFont(FONT, 8);
+        cs.setTextMatrix(new Matrix(scale, 0, 0, 1, x, y));
+        cs.showText(s);
+        cs.endText();
+    }
+
     /** An OCR layer left white: never seen over its scan, it would be white on white without it. */
     @Test
     void anOcrLayerLeftWhiteComesOutBlack() throws Exception {

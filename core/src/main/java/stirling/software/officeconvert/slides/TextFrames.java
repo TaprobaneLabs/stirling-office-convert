@@ -32,9 +32,17 @@ final class TextFrames {
     private final PlacedContent content;
     private final float slideWidth;
 
+    /** What the page's OCR text is grown by ({@link OcrSizes}); 1 on other pages. */
+    private float ocrGrow = 1f;
+
     TextFrames(PlacedContent content, float slideWidth) {
         this.content = content;
         this.slideWidth = slideWidth;
+    }
+
+    /** Starts a page whose OCR text is grown by {@code k}. */
+    void page(float k) {
+        ocrGrow = k;
     }
 
     /** {@code grow}: what an OCR paragraph's size is grown by ({@link OcrSizes}), 1 for other text. */
@@ -221,8 +229,8 @@ final class TextFrames {
             }
         }
         boolean ocr = unseen(d);
-        float grow = ocr ? OcrSizes.factor(d) : 1f;
-        float size = grow == 1f ? firstLineSize(first) : OcrSizes.grown(firstLineSize(first), grow);
+        float grow = ocr ? ocrGrow : 1f;
+        float size = OcrSizes.grown(firstLineSize(first), grow);
         float pitch = d.pitch > 0 ? d.pitch : 1.2f * size;
         float lineHeight = LineBoxes.settle(Math.clamp(pitch, 0.7f * size, 3f * size), size);
         boolean rtl = Marker.startIndex(first) > 0;
