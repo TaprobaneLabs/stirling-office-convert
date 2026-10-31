@@ -195,6 +195,16 @@ class ScanSlidesTest {
         assertFalse(body.contains("FFFFFF"), body);
     }
 
+    /** An OCR layer in the scan's own colour (some OCR tools take it from the scan): kept, as it reads on white. */
+    @Test
+    void anOcrLayerInAColourKeepsIt() throws Exception {
+        Path pdf = page(textOnly(), true, 120, 20, new Color(0x1F, 0x4E, 0x9A));
+        assertTrue(slide(pdf).contains("1F4E9A"));
+        Path docx = dir.resolve("out.docx");
+        PdfToDocx.convert(pdf, docx, PdfToDocx.Options.defaults());
+        assertTrue(entry(docx, "word/document.xml").contains("1F4E9A"));
+    }
+
     @Test
     void impressSlidesLeaveTheScanOutToo() throws Exception {
         Path pdf = page(textOnly(), true);

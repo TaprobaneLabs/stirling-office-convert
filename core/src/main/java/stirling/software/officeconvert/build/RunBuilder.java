@@ -1250,8 +1250,9 @@ final class RunBuilder {
     }
 
     /**
-     * {@code g}'s run style. Text the PDF never paints (an OCR layer's) is set in black: its colour was never seen, and
-     * an OCR tool may leave it white, which shown on white paper, once its scan is left out, would read as a blank page.
+     * {@code g}'s run style. Text the PDF never paints (an OCR layer's) keeps its colour, which some OCR tools take from
+     * the scan (an OMB memo's blue letterhead), unless it is light: an OCR tool may leave its layer white, and shown on
+     * white once the scan is left out, it would read as a blank page. Such text is set in black.
      */
     static RunStyle styleOf(Glyph g, float hostSize) {
         float size = g.size;
@@ -1272,7 +1273,7 @@ final class RunBuilder {
                 g.italic,
                 g.underline,
                 g.strike,
-                g.invisible ? 0 : g.rgb,
+                g.invisible && light(g.rgb) ? 0 : g.rgb,
                 g.highlightRgb,
                 g.vertAlign,
                 symbol,
@@ -1280,6 +1281,16 @@ final class RunBuilder {
                 scaleOf(g),
                 g.font.smallCaps(),
                 g.boxRgb);
+    }
+
+    /** Text at least this light (luma, 0 to 255) can't be read on white paper. */
+    private static final int LIGHT_LUMA = 200;
+
+    private static boolean light(int rgb) {
+        int r = (rgb >> 16) & 0xFF;
+        int gr = (rgb >> 8) & 0xFF;
+        int b = rgb & 0xFF;
+        return rgb >= 0 && 299 * r + 587 * gr + 114 * b >= 1000 * LIGHT_LUMA;
     }
 
     /**
