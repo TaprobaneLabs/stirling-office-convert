@@ -125,6 +125,55 @@ final class TableShaper {
         return cells > 0 && numbers * 2 >= cells;
     }
 
+    /**
+     * A grid of five columns or more whose rows nearly all hold text in two cells at most, that text mostly numbers, is a
+     * chart's axes, not a table: MMWR's bar charts of two panels were found as an 18-by-7 table of tick labels and years,
+     * their bars became shaded cells (two blocks for seven bars) and their error bars were lost.
+     */
+    static boolean looksLikeChart(TableDetection.Found t, List<List<Word>> cellWords) {
+        if (t.ruled() || t.cols() < CHART_COLUMNS || t.rows() < CHART_ROWS) {
+            return false;
+        }
+        int[] perRow = new int[t.rows()];
+        int text = 0;
+        int numbers = 0;
+        for (int i = 0; i < t.cells().size(); i++) {
+            FoundCell c = t.cells().get(i);
+            List<Word> ws = cellWords.get(i);
+            if (ws.isEmpty() || c.row() >= t.rows()) {
+                continue;
+            }
+            perRow[c.row()]++;
+            text++;
+            boolean number = true;
+            for (Word w : ws) {
+                String s = TICK_MARKS.matcher(w.text).replaceAll("");
+                number &= s.isEmpty() || NUMERIC.matcher(s).matches() || TICK.matcher(s).matches();
+            }
+            numbers += number ? 1 : 0;
+        }
+        int sparse = 0;
+        for (int n : perRow) {
+            sparse += n <= 2 ? 1 : 0;
+        }
+        return text > 0 && sparse >= CHART_SPARSE_ROWS * t.rows() && numbers >= CHART_NUMBERS * text;
+    }
+
+    private static final int CHART_COLUMNS = 5;
+
+    private static final int CHART_ROWS = 6;
+
+    /** The share of a chart's rows holding text in two cells at most, and of its text cells holding numbers. */
+    private static final float CHART_SPARSE_ROWS = 0.8f;
+
+    private static final float CHART_NUMBERS = 0.6f;
+
+    /** An axis's break marks, set beside its ticks. */
+    private static final Pattern TICK_MARKS = Pattern.compile("[\"“”'’]");
+
+    /** A tick that's a negative number, with a minus sign or an en dash. */
+    private static final Pattern TICK = Pattern.compile("[−–][0-9][0-9.,]*%?");
+
     static boolean looksLikeList(TableDetection.Found t, List<List<Word>> cellWords) {
         if (t.ruled()) {
             return false;

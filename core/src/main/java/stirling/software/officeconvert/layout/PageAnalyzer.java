@@ -161,7 +161,15 @@ public final class PageAnalyzer {
         List<TableDetection.Found> tables = detectTables
                 ? tableFinder.find(page, frame.textLeft(), frame.textRight(), segments, rules, fills, concat(strong, pictures))
                 : new ArrayList<>();
-        tables.removeIf(t -> TableShaper.looksLikeList(t, TableShaper.assign(t, TableFinder.wordsInside(segments, t))));
+        List<Box> charts = new ArrayList<>();
+        tables.removeIf(t -> {
+            List<List<Word>> cellWords = TableShaper.assign(t, TableFinder.wordsInside(segments, t));
+            boolean chart = TableShaper.looksLikeChart(t, cellWords);
+            if (chart) {
+                charts.add(TableFinder.boxOf(t));
+            }
+            return chart || TableShaper.looksLikeList(t, cellWords);
+        });
         if (detectTables) {
             addKeyValueTables(tables, outside(segments, pictures), frame, boxes.boxes());
         }
@@ -176,6 +184,13 @@ public final class PageAnalyzer {
             if (!Regions.overlapsMostly(f, tableBoxes) || cellArt(f, tableBoxes)) {
                 (Backdrops.isBackdrop(f, segments) ? backdrops : figures).add(f);
             }
+        }
+        if (!charts.isEmpty()) {
+            // A chart taken for a table is a figure as a whole, its ticks and every mark beside its axes with it: left to
+            // the figure finder, MMWR's left one stopped short of its axis's break marks, which then ran in the flow
+            // beside the picture, under it in Word, and pushed the page's notes onto another page
+            figures.addAll(charts);
+            figures = new ArrayList<>(FigureFinder.cluster(figures, 1f));
         }
         List<Box> wholeDrawings = new ArrayList<>();
         if (!drawings.isEmpty()) {
