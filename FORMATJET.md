@@ -113,4 +113,5 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.12` | Move a cell's line left to fit only when its table can't grow short of the page's edge (#89) | Not offered yet |
 | `0.2.2-fj.12` | Take a grid of axis ticks for a chart, not a table (#90) | Not offered yet |
 | `0.2.2-fj.13` | Find a scanned table's faded and broken rules, and its cells' short sides (#92) | Not offered yet |
-| Next release | Show a scan's OCR text on its slide instead of the scan, as Word documents do, at the size that fills its words' boxes rather than letter-spaced (#91) | Not offered yet: reverses upstream's choice for slides |
+| `0.2.2-fj.14` | Show a scan's OCR text on its slide instead of the scan, as Word documents do, at the size that fills its words' boxes rather than letter-spaced (#91) | Not offered yet: reverses upstream's choice for slides |
+| Next release | Take all the room the next column's lines leave before a table grows, moving those lines left with it (#94) | Not offered yet |
