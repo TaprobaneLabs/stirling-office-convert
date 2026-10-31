@@ -56,7 +56,7 @@ class WidenForTextTest {
     }
 
     @Test
-    void aLineHangingFromItsMarkerStays() {
+    void aLineHangingFromItsMarkerAtTheCellsEdgeStays() {
         // "• Store #4" with its bullet at the cell's edge and its text 10 pt in (from Codex's review)
         Paragraph item = paragraph(Align.LEFT, 10f, 70f);
         item.indentFirst = -10f;
@@ -67,13 +67,26 @@ class WidenForTextTest {
     }
 
     @Test
-    void aLineSetAtATabStopStays() {
+    void aHangingLineMovesNoFurtherThanItsMarker() {
+        // The bullet 6 pt in from the cell's edge, its text 16 pt in: the line can move 6 pt
+        Paragraph item = paragraph(Align.LEFT, 16f, 60f);
+        item.indentFirst = -10f;
+        Table t = table(64f, 60f, item, paragraph(Align.CENTER, 0f, 30f), paragraph(Align.CENTER, 0f, 30f));
+        TableBuilder.widenForText(t, 0f);
+        assertEquals(10f, item.indentLeft, 0.01f, "the bullet reaches the cell's edge");
+        assertEquals(72f, t.columnWidths.get(0), 0.01f, "and the column grows for the rest");
+    }
+
+    @Test
+    void aLineSetAtATabStopMovesWithItsTabs() {
         Paragraph tabbed = paragraph(Align.LEFT, 20f, 50f);
-        tabbed.tabs.add(new Paragraph.TabStop(40f, Paragraph.TabStop.Kind.LEFT, (char) 0));
+        tabbed.tabs.add(new Paragraph.TabStop(40f, Paragraph.TabStop.Kind.RIGHT, '.'));
         Table t = table(64f, 60f, tabbed, paragraph(Align.CENTER, 0f, 30f), paragraph(Align.CENTER, 0f, 30f));
         TableBuilder.widenForText(t, 0f);
-        assertEquals(20f, tabbed.indentLeft, 0.01f, "the text after its tab wouldn't move with it");
-        assertEquals(72f, t.columnWidths.get(0), 0.01f, "the column grows instead");
+        assertEquals(12f, tabbed.indentLeft, 0.01f, "the line moves 8 pt left");
+        assertEquals(32f, tabbed.tabs.getFirst().pos(), 0.01f, "and its tab stop with it");
+        assertEquals(Paragraph.TabStop.Kind.RIGHT, tabbed.tabs.getFirst().kind());
+        assertEquals(64f, t.columnWidths.get(0), 0.01f, "the column keeps its width");
     }
 
     /** Two rows: {@code first} then {@code second} in the first column, {@code next} in the second, no cell margins. */
