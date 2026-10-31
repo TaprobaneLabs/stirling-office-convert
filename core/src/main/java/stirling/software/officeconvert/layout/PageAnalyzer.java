@@ -855,6 +855,19 @@ public final class PageAnalyzer {
     }
 
     /**
+     * A filled shape of slanted or curved edges, no rectangle, set under text like a gradient: only a picture draws it. USGS
+     * Fact Sheet 2024-3019 sets two sections on a light pentagon over a dark one; the dark one, near enough a box, became a
+     * filled rectangle and the light one was dropped, which left dark text on the dark panel.
+     */
+    static boolean slantedPanel(PageGraphics.VectorMark m) {
+        return m.filled() && !m.shading() && !m.boxy() && !m.round() && !m.sparse() && (m.diagonal() || m.curved())
+                && m.segments() <= SLANTED_PANEL_SEGMENTS;
+    }
+
+    /** A panel has a few edges; a drawing's outline (a map's coast) has many. */
+    private static final int SLANTED_PANEL_SEGMENTS = 24;
+
+    /**
      * Gradients painted with the {@code sh} operator under text, across at least {@link #PANEL_WIDTH} of the page, that
      * no figure, backdrop or panel draws, each the ground of the text on it: a band behind a header or footer, a tint
      * behind a column, an illustration's backdrop. Each is drawn with everything else painted in its box but the text as
@@ -862,11 +875,11 @@ public final class PageAnalyzer {
      * prose once it held running text or met a page-tall strip: NOAA's GeoXO fact sheet lost its header and footer
      * bands, leaving white type on white and its logos a grey box, and USGS Fact Sheet 2023-3022 an illustration drawn
      * over one and the tint behind its introduction. A gradient inside another's ground is part of it; a page-sized one
-     * is painted paper.
+     * is painted paper. Slanted panels ({@link #slantedPanel}) are grounds too.
      */
     private static List<PageLayout.FigureItem> grounds(PageData page, List<PageGraphics.VectorMark> marks, List<Box> kept,
             List<Line> lines, PageGraphics gfx) {
-        List<PageGraphics.VectorMark> gradients = marks.stream().filter(PageGraphics.VectorMark::shadingOperator)
+        List<PageGraphics.VectorMark> gradients = marks.stream().filter(m -> m.shadingOperator() || slantedPanel(m))
                 .sorted(Comparator.comparingDouble(m -> -(double) m.width() * m.height())).toList();
         List<PageLayout.FigureItem> grounds = new ArrayList<>();
         for (PageGraphics.VectorMark m : gradients) {

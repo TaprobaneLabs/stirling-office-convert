@@ -211,9 +211,10 @@ public final class DocumentBuilder {
             for (int ci = 0; ci < band.columns().size(); ci++) {
                 // A full column of paragraphs that all keep their PDF lines and heights ends in Word where it ends in the
                 // PDF; a break there pins the next column's top, where flowing on would let Word pull its first lines back.
-                // A table's cells aren't fitted and its rows can grow, so a column holding one still flows on.
+                // A picture keeps its height too. A table's cells aren't fitted and its rows can grow, so a column
+                // holding one still flows on.
                 boolean pinned = flowing && ci > 0 && paragraphs.misses() == columnMisses && columnGrowth == 0
-                        && onlyParagraphs(band.columns().get(ci - 1));
+                        && noTables(band.columns().get(ci - 1));
                 boolean flowOn = ci > 0 && !pinned && flow.flowsOn(layout, band, ci, bodyBottom);
                 if (ci > 0 && !flowOn) {
                     columnBreak();
@@ -290,9 +291,10 @@ public final class DocumentBuilder {
         return true;
     }
 
-    private static boolean onlyParagraphs(PageLayout.Column column) {
+    /** Whether a column's flow holds only paragraphs and pictures, whose heights in Word are the PDF's. */
+    private static boolean noTables(PageLayout.Column column) {
         for (PageLayout.Item item : column.items()) {
-            if (ColumnFlow.inFlow(item) && !(item instanceof PageLayout.ParaItem)) {
+            if (ColumnFlow.inFlow(item) && item instanceof PageLayout.TableItem) {
                 return false;
             }
         }
