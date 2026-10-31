@@ -52,6 +52,11 @@ final class NumberingPart {
                     if (m.rgb() != 0) {
                         sb.append("<w:color w:val=\"").append(Xml.hex(m.rgb())).append("\"/>");
                     }
+                    // Word sets the marker in the paragraph mark's formatting where these don't say: a mark set wider
+                    // (the Federal Register's text at 111%) widened a square bullet past the hanging indent, and the
+                    // item's text jumped to the next default tab
+                    sb.append("<w:spacing w:val=\"").append(Xml.twips(m.spacing())).append("\"/>");
+                    sb.append("<w:w w:val=\"").append(m.scale()).append("\"/>");
                     int hp = Xml.halfPoints(m.size());
                     sb.append("<w:sz w:val=\"").append(hp).append("\"/><w:szCs w:val=\"").append(hp).append("\"/>");
                     sb.append("</w:rPr>");
