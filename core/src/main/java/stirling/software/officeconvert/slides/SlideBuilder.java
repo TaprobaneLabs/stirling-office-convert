@@ -22,10 +22,12 @@ import stirling.software.officeconvert.layout.DocStats;
 import stirling.software.officeconvert.layout.Line;
 import stirling.software.officeconvert.layout.LineBuilder;
 import stirling.software.officeconvert.layout.OcrText;
+import stirling.software.officeconvert.layout.PageAnalyzer;
 import stirling.software.officeconvert.layout.PageLayout;
 import stirling.software.officeconvert.layout.ParaDraft;
 import stirling.software.officeconvert.layout.ParagraphBuilder;
 import stirling.software.officeconvert.model.Picture;
+import stirling.software.officeconvert.model.Table;
 import stirling.software.officeconvert.slides.PaintOrder.Kind;
 
 final class SlideBuilder {
@@ -144,6 +146,9 @@ final class SlideBuilder {
             if (stack.backgroundOrder >= 0) {
                 hiddenByBackground(stack);
             }
+            if (layout.ocrText()) {
+                leaveOutScan(page, stack);
+            }
             for (Art.Piece piece : art.pieces(stack.paint, stack.represented, page.index(), toDisplay, width, height)) {
                 stack.add(piece.picture(), piece.order(), false);
             }
@@ -208,7 +213,11 @@ final class SlideBuilder {
     }
 
     private void table(PageLayout.TableItem ti, PageLayout layout, AffineTransform toDisplay, Stack stack) {
-        TableShape t = new TableShape(ti.x(), ti.top(), content.table(ti, layout));
+        Table cells = content.table(ti, layout);
+        if (OcrSizes.unseen(ti.cellParas())) {
+            OcrSizes.apply(cells, OcrSizes.factor(ti.cellParas()));
+        }
+        TableShape t = new TableShape(ti.x(), ti.top(), cells);
         Box area = box(frameOf(t));
         int order = stack.paint.lastInside(area, Kind.FILL, Kind.STROKE, Kind.TEXT);
         stack.add(t, order, false);
@@ -364,6 +373,23 @@ final class SlideBuilder {
             }
         }
         return false;
+    }
+
+    /**
+     * Leaves out the scan under a page whose text is its OCR layer ({@code OcrText.dominates}), as documents do
+     * ({@code PageAnalyzer.addImages}): the slide sets the OCR text as its words, where they can be read and edited.
+     * Drawn, the scan would show every word twice, so that text stayed invisible over it: the slide looked like the
+     * page, but held no text PowerPoint showed (its own render of 33 copier and flatbed scans kept 27% of their words).
+     * The pictures inside a scan (a photo, a logo) are figures cut from it ({@code ScanRegions}), drawn on their own.
+     */
+    private static void leaveOutScan(PageData page, Stack stack) {
+        Box sheet = new Box(0, 0, page.width(), page.height());
+        float least = PageAnalyzer.PAGE_IMAGE_SHARE * page.width() * page.height();
+        for (PaintOrder.Mark m : stack.paint.marks()) {
+            if (m.kind() == Kind.IMAGE && m.box().overlapArea(sheet) > least) {
+                stack.represented.add(m.order());
+            }
+        }
     }
 
     private static void hiddenByBackground(Stack stack) {

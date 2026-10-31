@@ -25,6 +25,13 @@ public final class PageAnalyzer {
     private static final int OUTLINED_LETTERS = 80;
     private static final float PROSE_OVER_DRAWING = 0.3f;
 
+    /**
+     * An image covering more than this share of a page is the page's own picture: a page's background, or the scan
+     * itself when the page's text is an OCR layer, which that text and the pictures cut from the scan
+     * ({@link ScanRegions}) replace.
+     */
+    public static final float PAGE_IMAGE_SHARE = 0.6f;
+
     private final DocStats stats;
     private final ParagraphBuilder paragraphs;
     private final PlacedText placed;
@@ -398,7 +405,7 @@ public final class PageAnalyzer {
     private static ImageDraw fullPageImage(PageData page, List<ImageDraw> images) {
         for (ImageDraw img : images) {
             Box b = new Box(img.clipX(), img.clipTop(), img.clipRight(), img.clipBottom());
-            if (b.area() > page.width() * page.height() * 0.6f) {
+            if (b.area() > page.width() * page.height() * PAGE_IMAGE_SHARE) {
                 return img;
             }
         }
@@ -476,7 +483,7 @@ public final class PageAnalyzer {
             if (b.width() < 3 || b.height() < 3 || Regions.insideAny(b, figures, 2f)) {
                 continue;
             }
-            boolean fullPage = b.area() > page.width() * page.height() * 0.6f;
+            boolean fullPage = b.area() > page.width() * page.height() * PAGE_IMAGE_SHARE;
             if (fullPage && ocr) {
                 continue;
             }

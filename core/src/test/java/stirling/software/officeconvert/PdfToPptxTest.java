@@ -284,9 +284,15 @@ class PdfToPptxTest {
     }
 
     @Test
-    void ocrTextOverAScanStaysSearchableButInvisible() throws Exception {
-        assertTrue(ocrSlide(true).matches("(?s).*<a:srgbClr val=\"[0-9A-F]{6}\"><a:alpha val=\"0\"/></a:srgbClr>(?:(?!</a:r>).)*"
-                + "<a:t>Scanned report text</a:t>.*"), "the scan shows the words, the text layer only carries them");
+    void ocrTextOverAScanShowsInsteadOfTheScan() throws Exception {
+        String scan = ocrSlide(true);
+        assertTrue(scan.contains("<a:t>Scanned report text</a:t>"));
+        assertFalse(scan.contains("<a:alpha val=\"0\"/>"), "the OCR text is the slide's text, so it shows");
+        Matcher pic = Pattern.compile("<p:pic>.*?<a:ext cx=\"(\\d+)\"").matcher(scan);
+        while (pic.find()) {
+            // The dark band the words sit on may be cut from the scan as a picture of its own, but never the page
+            assertTrue(Long.parseLong(pic.group(1)) < 960L * 12700 * 9 / 10, "the scan isn't drawn under its own words: " + scan);
+        }
         String bare = ocrSlide(false);
         assertTrue(bare.contains("<a:t>Scanned report text</a:t>"));
         assertFalse(bare.contains("<a:alpha val=\"0\"/>"), "with no picture under it the text is the only copy, so it shows");
