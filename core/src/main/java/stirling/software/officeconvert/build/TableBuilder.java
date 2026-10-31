@@ -127,7 +127,7 @@ final class TableBuilder {
             t.rows.add(row);
         }
         spanOverEmptyCells(t);
-        widenForText(t, f, ti);
+        widenForText(t, layout.page().width() - PAGE_EDGE - (f.left() + width));
         fitCells(t);
         allowOverrun(t);
         keepColumnHeaders(t);
@@ -360,7 +360,11 @@ final class TableBuilder {
                 && next.shading == cell.shading && next.top.equals(cell.top) && next.bottom.equals(cell.bottom);
     }
 
-    private static void widenForText(Table t, TableDetection.Found f, PageLayout.TableItem ti) {
+    /** How near the page's edge a table may grow: Word draws one into the margin, and cuts it off at the edge. */
+    private static final float PAGE_EDGE = 18f;
+
+    /** Widens columns for their one-line text; {@code roomRight} is how far the table may grow on the right. */
+    static void widenForText(Table t, float roomRight) {
         int n = t.columnWidths.size();
         float[] need = new float[n];
         float[] freeLeft = new float[n];
@@ -395,6 +399,7 @@ final class TableBuilder {
                 cellIndex++;
             }
         }
+        float spare = Math.max(0, roomRight);
         for (int c = 0; c < n; c++) {
             float deficit = need[c] - t.columnWidths.get(c);
             if (deficit <= 0) {
@@ -419,9 +424,51 @@ final class TableBuilder {
                 }
             }
             if (deficit > 0) {
-                t.columnWidths.set(c, t.columnWidths.get(c) + deficit);
+                // Short of the page's edge the table grows; past it, the lines move left in their cells first
+                float grow = Math.min(deficit, spare);
+                spare -= grow;
+                float still = deficit > grow ? moveIn(byColumn.get(c), t, t.columnWidths.get(c) + grow) : 0;
+                t.columnWidths.set(c, t.columnWidths.get(c) + grow + still);
             }
         }
+    }
+
+    /**
+     * Moves a column's lines left in their cells, as far as their indents allow, until they fit {@code width}, and returns
+     * how much wider than that the column must still grow. A table grown past the page's edge has its last columns cut
+     * off there: the Federal Reserve's H.4.1 release and OPM's SF 15 lost figures that way. A line moves whole: no
+     * further than where its first line starts, so a marker it hangs from (a negative first-line indent) stays in the
+     * cell, and its tab stops with it, so the text after a tab keeps its place in the line (from Codex's review). Lines
+     * move only to fit the width the column needs anyway: a line that can't move as far as the rest makes the column
+     * that wide, and a line that already fits there stays (also from Codex's review).
+     */
+    private static float moveIn(List<Paragraph> column, Table t, float width) {
+        float least = width;
+        for (Paragraph p : column) {
+            if (p.sourceLines == 1) {
+                least = Math.max(least, taken(p, t) - movable(p));
+            }
+        }
+        for (Paragraph p : column) {
+            float w = taken(p, t);
+            if (p.sourceLines == 1 && w > least && movable(p) > 0) {
+                float move = Math.min(movable(p), w - least);
+                p.indentLeft -= move;
+                p.tabs.replaceAll(s -> new Paragraph.TabStop(Math.max(0, s.pos() - move), s.kind(), s.leader()));
+            }
+        }
+        return least - width;
+    }
+
+    /** The room a one-line paragraph takes in its cell. */
+    private static float taken(Paragraph p, Table t) {
+        return Math.max(0, p.indentLeft) + p.textWidth + t.cellMarginLeft + t.cellMarginRight + 2f;
+    }
+
+    /** How far a left-aligned line can move left: to where its first line starts at the cell's edge. */
+    private static float movable(Paragraph p) {
+        return p.align == Align.LEFT || p.align == Align.JUSTIFY ? Math.max(0, p.indentLeft + Math.min(0, p.indentFirst))
+                : 0;
     }
 
     private static void borders(Table.Cell cell, TableDetection.FoundCell c, List<Rule> rules, boolean ruled) {

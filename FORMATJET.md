@@ -103,4 +103,14 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.11` | Judge a gutter's left side by the column that ends at it (#78) | Not offered yet |
 | `0.2.2-fj.11` | Start a frame's table at its header when prose sits above it (#79) | Not offered yet |
 | `0.2.2-fj.11` | Join Hangul syllables Tesseract boxed apart into their words (#81) | Not offered yet |
-| Unreleased | Show a scan's OCR text on its slide instead of the scan, as Word documents do, at the size that fills its words' boxes rather than letter-spaced (#91) | Not offered yet: reverses upstream's choice for slides |
+| `0.2.2-fj.12` | Place a logo and the lines beside it at a page's foot as a foot band (#82) | Not offered yet |
+| `0.2.2-fj.12` | Count a one-line numbered heading as keeping its line (#83) | Not offered yet |
+| `0.2.2-fj.12` | Leave another table's rows of amounts out of a frame table's header (#84) | Not offered yet |
+| `0.2.2-fj.12` | Pin a column that holds pictures as well as paragraphs (#85) | Not offered yet |
+| `0.2.2-fj.12` | Number pages from the header's page number, not a printer's frame count (#86) | Not offered yet |
+| `0.2.2-fj.12` | Set a list marker's character scale and spacing on its level (#87) | Not offered yet |
+| `0.2.2-fj.12` | Draw a slanted panel under text as a ground (#88) | Not offered yet |
+| `0.2.2-fj.12` | Move a cell's line left to fit only when its table can't grow short of the page's edge (#89) | Not offered yet |
+| `0.2.2-fj.12` | Take a grid of axis ticks for a chart, not a table (#90) | Not offered yet |
+| `0.2.2-fj.13` | Find a scanned table's faded and broken rules, and its cells' short sides (#92) | Not offered yet |
+| Next release | Show a scan's OCR text on its slide instead of the scan, as Word documents do, at the size that fills its words' boxes rather than letter-spaced (#91) | Not offered yet: reverses upstream's choice for slides |
