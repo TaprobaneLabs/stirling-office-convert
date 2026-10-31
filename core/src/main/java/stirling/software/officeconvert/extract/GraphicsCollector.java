@@ -69,6 +69,17 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
     private final Set<Object> seeThrough = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<Object, PageGraphics.Outline> outlines = new IdentityHashMap<>();
     private final Map<Object, Shape> lettering = new IdentityHashMap<>();
+    private final Map<Object, List<PageGraphics.Outline>> ink = new IdentityHashMap<>();
+
+    /**
+     * The marks and path points a page keeps the ink of ({@link PageGraphics#ink}): enough for the shapes a page draws
+     * outside its figures (CMS's notices: 32 and 34 groups of callouts and pointers), not a map's thousands of marks.
+     */
+    private static final int MAX_INK_MARKS = 3000;
+
+    private static final int MAX_INK_POINTS = 60_000;
+
+    private int inkPoints;
     private boolean evenOdd;
     private final Map<PDResources, Map<COSName, Integer>> tones = new IdentityHashMap<>();
 
@@ -144,7 +155,7 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         HiddenFills.remove(c.fills, c.paintOrder, c.seeThrough);
         BlankPaint.remove(c.fills, c.marks, c.images, c.rules, c.paintOrder, width * height);
         return new PageGraphics(c.rules, c.fills, c.images, c.marks, c.pastBudget.areas(), c.paintOrder, c.seeThrough,
-                c.outlines, c.masked, c.lettering);
+                c.outlines, c.masked, c.lettering, c.ink);
     }
 
     private Point2D.Float display(double x, double y) {
@@ -553,12 +564,14 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
             return;
         }
         boolean pattern = fill && gs.getNonStrokingColor().getColorSpace() instanceof PDPattern;
-        int fillRgb = onPaper(toRgb(gs.getNonStrokingColor(), 0xFFFFFF), fillAlpha);
+        int inkRgb = toRgb(gs.getNonStrokingColor(), 0xFFFFFF);
+        int fillRgb = onPaper(inkRgb, fillAlpha);
         if (pattern) {
             int tone = tones.computeIfAbsent(getResources(), k -> new HashMap<>())
                     .computeIfAbsent(gs.getNonStrokingColor().getPatternName(), k -> PatternTone.of(gs.getNonStrokingColor(), getResources()));
             if (tone >= 0) {
                 pattern = false;
+                inkRgb = tone;
                 fillRgb = onPaper(tone, fillAlpha);
             }
         }
@@ -591,6 +604,7 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
         if (shapes.mark() != null) {
             marks.add(shapes.mark());
             paintOrder.put(shapes.mark(), painted);
+            keepInk(shapes.mark(), fill && !pattern ? inkRgb : -1, stroke, fillAlpha, strokeAlpha);
         }
         shapes.rules().forEach(r -> paintOrder.put(r, painted));
         shapes.fills().forEach(f -> paintOrder.put(f, painted));
@@ -694,6 +708,91 @@ final class GraphicsCollector extends PDFGraphicsStreamEngine {
     private static boolean panel(VectorMark m) {
         return m.filled() && !m.shading() && m.segments() <= PANEL_SEGMENTS
                 && (m.right() - m.x()) * (m.bottom() - m.top()) >= PANEL_AREA;
+    }
+
+    /**
+     * Keeps what a mark paints, within the page's budget: its fill and its stroke's outline (width, caps, joins and dashes
+     * as the PDF sets them), in their colours and opacity, cut to the clip.
+     */
+    private void keepInk(VectorMark mark, int fillRgb, boolean stroke, double fillAlpha, double strokeAlpha) {
+        if (mark.shading() || ink.size() >= MAX_INK_MARKS) {
+            return;
+        }
+        int points = subpaths.stream().mapToInt(List::size).sum();
+        if (inkPoints + points > MAX_INK_POINTS) {
+            return;
+        }
+        inkPoints += points;
+        PDGraphicsState gs = getGraphicsState();
+        Path2D path = outline();
+        Shape outlined = null;
+        if (stroke) {
+            float width = lineWidth();
+            float scale = gs.getLineWidth() > 0 ? width / gs.getLineWidth() : 1f;
+            float[] dashes = null;
+            float phase = 0;
+            if (gs.getLineDashPattern() != null && gs.getLineDashPattern().getDashArray().length > 0) {
+                float[] d = gs.getLineDashPattern().getDashArray();
+                dashes = new float[d.length];
+                boolean any = false;
+                for (int i = 0; i < d.length; i++) {
+                    dashes[i] = Math.max(0, d[i] * scale);
+                    any |= dashes[i] > 0;
+                }
+                dashes = any ? dashes : null;
+                phase = gs.getLineDashPattern().getPhase() * scale;
+            }
+            java.awt.BasicStroke pen = new java.awt.BasicStroke(Math.max(0.1f, width), Math.clamp(gs.getLineCap(), 0, 2),
+                    Math.clamp(gs.getLineJoin(), 0, 2), Math.max(1f, gs.getMiterLimit()), dashes, phase);
+            outlined = pen.createStrokedShape(path);
+        }
+        // The clip is tested against what the mark paints: its box is already cut to the clip's box
+        Rectangle2D painted = path.getBounds2D();
+        if (outlined != null) {
+            painted = painted.createUnion(outlined.getBounds2D());
+        }
+        Shape clip = clipShape(painted);
+        List<PageGraphics.Outline> out = new ArrayList<>(2);
+        if (fillRgb >= 0) {
+            out.add(new PageGraphics.Outline(clipped(path, clip), fillRgb, (float) Math.min(1, fillAlpha)));
+        }
+        if (outlined != null) {
+            out.add(new PageGraphics.Outline(clipped(outlined, clip), toRgb(gs.getStrokingColor(), 0),
+                    (float) Math.min(1, strokeAlpha)));
+        }
+        if (!out.isEmpty()) {
+            ink.put(mark, out);
+        }
+    }
+
+    /** The page's clip in page space, or null when it is rectangles holding everything a mark paints. */
+    private Shape clipShape(Rectangle2D painted) {
+        float[] box = clipBox();
+        List<Path2D> clips = getGraphicsState().getCurrentClippingPaths();
+        boolean rectangles = clips.stream().allMatch(GraphicsCollector::rectangle);
+        if (rectangles && painted.getMinX() >= box[0] - 0.5f && painted.getMinY() >= box[1] - 0.5f
+                && painted.getMaxX() <= box[2] + 0.5f && painted.getMaxY() <= box[3] + 0.5f) {
+            return null;
+        }
+        java.awt.geom.Area area = null;
+        for (Path2D c : clips) {
+            java.awt.geom.Area a = new java.awt.geom.Area(toDisplay.createTransformedShape(c));
+            if (area == null) {
+                area = a;
+            } else {
+                area.intersect(a);
+            }
+        }
+        return area;
+    }
+
+    private static Shape clipped(Shape shape, Shape clip) {
+        if (clip == null) {
+            return shape;
+        }
+        java.awt.geom.Area a = new java.awt.geom.Area(shape);
+        a.intersect(new java.awt.geom.Area(clip));
+        return a;
     }
 
     private Path2D outline() {

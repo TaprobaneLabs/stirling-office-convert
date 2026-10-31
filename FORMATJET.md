@@ -116,3 +116,4 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.14` | Show a scan's OCR text on its slide instead of the scan, as Word documents do, at the size that fills its words' boxes rather than letter-spaced (#91) | Not offered yet: reverses upstream's choice for slides |
 | Next release | Take all the room the next column's lines leave before a table grows, moving those lines left with it (#94) | Not offered yet |
 | Next release | Take a map named by short labels for a figure, not prose or a text box (#96) | Not offered yet |
+| Next release | Draw shapes nothing else draws (callout digits, pointers, logos) as veils behind the text, and glyphs mapped to control characters in figures (#97) | Not offered yet |
