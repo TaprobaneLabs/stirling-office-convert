@@ -233,10 +233,10 @@ final class OcrWords {
         float scale = whole(reach / natural);
         if (!(scale >= MIN_SCALE && scale <= MAX_SCALE)) {
             for (int i = from; i < to; i++) {
-                float own = whole(measures[i].reach() / measures[i].natural());
-                if (own >= MIN_SCALE && own <= MAX_SCALE) {
+                float alone = whole(own[i - from]);
+                if (alone >= MIN_SCALE && alone <= MAX_SCALE) {
                     // As each word was set before lines took one scale: its space reaching the next word
-                    set(glyphs, out, words.get(i), measures[i], measures[i].start(), own, true);
+                    set(glyphs, out, words.get(i), measures[i], measures[i].start(), alone, true);
                 }
             }
             return;
