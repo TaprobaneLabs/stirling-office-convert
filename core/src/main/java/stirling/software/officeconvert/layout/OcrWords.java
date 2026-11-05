@@ -155,13 +155,22 @@ final class OcrWords {
         Glyph first = glyphs.get(w.letters().getFirst());
         Glyph last = glyphs.get(w.letters().getLast());
         Glyph after = glyphs.get(words.get(i + 1).letters().getFirst());
-        if (Math.abs(after.baseline - last.baseline) > TOUCHING * last.size + TOUCHING_PT) {
+        float near = TOUCHING * last.size + TOUCHING_PT;
+        float gap = after.x - last.right();
+        if (gap > 0) {
+            return gap <= WORD_SPACE * last.size && Math.abs(after.baseline - last.baseline) <= near ? after.x
+                    : Float.NaN;
+        }
+        if (after.x <= first.x) {
             return Float.NaN;
         }
-        float gap = after.x - last.right();
-        boolean spaced = gap > 0 && gap <= WORD_SPACE * last.size;
-        boolean inside = gap <= 0 && after.x > first.x;
-        return spaced || inside ? after.x : Float.NaN;
+        // Inside the box: on this word's baseline where the next word starts. A tilted line's baseline slopes across a box
+        // drawn over several words: a phone photo's line sloped 0.006, and at "Lieferungen"'s last letter, 190 points
+        // on, it was 1.1 points from where "an" starts on it
+        float along = last.x > first.x
+                ? first.baseline + (last.baseline - first.baseline) * (after.x - first.x) / (last.x - first.x)
+                : first.baseline;
+        return Math.abs(after.baseline - along) <= near ? after.x : Float.NaN;
     }
 
     /** A word's measure, or null when its stand-in face (or script face) has no widths for it or for a space. */

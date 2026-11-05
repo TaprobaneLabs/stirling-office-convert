@@ -118,4 +118,5 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.15` | Take a map named by short labels for a figure, not prose or a text box (#96) | Not offered yet |
 | `0.2.2-fj.15` | Draw shapes nothing else draws (callout digits, pointers, logos) as veils behind the text, and glyphs mapped to control characters in figures (#97) | Not offered yet |
 | Next release | Set an OCR line's words at one scale, so roughly boxed words come out one width, and stop a word boxed over the next ones at the next one (#99) | Not offered yet |
+| Next release | On a tilted line, find a next word that starts inside a word's box on that word's own baseline (#100) | Not offered yet |
 | Next release | Read a turned glyph's size and stretch from the same scales as an upright one's, so a page turned with its words stretched keeps their size (#101) | Not offered yet: a bug in upstream's first commit |
