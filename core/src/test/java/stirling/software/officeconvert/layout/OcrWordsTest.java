@@ -33,31 +33,105 @@ class OcrWordsTest {
     private static final float SIZE = 7.2f;
 
     @Test
-    void aWordAndItsSpaceReachTheNextWord() {
+    void theWordsOfALineShareOneScaleAndEndWhereItsBoxDoes() {
         List<Glyph> glyphs = new ArrayList<>();
         float end = word(glyphs, "Our", 72, 18, NOTO);
         float second = end + 4.5f;
         float secondEnd = word(glyphs, "safety", second, 30, NOTO);
         // A gap of 3 ems: the next cell of a table
         float third = secondEnd + 3 * SIZE;
-        word(glyphs, "record", third, 32, NOTO);
+        float thirdEnd = word(glyphs, "record", third, 32, NOTO);
 
         List<Glyph> out = OcrWords.fit(glyphs);
 
-        float arial = SubstituteMetrics.width("Our ", "Arial", false, false, SIZE);
-        Glyph o = out.get(0);
-        float scale = o.hscale;
-        assertEquals(Math.floor((second - 72) / arial * 100) / 100, scale, 1e-4, "Our and a space reach safety");
-        assertEquals(72f, o.x, 1e-3);
-        float ourEnd = out.get(2).right();
-        assertEquals(SubstituteMetrics.width("Our", "Arial", false, false, SIZE) * scale, ourEnd - 72, 1e-3,
-                "the letters take Arial's widths");
-        assertEquals(second, out.get(3).right(), 1e-3, "the space ends where the next word starts");
-        // "safety" is followed by a wide gap: it keeps its box
-        float safety = out.get(4).x;
+        float our = SubstituteMetrics.width("Our", "Arial", false, false, SIZE);
+        float space = SubstituteMetrics.width(" ", "Arial", false, false, SIZE);
+        float safety = SubstituteMetrics.width("safety", "Arial", false, false, SIZE);
+        float scale = out.get(0).hscale;
+        assertEquals(Math.floor((secondEnd - 72) / (our + space + safety) * 100) / 100, scale, 1e-4,
+                "Our and safety take the scale that takes them from Our's start to safety's end");
+        assertEquals(scale, out.get(4).hscale, 1e-6, "one scale for the line's words");
+        assertEquals(72f, out.get(0).x, 1e-3);
+        assertEquals(our * scale, out.get(2).right() - 72, 1e-3, "the letters take Arial's widths");
+        assertEquals(72 + (our + space) * scale, out.get(4).x, 1e-3, "safety starts after Our and Word's space");
         float safetyEnd = out.get(9).right();
-        assertEquals(second, safety, 1e-3);
-        assertTrue(safetyEnd <= secondEnd + 1e-3 && safetyEnd > secondEnd - 0.01f * 30, "safety ends where its box does");
+        assertTrue(safetyEnd <= secondEnd + 1e-3 && safetyEnd > secondEnd - 0.01f * (secondEnd - 72),
+                "the line ends where its last box does");
+        // "record" is past a wide gap: a line of its own, at its own box
+        float recordWidth = SubstituteMetrics.width("record", "Arial", false, false, SIZE);
+        assertEquals(Math.floor((thirdEnd - third) / recordWidth * 100) / 100, out.get(11).hscale, 1e-4);
+        assertEquals(third, out.get(11).x, 1e-3);
+    }
+
+    @Test
+    void wordsBoxedRoughlyComeOutOneWidth() {
+        // RapidOCR's word boxes in one line of a phone photo: stretches of 1.1, 1.5 and 1.2 of Arial's widths
+        String[] texts = {"health", "is", "common"};
+        float[] stretch = {1.1f, 1.5f, 1.2f};
+        float space = SubstituteMetrics.width(" ", "Arial", false, false, SIZE);
+        List<Glyph> glyphs = new ArrayList<>();
+        float x = 72;
+        for (int i = 0; i < texts.length; i++) {
+            float w = SubstituteMetrics.width(texts[i], "Arial", false, false, SIZE);
+            word(glyphs, texts[i], x, w * stretch[i], NOTO);
+            x += (w + (i + 1 < texts.length ? space : 0f)) * stretch[i];
+        }
+
+        List<Glyph> out = OcrWords.fit(glyphs);
+
+        float first = out.get(0).hscale;
+        for (Glyph g : out) {
+            assertEquals(first, g.hscale, 1e-6, "every letter and space of the line at one scale");
+        }
+        assertTrue(first > 1.1f && first < 1.5f, "between the words' own stretches");
+        for (int i = 1; i < out.size(); i++) {
+            assertTrue(out.get(i).x >= out.get(i - 1).x, "the words follow one another");
+        }
+    }
+
+    @Test
+    void aLinesLastWordBoxedFarTooWideDoesntStretchTheLine() {
+        // The last word of a line has no next word to stop it: boxed four times its width, it would widen every word
+        String[] texts = {"health", "is", "common"};
+        float[] stretch = {1.2f, 1.2f, 4f};
+        float space = SubstituteMetrics.width(" ", "Arial", false, false, SIZE);
+        List<Glyph> glyphs = new ArrayList<>();
+        float x = 72;
+        for (int i = 0; i < texts.length; i++) {
+            float w = SubstituteMetrics.width(texts[i], "Arial", false, false, SIZE);
+            word(glyphs, texts[i], x, w * stretch[i], NOTO);
+            x += (w + (i + 1 < texts.length ? space : 0f)) * stretch[i];
+        }
+
+        List<Glyph> out = OcrWords.fit(glyphs);
+
+        assertEquals(1.2f, out.get(0).hscale, 0.011f, "the line at its other words' stretch");
+        assertEquals(out.get(0).hscale, out.getLast().hscale, 1e-6, "common too");
+    }
+
+    @Test
+    void aWordBoxedOverTheNextWordsReachesOnlyToTheNextOne() {
+        // Tesseract boxed "Lieferungen" over the words after it: drawn stretched 3.8 times, it stays as drawn no more
+        List<Glyph> glyphs = new ArrayList<>();
+        float lieferungen = SubstituteMetrics.width("Lieferungen", "Arial", false, false, SIZE);
+        float space = SubstituteMetrics.width(" ", "Arial", false, false, SIZE);
+        float deutsch = SubstituteMetrics.width("Deutsch:", "Arial", false, false, SIZE);
+        float deutschEnd = word(glyphs, "Deutsch:", 72, 1.15f * deutsch, NOTO);
+        float start = deutschEnd + 1.15f * space;
+        word(glyphs, "Lieferungen", start, 3.8f * lieferungen, NOTO);
+        float an = start + 1.15f * (lieferungen + space);
+        float anEnd = word(glyphs, "an", an, 1.15f * SubstituteMetrics.width("an", "Arial", false, false, SIZE), NOTO);
+        int firstOfLieferungen = "Deutsch:".length() + 1;
+        int lastOfLieferungen = firstOfLieferungen + "Lieferungen".length() - 1;
+
+        List<Glyph> out = OcrWords.fit(glyphs);
+
+        float scale = out.get(firstOfLieferungen).hscale;
+        assertEquals(out.get(0).hscale, scale, 1e-6, "Lieferungen takes its line's scale");
+        assertTrue(scale > 1.1f && scale < 1.2f, "about the scan's 115%, not 380%");
+        assertTrue(out.get(lastOfLieferungen).right() <= an + 1e-3, "it ends before the next word starts");
+        // "an" and its space follow Lieferungen's: its last letter is the line's
+        assertTrue(out.get(lastOfLieferungen + 3).right() <= anEnd + 1e-3, "the line still ends where its last box does");
     }
 
     @Test

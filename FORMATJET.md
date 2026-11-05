@@ -117,3 +117,4 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.15` | Take all the room the next column's lines leave before a table grows, moving those lines left with it (#94) | Not offered yet |
 | `0.2.2-fj.15` | Take a map named by short labels for a figure, not prose or a text box (#96) | Not offered yet |
 | `0.2.2-fj.15` | Draw shapes nothing else draws (callout digits, pointers, logos) as veils behind the text, and glyphs mapped to control characters in figures (#97) | Not offered yet |
+| Next release | Set an OCR line's words at one scale, so roughly boxed words come out one width, and stop a word boxed over the next ones at the next one (#99) | Not offered yet |
