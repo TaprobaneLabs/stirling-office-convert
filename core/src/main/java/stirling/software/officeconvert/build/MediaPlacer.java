@@ -198,8 +198,13 @@ final class MediaPlacer {
     Picture veil(PageLayout.Veil veil, PageData page, List<Box> shown) throws IOException {
         List<PageGraphics.Outline> outlines = new ArrayList<>();
         for (PageGraphics.VectorMark m : veil.marks()) {
+            // Everything the mark paints, fill and stroke (StrayMarks' shapes keep their borders); a see-through letter
+            // past the ink budget still has its fill's outline
+            List<PageGraphics.Outline> ink = page.graphics().ink(m);
             PageGraphics.Outline o = page.graphics().outline(m);
-            if (o != null) {
+            if (!ink.isEmpty()) {
+                outlines.addAll(ink);
+            } else if (o != null) {
                 outlines.add(o);
             }
         }

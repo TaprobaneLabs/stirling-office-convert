@@ -2,6 +2,15 @@ package stirling.software.officeconvert.extract;
 
 public final class Glyph {
 
+    /**
+     * Whether a font maps a glyph to text that cleans to nothing (control characters only), so the page's text leaves it
+     * out: GAO's highlights page draws a 113 pt brace as a glyph mapped to U+001F. A picture drawn without its text must
+     * still paint such a glyph, or nothing does.
+     */
+    public static boolean textless(String unicode) {
+        return unicode != null && !unicode.isEmpty() && GlyphCollector.clean(unicode) == null;
+    }
+
     public final String text;
     public final float x;
     public final float width;

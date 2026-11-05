@@ -18,10 +18,17 @@ public record PageGraphics(
         Set<Object> seeThroughPaint,
         Map<Object, Outline> outlines,
         List<Area> masked,
-        Map<Object, Shape> lettering) {
+        Map<Object, Shape> lettering,
+        Map<Object, List<Outline>> ink) {
 
     public PageGraphics(List<Rule> rules, List<Fill> fills, List<ImageDraw> images, List<VectorMark> marks) {
-        this(rules, fills, images, marks, List.of(), Map.of(), Set.of(), Map.of(), List.of(), Map.of());
+        this(rules, fills, images, marks, List.of(), Map.of(), Set.of(), Map.of(), List.of(), Map.of(), Map.of());
+    }
+
+    public PageGraphics(List<Rule> rules, List<Fill> fills, List<ImageDraw> images, List<VectorMark> marks,
+            List<Area> pastBudget, Map<Object, Integer> paintOrder, Set<Object> seeThroughPaint,
+            Map<Object, Outline> outlines, List<Area> masked, Map<Object, Shape> lettering) {
+        this(rules, fills, images, marks, pastBudget, paintOrder, seeThroughPaint, outlines, masked, lettering, Map.of());
     }
 
     public record Area(float x, float top, float right, float bottom) {}
@@ -30,6 +37,15 @@ public record PageGraphics(
 
     public Outline outline(Object painted) {
         return painted == null ? null : outlines.get(painted);
+    }
+
+    /**
+     * What a mark paints, as page shapes: its fill and its stroke's outline, each with its colour and opacity, clipped as
+     * the page clips them. Empty for a mark past the page's budget, a pattern fill or a shading.
+     */
+    public List<Outline> ink(Object painted) {
+        List<Outline> o = painted == null ? null : ink.get(painted);
+        return o == null ? List.of() : o;
     }
 
     public Shape lettering(Object painted) {

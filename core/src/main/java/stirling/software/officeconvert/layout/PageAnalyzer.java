@@ -270,7 +270,12 @@ public final class PageAnalyzer {
         List<Line> sideNotes = new ArrayList<>();
         List<PageLayout.Band> bands = bands(page, flow, blocks, frame, ocr, sideNotes);
 
-        List<PageGraphics.VectorMark> dots = marks.stream().filter(PageGraphics.VectorMark::round).toList();
+        StrayMarks.Found stray = StrayMarks.find(paper == null ? marks : marks.stream().filter(m -> m != paper).toList(),
+                gfx, drawn, tableBoxes, concat(segments, furnitureLines), page.width(), page.height());
+        Set<PageGraphics.VectorMark> veiledMarks = Collections.newSetFromMap(new IdentityHashMap<>());
+        veiledMarks.addAll(stray.taken());
+        List<PageGraphics.VectorMark> dots =
+                marks.stream().filter(m -> m.round() && !veiledMarks.contains(m)).toList();
         List<PageLayout.Decoration> decorations =
                 new ArrayList<>(Decorations.leftovers(freeFills, freeRules, dots, drawn, tableBoxes, tinted, gfx::order));
         for (TextBoxFinder.Container c : containers) {
@@ -290,7 +295,7 @@ public final class PageAnalyzer {
         }
         groundTextBoxes(bands, furniture, decorations, gfx);
         return new PageLayout(page, bands, ocr, decorations, notes.notes(), notes.continuation(), furniture,
-                veiled.veils(), textPaint);
+                concat(veiled.veils(), stray.veils()), textPaint);
     }
 
     private PageLayout formPage(PageData page, boolean ocr, List<Line> lines, List<Rule> rules, List<Fill> fills,

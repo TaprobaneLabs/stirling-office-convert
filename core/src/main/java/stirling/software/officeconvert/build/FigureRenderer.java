@@ -100,6 +100,22 @@ final class FigureRenderer extends PDFRenderer {
         return text || turnedFrom >= 0 && direction(textRenderingMatrix) != turnedFrom;
     }
 
+    /**
+     * A glyph the page's text leaves out (its text is control characters), which a picture without text still paints. A
+     * simple font's glyph with no mapping reads as its code, as {@code TextPositions} reads it: GAO's brace is code 31.
+     */
+    private static boolean textless(PDFont font, int code) {
+        try {
+            String unicode = font.toUnicode(code);
+            if (unicode == null && font instanceof org.apache.pdfbox.pdmodel.font.PDSimpleFont) {
+                unicode = String.valueOf((char) code);
+            }
+            return stirling.software.officeconvert.extract.Glyph.textless(unicode);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     void paperSpan(Rectangle2D region) {
         span = region;
     }
@@ -260,7 +276,7 @@ final class FigureRenderer extends PDFRenderer {
                     throws IOException {
                 PDTextState state = getGraphicsState().getTextState();
                 RenderingMode mode = state.getRenderingMode();
-                if (draws(textRenderingMatrix)) {
+                if (draws(textRenderingMatrix) || textless(font, code)) {
                     super.showFontGlyph(textRenderingMatrix, font, code, displacement);
                 } else if (mode.isClip()) {
                     state.setRenderingMode(RenderingMode.NEITHER_CLIP);
