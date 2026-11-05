@@ -600,7 +600,8 @@ final class GlyphCollector extends PDFStreamEngine {
         if (!(tp.getFont() instanceof PDVectorFont vector) || codes == null || codes.length != 1) {
             return null;
         }
-        float along = Math.round(tp.getDir()) % 180 != 0 ? tp.getYScale() : tp.getXScale();
+        // Along the line, for text turned any way (horizontalScale())
+        float along = tp.getXScale();
         if (!(along > 0)) {
             return null;
         }
@@ -721,19 +722,23 @@ final class GlyphCollector extends PDFStreamEngine {
         return Float.isFinite(t) ? t : 0f;
     }
 
+    /**
+     * A glyph's stretch along its line: its text rendering matrix's x scale (the size times the horizontal scaling, Tz)
+     * over its y scale (the size). PDFBox's scales are the lengths of the matrix's rows, so they hold for text turned any
+     * way. They were swapped for text turned a quarter, which is harmless at 100% but not with a stretch: OCRmyPDF draws
+     * each word of a page it turns at its own Tz, and a phone photo's words came out with that stretch as their size
+     * (6 to 12.5 points in one line set at 6.68) and its inverse as their scale.
+     */
     static float horizontalScale(TextPosition tp) {
-        boolean vertical = Math.round(tp.getDir()) % 180 != 0;
-        float along = vertical ? tp.getYScale() : tp.getXScale();
-        float across = vertical ? tp.getXScale() : tp.getYScale();
+        float along = tp.getXScale();
+        float across = tp.getYScale();
         float s = across > 0.5f ? along / across : 1f;
         return Float.isFinite(s) && s > 0.2f && s < 5f ? s : 1f;
     }
 
+    /** A glyph's size: its text rendering matrix's y scale, for text turned any way (horizontalScale()). */
     static float fontSize(TextPosition tp) {
         float size = Math.abs(tp.getYScale());
-        if (Math.round(tp.getDir()) % 180 != 0) {
-            size = Math.abs(tp.getXScale());
-        }
         if (size <= 0.5f || size > 400f) {
             size = tp.getFontSizeInPt();
         }
