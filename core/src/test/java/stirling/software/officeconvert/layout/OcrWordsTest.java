@@ -58,8 +58,8 @@ class OcrWordsTest {
         assertTrue(safetyEnd <= secondEnd + 1e-3 && safetyEnd > secondEnd - 0.01f * (secondEnd - 72),
                 "the line ends where its last box does");
         // "record" is past a wide gap: a line of its own, at its own box
-        float record = SubstituteMetrics.width("record", "Arial", false, false, SIZE);
-        assertEquals(Math.floor((thirdEnd - third) / record * 100) / 100, out.get(11).hscale, 1e-4);
+        float recordWidth = SubstituteMetrics.width("record", "Arial", false, false, SIZE);
+        assertEquals(Math.floor((thirdEnd - third) / recordWidth * 100) / 100, out.get(11).hscale, 1e-4);
         assertEquals(third, out.get(11).x, 1e-3);
     }
 
