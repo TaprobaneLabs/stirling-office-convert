@@ -110,6 +110,46 @@ class OcrWordsTest {
     }
 
     @Test
+    void onATiltedLineAWordBoxedOverTheNextOnesStillReachesOnlyToTheNext() {
+        // The phone photo's line sloped 0.006: at the stretched word's last letter, its baseline was well off where the
+        // next word starts on it
+        float slope = 0.006f;
+        List<Glyph> glyphs = new ArrayList<>();
+        float lieferungen = SubstituteMetrics.width("Lieferungen", "Arial", false, false, SIZE);
+        float space = SubstituteMetrics.width(" ", "Arial", false, false, SIZE);
+        float deutsch = SubstituteMetrics.width("Deutsch:", "Arial", false, false, SIZE);
+        float deutschEnd = tilted(glyphs, "Deutsch:", 72, 1.15f * deutsch, slope);
+        float start = deutschEnd + 1.15f * space;
+        tilted(glyphs, "Lieferungen", start, 3.8f * lieferungen, slope);
+        float an = start + 1.15f * (lieferungen + space);
+        tilted(glyphs, "an", an, 1.15f * SubstituteMetrics.width("an", "Arial", false, false, SIZE), slope);
+        int firstOfLieferungen = "Deutsch:".length() + 1;
+        int lastOfLieferungen = firstOfLieferungen + "Lieferungen".length() - 1;
+
+        List<Glyph> out = OcrWords.fit(glyphs);
+
+        float scale = out.get(firstOfLieferungen).hscale;
+        assertEquals(out.get(0).hscale, scale, 1e-6, "Lieferungen takes its line's scale");
+        assertTrue(scale > 1.1f && scale < 1.2f, "about the scan's 115%, not 380%");
+        assertTrue(out.get(lastOfLieferungen).right() <= an + 1e-3, "it ends before the next word starts");
+    }
+
+    /** A word drawn as word() draws it, on a line rising by {@code slope}; returns where it ends. */
+    private static float tilted(List<Glyph> glyphs, String text, float x, float width, float slope) {
+        float each = width / text.length();
+        for (int i = 0; i <= text.length(); i++) {
+            float at = x + i * each;
+            boolean space = i == text.length();
+            Glyph g = new Glyph(space ? " " : String.valueOf(text.charAt(i)), at, space ? 0.26f * SIZE : each,
+                    700 - slope * (at - 72), SIZE, 0.9f * SIZE, 0.2f * SIZE, NOTO, 0, glyphs.size(), 0.26f * SIZE,
+                    false, false);
+            g.invisible = true;
+            glyphs.add(g);
+        }
+        return x + width;
+    }
+
+    @Test
     void aWordBoxedOverTheNextWordsReachesOnlyToTheNextOne() {
         // Tesseract boxed "Lieferungen" over the words after it: drawn stretched 3.8 times, it stays as drawn no more
         List<Glyph> glyphs = new ArrayList<>();
