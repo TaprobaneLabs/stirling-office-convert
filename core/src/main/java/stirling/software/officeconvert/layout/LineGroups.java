@@ -10,15 +10,23 @@ final class LineGroups {
 
     private LineGroups() {}
 
+    /**
+     * Segments joined into rows: in order of baseline, each joins the row while it stands within a fifth of the row's
+     * first segment's size of the row's mean baseline so far, as GlyphRows takes glyphs into rows. Measured from the
+     * row's first segment instead, a tilted line cut into three pieces came apart at its far end: a phone photo's
+     * header, its pieces 0.8 points apart in turn and 1.6 end to end, lost its first piece to a text box beside the
+     * rest.
+     */
     static List<Line> joinRows(List<Line> segs) {
         segs.sort(Comparator.comparingDouble((Line l) -> l.baseline).thenComparingDouble(l -> l.x));
         List<Line> out = new ArrayList<>();
         int i = 0;
         while (i < segs.size()) {
+            float tol = Math.max(1f, segs.get(i).size * 0.2f);
+            double sum = segs.get(i).baseline;
             int j = i + 1;
-            while (j < segs.size()
-                    && Math.abs(segs.get(j).baseline - segs.get(i).baseline)
-                            < Math.max(1f, segs.get(i).size * 0.2f)) {
+            while (j < segs.size() && Math.abs(segs.get(j).baseline - sum / (j - i)) < tol) {
+                sum += segs.get(j).baseline;
                 j++;
             }
             out.add(LineBuilder.join(segs.subList(i, j)));
