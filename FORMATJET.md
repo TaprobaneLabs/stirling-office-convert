@@ -123,3 +123,4 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | Next release | Keep a ruled row whole when its cells' lines are wrapped text rather than rows stacked in it, so a form's groups of wrapped lines stay one row each (#102) | Not offered yet |
 | Next release | On a scan, keep a panel's grey ground from becoming a picture that takes the panel's text: not where stacked lines of OCR text cover a fifth of it or more (#103) | Not offered yet |
 | Next release | Set an OCR line on one baseline, so a tilted line on a photo stays one row instead of coming apart mid-word (#104) | Not offered yet |
+| Next release | Keep a scan's band of white text whole, as one picture holding its words, instead of a picture from the middle of its first line beside the rest set in black (#105) | Not offered yet |

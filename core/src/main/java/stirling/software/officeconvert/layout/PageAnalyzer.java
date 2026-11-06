@@ -218,7 +218,7 @@ public final class PageAnalyzer {
         if (ocr) {
             ImageDraw scan = fullPageImage(page, gfx.images());
             if (scan != null) {
-                figures.addAll(ScanRegions.find(scan, segments, page.width(), page.height()));
+                figures.addAll(ScanRegions.find(scan, segments, tableBoxes, page.width(), page.height()));
             }
         }
 

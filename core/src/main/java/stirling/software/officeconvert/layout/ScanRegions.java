@@ -3,6 +3,8 @@ package stirling.software.officeconvert.layout;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 import stirling.software.officeconvert.extract.ImageBudget;
@@ -14,7 +16,11 @@ final class ScanRegions {
 
     private ScanRegions() {}
 
-    static List<Box> find(ImageDraw scan, List<Line> ocrLines, float pageW, float pageH) {
+    /**
+     * The pictures in a scan: its ink that no OCR word covers. {@code tables} are the page's tables, whose words they
+     * set, so words on a dark ground inside them are masked as on white.
+     */
+    static List<Box> find(ImageDraw scan, List<Line> ocrLines, List<Box> tables, float pageW, float pageH) {
         if (!plausibleShape(scan) || !ImageBudget.affordable(scan.image())) {
             return List.of();
         }
@@ -38,14 +44,24 @@ final class ScanRegions {
         for (int r = 0; r < rows; r++) {
             ink[r] = whole[r].clone();
         }
-        maskWords(ink, ocrLines, scan, cols, rows);
+        List<int[]> grounded = maskWords(ink, whole, ocrLines, tables, scan, cols, rows);
+        int[][] labels = new int[rows][cols];
+        List<int[]> parts = components(ink, labels);
+        if (maskPanels(ink, grounded, parts, ocrLines, scan, cols, rows, pageW, pageH)) {
+            parts = components(ink, labels);
+        }
         List<Box> out = new ArrayList<>();
-        for (int[] c : components(ink)) {
+        List<Box> trimmedBands = new ArrayList<>();
+        for (int i = 0; i < parts.size(); i++) {
+            int[] c = holds(parts.get(i), grounded) ? trimmed(parts.get(i), labels, i + 1) : parts.get(i);
             int area = (c[2] - c[0] + 1) * (c[3] - c[1] + 1);
             Box b = box(c, scan, cols, rows, pageW, pageH);
             if (c[4] >= 0.35f * area && b.area() >= 0.012f * pageW * pageH && b.width() >= 20 && b.height() >= 14
                     && !textGround(b, ocrLines)) {
                 out.add(b);
+                if (c != parts.get(i)) {
+                    trimmedBands.add(b);
+                }
             }
         }
         for (int[] c : clusters(components(whole), CLUSTER_GAP)) {
@@ -53,14 +69,22 @@ final class ScanRegions {
             Box b = box(c, scan, cols, rows, pageW, pageH);
             if (c[4] < SPARSE * area || b.area() < 0.012f * pageW * pageH || inside(c, ink) < BARE * c[4]
                     || wordsIn(b, ocrLines) > FEW_WORDS || b.width() > MAX_ASPECT * b.height()
-                    || b.height() > MAX_ASPECT * b.width() || textGround(b, ocrLines)) {
+                    || b.height() > MAX_ASPECT * b.width() || textGround(b, ocrLines)
+                    || trimmedBands.stream()
+                            .anyMatch(t -> holds(b, t) && wordsIn(b, ocrLines) > wordsIn(t, ocrLines))) {
+                // A cluster holding a band trimmed of its tails may add artwork beside it, but no words beyond the
+                // band's: its box would reach over text the tails ran past
                 continue;
             }
-            out.removeIf(o -> o.x() >= b.x() - 1 && o.right() <= b.right() + 1 && o.top() >= b.top() - 1
-                    && o.bottom() <= b.bottom() + 1);
+            out.removeIf(o -> holds(b, o));
             out.add(b);
         }
         return out;
+    }
+
+    private static boolean holds(Box b, Box o) {
+        return o.x() >= b.x() - 1 && o.right() <= b.right() + 1 && o.top() >= b.top() - 1
+                && o.bottom() <= b.bottom() + 1;
     }
 
     private static final int CLUSTER_GAP = 3;
@@ -220,27 +244,181 @@ final class ScanRegions {
         return ink;
     }
 
-    private static void maskWords(boolean[][] ink, List<Line> lines, ImageDraw scan, int cols, int rows) {
+    /**
+     * A word whose masked cells are at least this share ink is light lettering on a dark ground (a band, a banner, a
+     * logo's box): the ink is the ground's, and the letters have none to take away.
+     */
+    private static final float DARK_GROUND = 0.75f;
+
+    /**
+     * Takes each word's ink out of {@code ink}, so that text never makes a picture of its own, but leaves words on a
+     * dark ground alone: masked, two lines of white text that filled a band's height cut it in two, and the band came
+     * out as a picture from the middle of its first line (a CDC fact sheet's footer). Words in a table are masked all
+     * the same: the table sets them, and a shaded header row kept whole would show its lettering beside them, while
+     * masked it still leaves a picture of the headings the OCR missed. Returns the cells of the words left, each as
+     * {first row, end row, first column, end column}.
+     */
+    private static List<int[]> maskWords(boolean[][] ink, boolean[][] whole, List<Line> lines, List<Box> tables,
+            ImageDraw scan, int cols, int rows) {
         float boxW = scan.right() - scan.x();
         float boxH = scan.bottom() - scan.top();
+        List<int[]> grounded = new ArrayList<>();
         for (Line l : lines) {
             for (Word w : l.words) {
-                int c0 = (int) Math.floor((w.x - scan.x()) / boxW * cols) - 1;
-                int c1 = (int) Math.ceil((w.right - scan.x()) / boxW * cols) + 1;
-                int r0 = (int) Math.floor((l.top - scan.top()) / boxH * rows) - 1;
-                int r1 = (int) Math.ceil((l.bottom - scan.top()) / boxH * rows) + 1;
-                for (int r = Math.max(0, r0); r < Math.min(rows, r1); r++) {
-                    for (int c = Math.max(0, c0); c < Math.min(cols, c1); c++) {
-                        ink[r][c] = false;
-                    }
+                int[] cells = {
+                    Math.max(0, (int) Math.floor((l.top - scan.top()) / boxH * rows) - 1),
+                    Math.min(rows, (int) Math.ceil((l.bottom - scan.top()) / boxH * rows) + 1),
+                    Math.max(0, (int) Math.floor((w.x - scan.x()) / boxW * cols) - 1),
+                    Math.min(cols, (int) Math.ceil((w.right - scan.x()) / boxW * cols) + 1)
+                };
+                if (inkShare(whole, cells) >= DARK_GROUND
+                        && !Regions.insideAny(Regions.wordX(w), Regions.wordY(l), tables, 1f)) {
+                    grounded.add(cells);
+                } else {
+                    mask(ink, cells);
                 }
+            }
+        }
+        return grounded;
+    }
+
+    /** A dark ground holding more rows of text than this is a panel (a sidebar), not a band: its words stay text. */
+    private static final int BAND_ROWS = 3;
+
+    /**
+     * Masks the words left on a dark ground in each part of the scan that holds more than {@link #BAND_ROWS} rows of
+     * text, as on white: kept whole, a sidebar of white text would be a picture of all its words. True when any were.
+     */
+    private static boolean maskPanels(boolean[][] ink, List<int[]> grounded, List<int[]> parts, List<Line> lines,
+            ImageDraw scan, int cols, int rows, float pageW, float pageH) {
+        boolean masked = false;
+        for (int[] c : parts) {
+            List<int[]> held = grounded.stream().filter(g -> within(g, c)).toList();
+            if (!held.isEmpty() && textRows(box(c, scan, cols, rows, pageW, pageH), lines) > BAND_ROWS) {
+                held.forEach(g -> mask(ink, g));
+                grounded.removeAll(held);
+                masked = true;
+            }
+        }
+        return masked;
+    }
+
+    /** Whether the word whose cells are {@code g} has its middle in the part of the scan {@code c}. */
+    private static boolean within(int[] g, int[] c) {
+        return (g[2] + g[3]) / 2 >= c[0] && (g[2] + g[3]) / 2 <= c[2] && (g[0] + g[1]) / 2 >= c[1]
+                && (g[0] + g[1]) / 2 <= c[3];
+    }
+
+    private static boolean holds(int[] c, List<int[]> grounded) {
+        return grounded.stream().anyMatch(g -> within(g, c));
+    }
+
+    /** A row or column at a band's edge with less ink than this share of its fullest one's is a thin tail. */
+    private static final float THIN = 0.05f;
+
+    /**
+     * A band without the thin tails at its edges: the rows at its top and bottom, and the columns at its sides, whose
+     * ink is under {@link #THIN} of its fullest row's or column's, such as the line of a page's frame running on from a
+     * banner. With the banner's words masked, the line was cut off with them; kept whole, it stretched the banner's
+     * picture down over the heading under it, which the picture then took (a phone photo of CDC's fact sheet). Only the
+     * band's own cells count ({@code labels} holding {@code id}), not those of a photo just under it.
+     */
+    private static int[] trimmed(int[] c, int[][] labels, int id) {
+        int[] across = new int[c[3] - c[1] + 1];
+        int[] down = new int[c[2] - c[0] + 1];
+        for (int r = c[1]; r <= c[3]; r++) {
+            for (int k = c[0]; k <= c[2]; k++) {
+                if (labels[r][k] == id) {
+                    across[r - c[1]]++;
+                    down[k - c[0]]++;
+                }
+            }
+        }
+        float rowTail = THIN * Arrays.stream(across).max().orElse(0);
+        float colTail = THIN * Arrays.stream(down).max().orElse(0);
+        int top = c[1];
+        int bottom = c[3];
+        int left = c[0];
+        int right = c[2];
+        while (top < bottom && across[top - c[1]] < rowTail) {
+            top++;
+        }
+        while (bottom > top && across[bottom - c[1]] < rowTail) {
+            bottom--;
+        }
+        while (left < right && down[left - c[0]] < colTail) {
+            left++;
+        }
+        while (right > left && down[right - c[0]] < colTail) {
+            right--;
+        }
+        if (top == c[1] && bottom == c[3] && left == c[0] && right == c[2]) {
+            return c;
+        }
+        int[] t = {left, top, right, bottom, 0};
+        for (int r = top; r <= bottom; r++) {
+            for (int k = left; k <= right; k++) {
+                t[4] += labels[r][k] == id ? 1 : 0;
+            }
+        }
+        return t;
+    }
+
+    /** The rows of text in {@code b}: its lines, those side by side or overlapping counted once. */
+    private static int textRows(Box b, List<Line> lines) {
+        List<Line> held = new ArrayList<>();
+        for (Line l : lines) {
+            float cy = (l.top + l.bottom) / 2f;
+            if (cy >= b.top() && cy <= b.bottom() && l.words.stream()
+                    .anyMatch(w -> (w.x + w.right) / 2f >= b.x() && (w.x + w.right) / 2f <= b.right())) {
+                held.add(l);
+            }
+        }
+        held.sort(Comparator.comparingDouble(l -> l.top));
+        int n = 0;
+        float bottom = Float.NEGATIVE_INFINITY;
+        for (Line l : held) {
+            if (l.top >= bottom) {
+                n++;
+            }
+            bottom = Math.max(bottom, l.bottom);
+        }
+        return n;
+    }
+
+    private static void mask(boolean[][] ink, int[] cells) {
+        for (int r = cells[0]; r < cells[1]; r++) {
+            for (int c = cells[2]; c < cells[3]; c++) {
+                ink[r][c] = false;
             }
         }
     }
 
+    private static float inkShare(boolean[][] ink, int[] cells) {
+        int n = 0;
+        int all = 0;
+        for (int r = cells[0]; r < cells[1]; r++) {
+            for (int c = cells[2]; c < cells[3]; c++) {
+                n += ink[r][c] ? 1 : 0;
+                all++;
+            }
+        }
+        return all == 0 ? 0 : (float) n / all;
+    }
+
     private static List<int[]> components(boolean[][] ink) {
+        return components(ink, null);
+    }
+
+    /** The parts of {@code ink}, each as its box and cell count; {@code labels}, if given, gets each cell's part. */
+    private static List<int[]> components(boolean[][] ink, int[][] labels) {
         int rows = ink.length;
         int cols = ink[0].length;
+        if (labels != null) {
+            for (int[] row : labels) {
+                Arrays.fill(row, 0);
+            }
+        }
         boolean[][] seen = new boolean[rows][cols];
         List<int[]> out = new ArrayList<>();
         int[] stack = new int[rows * cols];
@@ -262,6 +440,9 @@ final class ScanRegions {
                     comp[2] = Math.max(comp[2], cc);
                     comp[3] = Math.max(comp[3], cr);
                     comp[4]++;
+                    if (labels != null) {
+                        labels[cr][cc] = out.size() + 1;
+                    }
                     for (int dr = -1; dr <= 1; dr++) {
                         for (int dc = -1; dc <= 1; dc++) {
                             int nr = cr + dr;
