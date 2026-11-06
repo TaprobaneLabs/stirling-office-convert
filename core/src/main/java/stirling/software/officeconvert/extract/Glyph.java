@@ -100,14 +100,19 @@ public final class Glyph {
 
     /** This glyph with other text, everything else the same. */
     public Glyph withText(String other) {
-        return copy(other, width);
+        return copy(other, width, baseline);
     }
 
     public Glyph withWidth(float other) {
-        return copy(text, other);
+        return copy(text, other, baseline);
     }
 
-    private Glyph copy(String text, float width) {
+    /** This glyph moved onto another baseline, everything else the same. */
+    public Glyph withBaseline(float other) {
+        return copy(text, width, other);
+    }
+
+    private Glyph copy(String text, float width, float baseline) {
         Glyph g = new Glyph(text, x, width, baseline, size, ascent, descent, font, rgb, seq, spaceWidth, bold, italic);
         g.underline = underline;
         g.strike = strike;

@@ -134,6 +134,38 @@ class OcrWordsTest {
         assertTrue(out.get(lastOfLieferungen).right() <= an + 1e-3, "it ends before the next word starts");
     }
 
+    @Test
+    void aTiltedLineStandsOnOneBaseline() {
+        // A line of a phone photo of CDC's HPV fact sheet, its baseline 6 points higher at its end than at its start
+        float slope = 0.018f;
+        String[] texts = "If you are pregnant and have HPV, you can get genital warts or develop abnormal cell".split(" ");
+        float space = SubstituteMetrics.width(" ", "Arial", false, false, SIZE);
+        List<Glyph> glyphs = new ArrayList<>();
+        float x = 72;
+        for (String t : texts) {
+            x = tilted(glyphs, t, x, 1.15f * SubstituteMetrics.width(t, "Arial", false, false, SIZE), slope)
+                    + 1.15f * space;
+        }
+        assertTrue(LineBuilder.build(glyphs).size() > 1, "as drawn, the line comes apart into rows");
+
+        List<Glyph> out = OcrWords.fit(glyphs);
+
+        double sum = 0;
+        int letters = 0;
+        for (Glyph g : glyphs) {
+            if (!g.isSpace()) {
+                sum += g.baseline;
+                letters++;
+            }
+        }
+        for (Glyph g : out) {
+            assertEquals(sum / letters, g.baseline, 1e-3, "every letter and space on the letters' mean baseline");
+        }
+        List<Line> lines = LineBuilder.build(out);
+        assertEquals(1, lines.size(), "one row");
+        assertEquals(texts.length, lines.getFirst().words.size(), "every word in it");
+    }
+
     /** A word drawn as word() draws it, on a line rising by {@code slope}; returns where it ends. */
     private static float tilted(List<Glyph> glyphs, String text, float x, float width, float slope) {
         float each = width / text.length();

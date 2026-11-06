@@ -218,13 +218,47 @@ final class OcrWords {
      * Words {@code from} (inclusive) to {@code to} (exclusive), one line, set out one after another from the first's start
      * at the scale that takes them to the last one's reach, in a whole percent as Word writes it: the line comes out no
      * longer than the scan's. When that scale is no word's (outside MIN_SCALE to MAX_SCALE), each word takes its own, or
-     * stays as drawn when that is no word's either.
+     * stays as drawn when that is no word's either. Either way the line then stands on one baseline (level()).
      */
     private static void setLine(List<Glyph> glyphs, List<Glyph> out, List<Word> words, Measure[] measures, int from,
             int to) {
         if (from >= to) {
             return;
         }
+        place(glyphs, out, words, measures, from, to);
+        level(out, words, from, to);
+    }
+
+    /**
+     * The words of a line moved onto one baseline, their letters' mean, as Word sets the line. A phone photo's lines
+     * slope (a page that bends, or one not square to the camera) and the layout takes glyphs into rows by their baseline:
+     * on a photo of CDC's HPV fact sheet, lines whose baselines fell 4 to 6 points over their 300 came apart into two
+     * rows, mid-word ("If you are pregnant and have H" and "PV, you can get genital warts"), and Word set the first half
+     * in a text box beside the paragraph.
+     */
+    private static void level(List<Glyph> out, List<Word> words, int from, int to) {
+        double sum = 0;
+        int n = 0;
+        for (int i = from; i < to; i++) {
+            for (int k : words.get(i).letters()) {
+                sum += out.get(k).baseline;
+                n++;
+            }
+        }
+        float baseline = (float) (sum / n);
+        for (int i = from; i < to; i++) {
+            Word w = words.get(i);
+            for (int k : w.letters()) {
+                out.set(k, out.get(k).withBaseline(baseline));
+            }
+            if (w.space() >= 0) {
+                out.set(w.space(), out.get(w.space()).withBaseline(baseline));
+            }
+        }
+    }
+
+    private static void place(List<Glyph> glyphs, List<Glyph> out, List<Word> words, Measure[] measures, int from,
+            int to) {
         float[] own = new float[to - from];
         for (int i = from; i < to; i++) {
             own[i - from] = measures[i].reach() / measures[i].natural();
