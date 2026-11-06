@@ -117,12 +117,12 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.15` | Take all the room the next column's lines leave before a table grows, moving those lines left with it (#94) | Not offered yet |
 | `0.2.2-fj.15` | Take a map named by short labels for a figure, not prose or a text box (#96) | Not offered yet |
 | `0.2.2-fj.15` | Draw shapes nothing else draws (callout digits, pointers, logos) as veils behind the text, and glyphs mapped to control characters in figures (#97) | Not offered yet |
-| Next release | Set an OCR line's words at one scale, so roughly boxed words come out one width, and stop a word boxed over the next ones at the next one (#99) | Not offered yet |
-| Next release | On a tilted line, find a next word that starts inside a word's box on that word's own baseline (#100) | Not offered yet |
-| Next release | Read a turned glyph's size and stretch from the same scales as an upright one's, so a page turned with its words stretched keeps their size (#101) | Not offered yet: a bug in upstream's first commit |
-| Next release | Keep a ruled row whole when its cells' lines are wrapped text rather than rows stacked in it, so a form's groups of wrapped lines stay one row each (#102) | Not offered yet |
-| Next release | On a scan, keep a panel's grey ground from becoming a picture that takes the panel's text: not where stacked lines of OCR text cover a fifth of it or more (#103) | Not offered yet |
-| Next release | Set an OCR line on one baseline, so a tilted line on a photo stays one row instead of coming apart mid-word (#104) | Not offered yet |
-| Next release | Keep a scan's band of white text whole, as one picture holding its words, instead of a picture from the middle of its first line beside the rest set in black (#105) | Not offered yet |
-| Next release | Take a stroked line off level by up to 0.5% of its length as a rule, and let a rule dividing its column under rows Word sets lower give back the room that would push the next paragraph, so a budget table's rule follows its rows without pushing the heading under it (#107) | Not offered yet |
-| Next release | Join a column's segments into rows against the row's mean baseline, not its first segment's, so a tilted line cut into pieces stays one row (#106) | Not offered yet |
+| `0.2.2-fj.16` | Set an OCR line's words at one scale, so roughly boxed words come out one width, and stop a word boxed over the next ones at the next one (#99) | Not offered yet |
+| `0.2.2-fj.16` | On a tilted line, find a next word that starts inside a word's box on that word's own baseline (#100) | Not offered yet |
+| `0.2.2-fj.16` | Read a turned glyph's size and stretch from the same scales as an upright one's, so a page turned with its words stretched keeps their size (#101) | Not offered yet: a bug in upstream's first commit |
+| `0.2.2-fj.17` | Keep a ruled row whole when its cells' lines are wrapped text rather than rows stacked in it, so a form's groups of wrapped lines stay one row each (#102) | Not offered yet |
+| `0.2.2-fj.17` | On a scan, keep a panel's grey ground from becoming a picture that takes the panel's text: not where stacked lines of OCR text cover a fifth of it or more (#103) | Not offered yet |
+| `0.2.2-fj.17` | Set an OCR line on one baseline, so a tilted line on a photo stays one row instead of coming apart mid-word (#104) | Not offered yet |
+| `0.2.2-fj.18` | Keep a scan's band of white text whole, as one picture holding its words, instead of a picture from the middle of its first line beside the rest set in black (#105) | Not offered yet |
+| `0.2.2-fj.18` | Take a stroked line off level by up to 0.5% of its length as a rule, and let a rule dividing its column under rows Word sets lower give back the room that would push the next paragraph, so a budget table's rule follows its rows without pushing the heading under it (#107) | Not offered yet |
+| `0.2.2-fj.18` | Join a column's segments into rows against the row's mean baseline, not its first segment's, so a tilted line cut into pieces stays one row (#106) | Not offered yet |
