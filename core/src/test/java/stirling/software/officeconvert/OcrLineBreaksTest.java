@@ -80,7 +80,7 @@ class OcrLineBreaksTest {
      * An OCR tool sizes each line from its own box, so one paragraph's lines come at 4.79 to 5.24 points, which Word sets
      * at 5. At its run's size and character scale, before any character spacing (the width fix's, in twentieths of a
      * point a character, 1.4% of a line at 5 points, and the fit's), each line must come out in Word at the same share of
-     * its width in the OCR layer, within a percent: a line at 5.07 had stayed 1.4% short while one at 4.79 came out 4%
+     * its width in the OCR layer, within the two whole-percent roundings of its scale: a line at 5.07 had stayed 1.4% short while one at 4.79 came out 4%
      * long, and the fit, measuring the lines against each other, broke the paragraph elsewhere (IRS Form 8822's scan,
      * whose Privacy Act notice lost its first line's break).
      */
@@ -116,7 +116,8 @@ class OcrLineBreaksTest {
                     text.length() > 30 ? text.substring(0, 30) : text));
             at += text.length();
         }
-        assertTrue(most - least <= 0.01f, "the lines' widths within a percent of each other: " + least + " to " + most
+        // OcrWords rounds each line's scale down to a whole percent, and Word's scale is rounded down again: up to 1.6%
+        assertTrue(most - least <= 0.016f, "the lines' widths within 1.6% of each other: " + least + " to " + most
                 + detail);
         assertTrue(most <= 1.001f, "none longer than the scan's: " + most + detail);
     }

@@ -216,11 +216,9 @@ final class OcrWords {
 
     /**
      * Words {@code from} (inclusive) to {@code to} (exclusive), one line, set out one after another from the first's start
-     * at the scale that takes them to the last one's reach. Word's whole percent is RunBuilder.scaleOf()'s, taken at the
-     * half-point size Word sets the line in and rounded down, so the line comes out no longer than the scan's; rounded down
-     * here as well, a line lost up to two percent against its neighbours. When that scale is no word's (outside MIN_SCALE
-     * to MAX_SCALE), each word takes its own, or stays as drawn when that is no word's either. Either way the line then
-     * stands on one baseline (level()).
+     * at the scale that takes them to the last one's reach, in a whole percent as Word writes it: the line comes out no
+     * longer than the scan's. When that scale is no word's (outside MIN_SCALE to MAX_SCALE), each word takes its own, or
+     * stays as drawn when that is no word's either. Either way the line then stands on one baseline (level()).
      */
     private static void setLine(List<Glyph> glyphs, List<Glyph> out, List<Word> words, Measure[] measures, int from,
             int to) {
@@ -275,10 +273,10 @@ final class OcrWords {
             reach += wrong ? measures[i].natural() * typical : measures[i].reach();
             natural += measures[i].natural();
         }
-        float scale = reach / natural;
+        float scale = whole(reach / natural);
         if (!(scale >= MIN_SCALE && scale <= MAX_SCALE)) {
             for (int i = from; i < to; i++) {
-                float alone = own[i - from];
+                float alone = whole(own[i - from]);
                 if (alone >= MIN_SCALE && alone <= MAX_SCALE) {
                     // As each word was set before lines took one scale: its space reaching the next word
                     set(glyphs, out, words.get(i), measures[i], measures[i].start(), alone, true);
@@ -290,6 +288,10 @@ final class OcrWords {
         for (int i = from; i < to; i++) {
             x = set(glyphs, out, words.get(i), measures[i], x, scale, i + 1 == to);
         }
+    }
+
+    private static float whole(float scale) {
+        return (float) Math.floor(scale * 100f) / 100f;
     }
 
     private static float median(float[] values) {

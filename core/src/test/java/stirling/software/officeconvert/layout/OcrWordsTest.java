@@ -48,7 +48,7 @@ class OcrWordsTest {
         float space = SubstituteMetrics.width(" ", "Arial", false, false, SIZE);
         float safety = SubstituteMetrics.width("safety", "Arial", false, false, SIZE);
         float scale = out.get(0).hscale;
-        assertEquals((secondEnd - 72) / (our + space + safety), scale, 1e-4,
+        assertEquals(Math.floor((secondEnd - 72) / (our + space + safety) * 100) / 100, scale, 1e-4,
                 "Our and safety take the scale that takes them from Our's start to safety's end");
         assertEquals(scale, out.get(4).hscale, 1e-6, "one scale for the line's words");
         assertEquals(72f, out.get(0).x, 1e-3);
@@ -59,7 +59,7 @@ class OcrWordsTest {
                 "the line ends where its last box does");
         // "record" is past a wide gap: a line of its own, at its own box
         float recordWidth = SubstituteMetrics.width("record", "Arial", false, false, SIZE);
-        assertEquals((thirdEnd - third) / recordWidth, out.get(11).hscale, 1e-4);
+        assertEquals(Math.floor((thirdEnd - third) / recordWidth * 100) / 100, out.get(11).hscale, 1e-4);
         assertEquals(third, out.get(11).x, 1e-3);
     }
 
@@ -233,7 +233,7 @@ class OcrWordsTest {
             glyphs.add(g);
         }
         List<Glyph> out = OcrWords.fit(glyphs);
-        assertEquals(reach / (em * SIZE), out.get(0).hscale, 1e-4, "the stretch Tamil's widths need");
+        assertEquals(Math.floor(reach / (em * SIZE) * 100) / 100, out.get(0).hscale, 1e-4, "the stretch Tamil's widths need");
         assertEquals(72f + reach, out.getLast().right(), 0.02f * reach, "the word still ends where its box does");
     }
 
@@ -253,7 +253,7 @@ class OcrWordsTest {
             glyphs.add(g);
         }
         List<Glyph> out = OcrWords.fit(glyphs);
-        assertEquals(reach / (whole * SIZE), out.get(0).hscale, 1e-4, "the conjunct's stretch");
+        assertEquals(Math.floor(reach / (whole * SIZE) * 100) / 100, out.get(0).hscale, 1e-4, "the conjunct's stretch");
     }
 
     @Test
