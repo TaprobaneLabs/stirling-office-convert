@@ -52,7 +52,8 @@ final class ScanRegions {
         for (int[] c : parts) {
             int area = (c[2] - c[0] + 1) * (c[3] - c[1] + 1);
             Box b = box(c, scan, cols, rows, pageW, pageH);
-            if (c[4] >= 0.35f * area && b.area() >= 0.012f * pageW * pageH && b.width() >= 20 && b.height() >= 14) {
+            if (c[4] >= 0.35f * area && b.area() >= 0.012f * pageW * pageH && b.width() >= 20 && b.height() >= 14
+                    && !textGround(b, ocrLines)) {
                 out.add(b);
             }
         }
@@ -61,7 +62,7 @@ final class ScanRegions {
             Box b = box(c, scan, cols, rows, pageW, pageH);
             if (c[4] < SPARSE * area || b.area() < 0.012f * pageW * pageH || inside(c, ink) < BARE * c[4]
                     || wordsIn(b, ocrLines) > FEW_WORDS || b.width() > MAX_ASPECT * b.height()
-                    || b.height() > MAX_ASPECT * b.width()) {
+                    || b.height() > MAX_ASPECT * b.width() || textGround(b, ocrLines)) {
                 continue;
             }
             out.removeIf(o -> o.x() >= b.x() - 1 && o.right() <= b.right() + 1 && o.top() >= b.top() - 1
@@ -88,6 +89,36 @@ final class ScanRegions {
         float bottom = scan.top() + boxH * (c[3] + 1) / rows;
         return new Box(Math.max(0, x), Math.max(0, top), Math.min(pageW, right), Math.min(pageH, bottom));
     }
+
+    /**
+     * Whether a region of ink is the ground of a panel of text, not a picture: at least GROUND_LINES lines of OCR text with
+     * words it would take, most of them standing one under another at a paragraph's pitch (FigureFinder.stackedShare()),
+     * covering at least GROUND_COVER of it. A grey panel's ink around its words read as a picture, and the picture took
+     * the words inside it: a phone photo of CDC's HPV fact sheet lost the last address of its grey sidebar ("P.O. Box
+     * 13827", "1-800-783-9877") into a picture of the panel. A chart's legend stacks too, but covers little of the chart,
+     * and a photo's text is a caption or a few words.
+     */
+    static boolean textGround(Box region, List<Line> lines) {
+        List<Line> taken = new ArrayList<>();
+        float covered = 0;
+        for (Line l : lines) {
+            for (Word w : l.words) {
+                if (region.contains(Regions.wordX(w), Regions.wordY(l))) {
+                    taken.add(l);
+                    covered += region.overlapArea(new Box(l.x, l.top, l.right, l.bottom));
+                    break;
+                }
+            }
+        }
+        return taken.size() >= GROUND_LINES && covered >= GROUND_COVER * region.area()
+                && FigureFinder.stackedShare(taken) >= GROUND_STACKED;
+    }
+
+    static final int GROUND_LINES = 3;
+
+    static final float GROUND_STACKED = 0.5f;
+
+    static final float GROUND_COVER = 0.2f;
 
     private static int inside(int[] c, boolean[][] ink) {
         int n = 0;

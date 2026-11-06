@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import stirling.software.officeconvert.extract.Glyph;
@@ -542,7 +544,7 @@ final class TableShaper {
             }
             i = j;
         }
-        if (shared.size() < 2 || !startsEveryLine(firstColumn, shared)) {
+        if (shared.size() < 2 || !startsEveryLine(firstColumn, shared) || runsOn(t, r, cellWords, shared)) {
             return null;
         }
         float[] bounds = new float[shared.size() - 1];
@@ -552,6 +554,73 @@ final class TableShaper {
             bounds[k] = (bottomOfUpper + topOfLower) / 2f;
         }
         return bounds;
+    }
+
+    /** Words that leave a line open: the next line carries on the phrase. */
+    private static final Set<String> OPEN_WORDS = Set.of(
+            "and", "or", "of", "the", "to", "for", "in", "on", "with", "a", "an", "by", "at", "from", "per");
+
+    /**
+     * Whether a band's cells run on across most of the lines it would be cut at: its lines are one row's wrapped text,
+     * not rows stacked in it. Form 8822's mailing table rules off each group of states with its service centre's
+     * address, and both columns are set on one grid of baselines, so every line of a group shares its baseline with the
+     * other column and the group was cut into a row per line ("Alabama, Arkansas," over "Delaware, Georgia,
+     * Illinois,"). A cut runs on when a cell's line above it ends open (a comma, a hyphen, a word such as "of" or "or")
+     * or its line below starts in lower case. Stacked rows start each line afresh: a statement's "Purchases" and "Fees
+     * Charged", each with its amount.
+     */
+    private static boolean runsOn(TableDetection.Found t, int r, List<List<Word>> cellWords, List<Float> shared) {
+        int cuts = shared.size() - 1;
+        int running = 0;
+        for (int k = 1; k < shared.size(); k++) {
+            float cut = shared.get(k);
+            for (int i = 0; i < t.cells().size(); i++) {
+                FoundCell c = t.cells().get(i);
+                if (c.row() != r || c.rowSpan() != 1 || cellWords.get(i).isEmpty()) {
+                    continue;
+                }
+                List<Word> below = lineAt(cellWords.get(i), cut);
+                List<Word> above = lineBefore(cellWords.get(i), cut);
+                if (!below.isEmpty() && !above.isEmpty() && carriesOn(above.getLast().text, below.getFirst().text)) {
+                    running++;
+                    break;
+                }
+            }
+        }
+        return running * 2 > cuts;
+    }
+
+    private static boolean carriesOn(String above, String below) {
+        if (above.isEmpty() || below.isEmpty()) {
+            return false;
+        }
+        char end = above.charAt(above.length() - 1);
+        return Character.isLowerCase(below.charAt(0)) || end == ',' || end == '-' || end == '/' || end == '('
+                || end == '&' || OPEN_WORDS.contains(above.toLowerCase(Locale.ROOT));
+    }
+
+    /** A cell's words on the line at {@code baseline}, left to right. */
+    private static List<Word> lineAt(List<Word> words, float baseline) {
+        List<Word> line = new ArrayList<>();
+        for (Word w : words) {
+            if (Math.abs(w.first().baseline - baseline) <= 1.5f) {
+                line.add(w);
+            }
+        }
+        line.sort(Comparator.comparingDouble(w -> w.x));
+        return line;
+    }
+
+    /** A cell's last line above {@code baseline}. */
+    private static List<Word> lineBefore(List<Word> words, float baseline) {
+        float best = -Float.MAX_VALUE;
+        for (Word w : words) {
+            float b = w.first().baseline;
+            if (b < baseline - 1.5f && b > best) {
+                best = b;
+            }
+        }
+        return best == -Float.MAX_VALUE ? List.of() : lineAt(words, best);
     }
 
     private static boolean startsEveryLine(float[] firstColumn, List<Float> shared) {
