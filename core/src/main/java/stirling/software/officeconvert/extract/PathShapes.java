@@ -17,6 +17,10 @@ final class PathShapes {
 
     private static final float AXIS_TOLERANCE = 1f;
 
+    /** A long stroked line may be off level (or upright) by this share of its length and still be a rule: 0.5% is
+     *  about 0.3 degrees, as when a line is drawn from one end's baseline to the other's. */
+    private static final float NEAR_LEVEL = 0.005f;
+
     private static final long MAX_CUT_WORK = 20_000_000L;
 
     private static final float HOLES = 0.1f;
@@ -72,9 +76,9 @@ final class PathShapes {
                     Point2D.Float b = path.get(i);
                     float dx = Math.abs(a.x - b.x);
                     float dy = Math.abs(a.y - b.y);
-                    if (dy <= AXIS_TOLERANCE && dx >= RULE_MIN_LENGTH) {
+                    if (dy <= offAxis(dx) && dx >= RULE_MIN_LENGTH) {
                         pathRules.add(new Rule(true, (a.y + b.y) / 2f, Math.min(a.x, b.x), Math.max(a.x, b.x), paint.thickness(), paint.strokeRgb()));
-                    } else if (dx <= AXIS_TOLERANCE && dy >= RULE_MIN_LENGTH) {
+                    } else if (dx <= offAxis(dy) && dy >= RULE_MIN_LENGTH) {
                         pathRules.add(new Rule(false, (a.x + b.x) / 2f, Math.min(a.y, b.y), Math.max(a.y, b.y), paint.thickness(), paint.strokeRgb()));
                     } else if (dx > AXIS_TOLERANCE && dy > AXIS_TOLERANCE) {
                         allRuled = false;
@@ -429,6 +433,11 @@ final class PathShapes {
 
     private static boolean isCurve(Point2D.Float p) {
         return Float.isNaN(p.x);
+    }
+
+    /** How far a stroked segment of this length may run off its axis and still be a rule. */
+    static float offAxis(float length) {
+        return Math.max(AXIS_TOLERANCE, NEAR_LEVEL * length);
     }
 
     private static boolean isBox(List<Point2D.Float> path) {
