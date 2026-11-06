@@ -191,8 +191,10 @@ class OcrLineBreaksTest {
         return lines;
     }
 
-    /** A paragraph of the document, its text, and each character's width in Word. */
-    /** {@code scaled}: each character's width at its run's size and scale, before its character spacing. */
+    /**
+     * A paragraph of the document, its text, each character's width in Word ({@code widths}), the same before its run's
+     * character spacing ({@code scaled}), and its run's size, scale and spacing ({@code styles}).
+     */
     private record Chars(String paragraph, StringBuilder text, List<Float> widths, List<Float> scaled, List<String> styles) {}
 
     /**
