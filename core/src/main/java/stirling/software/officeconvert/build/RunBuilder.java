@@ -253,7 +253,7 @@ final class RunBuilder {
         acc[0] += end - w.x;
         acc[1] += em * wordSize(first);
         acc[2] += text.length();
-        acc[8] += em * first.size;
+        acc[8] += em * (halfPointScaled(first) ? wordSize(first) : first.size);
         acc[9] = ScriptWidths.clustered(script) ? 1 : 0;
     }
 
@@ -324,7 +324,7 @@ final class RunBuilder {
             acc[0] += pdf;
             acc[1] += exact * wordSize(first) / first.size;
             acc[2] += chars;
-            acc[8] += exact;
+            acc[8] += halfPointScaled(first) ? exact * wordSize(first) / first.size : exact;
         }
     }
 
@@ -368,7 +368,7 @@ final class RunBuilder {
                         acc[0] += !Float.isNaN(l.drawnSpace) ? l.drawnSpace : !Float.isNaN(positioned) ? positioned : last.spaceWidth;
                         acc[1] += em * wordSize(last);
                         acc[2] += 1;
-                        acc[8] += em * last.size;
+                        acc[8] += em * (halfPointScaled(last) ? wordSize(last) : last.size);
                         acc[9] = 1;
                     }
                 } else if (spaced && last.vertAlign == 0 && !unmeasured(last)) {
@@ -381,7 +381,7 @@ final class RunBuilder {
                         acc[0] += natural;
                         acc[1] += exact * wordSize(last) / last.size;
                         acc[2] += 1;
-                        acc[8] += exact;
+                        acc[8] += halfPointScaled(last) ? exact * wordSize(last) / last.size : exact;
                     }
                 }
                 for (int gi = 0; gi < w.glyphs.size(); gi++) {
@@ -400,8 +400,9 @@ final class RunBuilder {
                     acc[12] += g.tracking * g.tracking * g.text.length();
                     acc[13] += g.tracking / g.size * g.text.length();
                     acc[14] += (float) g.text.chars().filter(Character::isLowerCase).count();
-                    acc[8] += exact;
-                    acc[7] = Math.max(acc[7], Math.abs(wordSize(g) - g.size) / g.size);
+                    // Text whose scale gives back Word's half point is at its width there already
+                    acc[8] += halfPointScaled(g) ? word : exact;
+                    acc[7] = Math.max(acc[7], halfPointScaled(g) ? 0f : Math.abs(wordSize(g) - g.size) / g.size);
                     acc[0] += g.width;
                     acc[1] += word;
                     acc[2] += g.text.length();
@@ -1298,16 +1299,15 @@ final class RunBuilder {
      * in invisible text: an OCR word's scale takes it to where the next word starts (OcrWords), and Word's lines would
      * otherwise end up to 3% from the scan's.
      *
-     * <p>Invisible text in a stand-in face (an OCR layer's) also gives back what Word's half-point size takes from its
-     * width or adds, rounded down so a line never runs past the scan's. The width fix's spacing ({@link #widthFixes})
-     * moves in twentieths of a point a character, 1.4% of a line at 5 points, and an OCR tool sizes each line from its
-     * own box: on IRS Form 8822's scan, lines set at 5.04 points came out at 5, 1.2% short of their neighbours that
-     * rounded up from 4.8 and were condensed back, so no edge kept the Privacy Act notice's first line and Word took the
-     * next line's first word onto it. A face Word has keeps its scale: its fix is measured against Word's own widths at
-     * the PDF's size.
+     * <p>Invisible text (an OCR layer's) also gives back what Word's half-point size takes from its width or adds,
+     * rounded down so a line never runs past the scan's ({@link #halfPointScaled}). The width fix's spacing
+     * ({@link #widthFixes}) moves in twentieths of a point a character, 1.4% of a line at 5 points, and an OCR tool sizes
+     * each line from its own box: on IRS Form 8822's scan, lines set at 5.04 points came out at 5, 1.2% short of their
+     * neighbours that rounded up from 4.8 and were condensed back, so no edge kept the Privacy Act notice's first line and
+     * Word took the next line's first word onto it.
      */
     static int scaleOf(Glyph g) {
-        if (g.invisible && g.vertAlign == 0 && g.font.substituted()) {
+        if (halfPointScaled(g)) {
             // A hair over before rounding down, so a whole percent stays itself through the float arithmetic
             return Math.clamp((int) Math.floor(g.hscale * g.size / wordSize(g) * 100f + SCALE_HAIR), 1, 600);
         }
@@ -1316,6 +1316,15 @@ final class RunBuilder {
     }
 
     private static final float SCALE_HAIR = 1e-3f;
+
+    /**
+     * Whether a glyph's scale gives back what Word's half-point size takes or adds (scaleOf()): invisible text set at its
+     * own size, not a superscript's or subscript's host size. The width fix then measures it at Word's size, where its
+     * width is already the PDF's, so it adds no spacing for the rounding.
+     */
+    static boolean halfPointScaled(Glyph g) {
+        return g.invisible && g.vertAlign == 0;
+    }
 
     static boolean isPrivateUse(String s) {
         for (int i = 0; i < s.length(); i++) {

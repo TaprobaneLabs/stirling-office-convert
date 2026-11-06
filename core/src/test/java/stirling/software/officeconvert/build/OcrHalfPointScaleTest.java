@@ -59,11 +59,16 @@ class OcrHalfPointScaleTest {
     }
 
     @Test
-    void visibleTextScriptsAndFacesWordHasKeepTheirScale() {
+    void invisibleTextInAFaceWordHasGivesItBackToo() {
+        // OCRmyPDF's NotoSans is set in Arial, which Word has: the fork takes it for that face
+        assertEquals(146, RunBuilder.scaleOf(glyph(EXACT, 5.04f, 1.45f, true)));
+    }
+
+    @Test
+    void visibleTextAndScriptsKeepTheirScale() {
         assertEquals(145, RunBuilder.scaleOf(glyph(OCR, 5.04f, 1.45f, false)));
         assertEquals(100, RunBuilder.scaleOf(glyph(OCR, 5.04f, 1.01f, false)));
-        // A face Word has: its fix measures it against Word's own widths at the PDF's size
-        assertEquals(145, RunBuilder.scaleOf(glyph(EXACT, 5.04f, 1.45f, true)));
+        assertEquals(145, RunBuilder.scaleOf(glyph(EXACT, 5.04f, 1.45f, false)));
         // A superscript is set at its host's size, not its own
         Glyph script = glyph(OCR, 5.04f, 1.45f, true);
         script.vertAlign = 1;
