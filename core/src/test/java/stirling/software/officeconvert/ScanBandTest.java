@@ -93,26 +93,29 @@ class ScanBandTest {
      */
     @Test
     void aFramesLineDoesNotStretchABannersPicture() throws Exception {
-        String title = "Banner Title of a Scanned Fact Sheet";
-        List<Words> words = bodyText();
-        words.add(new Words(title, 82, 84, 11));
-        words.add(new Words("What is it?", 300, 122, 11));
-        String slide = slide(scan(g -> {
-            g.setColor(new Color(90, 90, 88));
-            g.fillRoundRect(px(72), px(60), px(328), px(38), px(12), px(12));
-            g.fillRect(px(396), px(96), px(3), px(40));
-            g.setColor(WHITE_INK);
-            g.setFont(new Font(Font.SERIF, Font.PLAIN, 23));
-            g.drawString(title, px(82), px(84));
-            g.setColor(new Color(40, 40, 40));
-            g.drawString("What is it?", px(300), px(122));
-        }, words));
-        assertTrue(slide.contains("What is it?"), "the heading beside the frame's line stays text: " + slide);
-        List<float[]> pictures = pictures(slide);
-        assertEquals(1, pictures.size(), "the banner: " + slide);
-        float foot = pictures.getFirst()[2] + pictures.getFirst()[3];
-        assertTrue(foot <= 104, "down to the banner's foot, not the line's: " + foot);
-        assertFalse(slide.contains("Banner Title"), "the banner's words are in its picture");
+        // With a short title and no body text, the banner, the line and the heading hold few enough words, and the page
+        // few enough parts, for the second pass to take them as one cluster
+        for (String title : new String[] {"Banner Title of a Scanned Fact Sheet", "Banner Sheet"}) {
+            List<Words> words = title.length() > 12 ? bodyText() : new ArrayList<>();
+            words.add(new Words(title, 82, 84, 11));
+            words.add(new Words("What is it?", 300, 122, 11));
+            String slide = slide(scan(g -> {
+                g.setColor(new Color(90, 90, 88));
+                g.fillRoundRect(px(72), px(60), px(328), px(38), px(12), px(12));
+                g.fillRect(px(396), px(96), px(3), px(40));
+                g.setColor(WHITE_INK);
+                g.setFont(new Font(Font.SERIF, Font.PLAIN, 23));
+                g.drawString(title, px(82), px(84));
+                g.setColor(new Color(40, 40, 40));
+                g.drawString("What is it?", px(300), px(122));
+            }, words));
+            assertTrue(slide.contains("What is it?"), title + ": the heading beside the frame's line stays text: " + slide);
+            List<float[]> pictures = pictures(slide);
+            assertEquals(1, pictures.size(), title + ": the banner: " + slide);
+            float foot = pictures.getFirst()[2] + pictures.getFirst()[3];
+            assertTrue(foot <= 104, title + ": down to the banner's foot, not the line's: " + foot);
+            assertFalse(slide.contains("Banner"), title + ": the banner's words are in its picture");
+        }
     }
 
     /** Black type on white paper is still masked, however heavy: a heading stays text, with no picture of it. */
@@ -238,8 +241,8 @@ class ScanBandTest {
     }
 
     /**
-     * A copier scan: the body text drawn on near-white paper, then whatever {@code draw} adds, under an OCR layer of
-     * invisible text holding every one of {@code words}.
+     * A copier scan: the body text drawn on near-white paper when {@code words} hold it, then whatever {@code draw} adds,
+     * under an OCR layer of invisible text holding every one of {@code words}.
      */
     private Path scan(Consumer<Graphics2D> draw, List<Words> words) throws IOException {
         BufferedImage img = new BufferedImage(px(612), px(792), BufferedImage.TYPE_INT_RGB);
@@ -249,8 +252,10 @@ class ScanBandTest {
         g.fillRect(0, 0, img.getWidth(), img.getHeight());
         g.setColor(new Color(40, 40, 40));
         g.setFont(new Font(Font.SERIF, Font.PLAIN, 22));
-        for (Words w : bodyText()) {
-            g.drawString(w.text(), px(w.x()), px(w.baseline()));
+        if (words.containsAll(bodyText())) {
+            for (Words w : bodyText()) {
+                g.drawString(w.text(), px(w.x()), px(w.baseline()));
+            }
         }
         draw.accept(g);
         g.dispose();

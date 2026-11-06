@@ -51,6 +51,7 @@ final class ScanRegions {
             parts = components(ink, labels);
         }
         List<Box> out = new ArrayList<>();
+        List<Box> trimmedBands = new ArrayList<>();
         for (int i = 0; i < parts.size(); i++) {
             int[] c = holds(parts.get(i), grounded) ? trimmed(parts.get(i), labels, i + 1) : parts.get(i);
             int area = (c[2] - c[0] + 1) * (c[3] - c[1] + 1);
@@ -58,6 +59,9 @@ final class ScanRegions {
             if (c[4] >= 0.35f * area && b.area() >= 0.012f * pageW * pageH && b.width() >= 20 && b.height() >= 14
                     && !textGround(b, ocrLines)) {
                 out.add(b);
+                if (c != parts.get(i)) {
+                    trimmedBands.add(b);
+                }
             }
         }
         for (int[] c : clusters(components(whole), CLUSTER_GAP)) {
@@ -65,14 +69,20 @@ final class ScanRegions {
             Box b = box(c, scan, cols, rows, pageW, pageH);
             if (c[4] < SPARSE * area || b.area() < 0.012f * pageW * pageH || inside(c, ink) < BARE * c[4]
                     || wordsIn(b, ocrLines) > FEW_WORDS || b.width() > MAX_ASPECT * b.height()
-                    || b.height() > MAX_ASPECT * b.width() || textGround(b, ocrLines)) {
+                    || b.height() > MAX_ASPECT * b.width() || textGround(b, ocrLines)
+                    || trimmedBands.stream().anyMatch(t -> holds(b, t))) {
+                // A cluster holding a band trimmed of its tails would put the tails back, with what they reach
                 continue;
             }
-            out.removeIf(o -> o.x() >= b.x() - 1 && o.right() <= b.right() + 1 && o.top() >= b.top() - 1
-                    && o.bottom() <= b.bottom() + 1);
+            out.removeIf(o -> holds(b, o));
             out.add(b);
         }
         return out;
+    }
+
+    private static boolean holds(Box b, Box o) {
+        return o.x() >= b.x() - 1 && o.right() <= b.right() + 1 && o.top() >= b.top() - 1
+                && o.bottom() <= b.bottom() + 1;
     }
 
     private static final int CLUSTER_GAP = 3;
