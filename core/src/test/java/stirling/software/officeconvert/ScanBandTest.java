@@ -132,7 +132,7 @@ class ScanBandTest {
      */
     @Test
     void aTablesDarkHeaderRowIsNoPicture() throws Exception {
-        String slide = tableSlide(true);
+        String slide = tableSlide(3);
         assertTrue(slide.contains("<a:tbl>"), slide);
         String table = slide.substring(slide.indexOf("<a:tbl>"), slide.indexOf("</a:tbl>"));
         assertTrue(table.contains("Description"), table);
@@ -140,19 +140,24 @@ class ScanBandTest {
         assertEquals(List.of(), pictures(slide), "the header row's shading isn't a picture beside its words: " + slide);
     }
 
-    /** The same header row with headings the OCR missed, as it can white words on a halftone: the picture shows them. */
+    /**
+     * The same header row with headings the OCR missed, as it can white words on a halftone, all of them or all but
+     * one: the picture is the one place they show, so it stays.
+     */
     @Test
     void aHeaderRowTheOcrMissedStaysAPicture() throws Exception {
-        String slide = tableSlide(false);
-        assertTrue(slide.contains("<a:tbl>"), slide);
-        assertTrue(slide.contains("Service item 3"), slide);
-        List<float[]> pictures = pictures(slide);
-        assertEquals(1, pictures.size(), "the header row, the one place its headings show: " + slide);
-        assertTrue(pictures.getFirst()[1] > 300, "across the row: " + pictures.getFirst()[1]);
+        for (int read : new int[] {0, 1}) {
+            String slide = tableSlide(read);
+            assertTrue(slide.contains("<a:tbl>"), slide);
+            assertTrue(slide.contains("Service item 3"), slide);
+            List<float[]> pictures = pictures(slide);
+            assertEquals(1, pictures.size(), read + " read; the header row, the one place its headings show: " + slide);
+            assertTrue(pictures.getFirst()[1] > 300, "across the row: " + pictures.getFirst()[1]);
+        }
     }
 
-    /** A scanned table with a dark header row of white headings, in its OCR layer when {@code headsRead}. */
-    private String tableSlide(boolean headsRead) throws Exception {
+    /** A scanned table with a dark header row of white headings, the first {@code headsRead} of them in its OCR layer. */
+    private String tableSlide(int headsRead) throws Exception {
         float left = 72;
         float top = 480;
         float[] cols = {0, 60, 300, 400};
@@ -169,7 +174,8 @@ class ScanBandTest {
             }
         }
         List<Words> words = bodyText();
-        words.addAll(headsRead ? cells : cells.subList(3, cells.size()));
+        words.addAll(cells.subList(0, headsRead));
+        words.addAll(cells.subList(3, cells.size()));
         return slide(scan(g -> {
             g.setColor(new Color(70, 70, 68));
             g.fillRect(px(left), px(top), px(cols[3]), px(row));

@@ -219,7 +219,7 @@ public final class PageAnalyzer {
             ImageDraw scan = fullPageImage(page, gfx.images());
             if (scan != null) {
                 for (Box f : ScanRegions.find(scan, segments, page.width(), page.height())) {
-                    if (!repeatsTableWords(f, tableBoxes, segments)) {
+                    if (!repeatsTableWords(f, tables, tableBoxes, segments)) {
                         figures.add(f);
                     }
                 }
@@ -427,17 +427,38 @@ public final class PageAnalyzer {
     }
 
     /**
-     * A part of a scan mostly inside a table, wider than a picture in one cell, over words of the scan's text: a shaded
-     * row (a header band), whose words the table sets, so that as a picture too its white lettering would show beside
-     * them. A band whose words the OCR missed stays a picture: it is all that shows them.
+     * A part of a scan mostly inside a table, wider than a picture in one cell, over whole cells that each hold words of
+     * the scan's text: a shaded row (a header band) whose words the table sets, so that as a picture too its white
+     * lettering would show beside them. A row with a cell whose words the OCR missed stays a picture, the one place they
+     * show, even though the words it did read then show twice.
      */
-    private static boolean repeatsTableWords(Box f, List<Box> tableBoxes, List<Line> segments) {
+    private static boolean repeatsTableWords(Box f, List<TableDetection.Found> tables, List<Box> tableBoxes,
+            List<Line> segments) {
         if (tableBoxes.stream().noneMatch(t -> f.overlapArea(t) >= 0.5f * f.area()) || cellArt(f, tableBoxes)) {
             return false;
         }
+        boolean covers = false;
+        for (TableDetection.Found t : tables) {
+            for (TableDetection.FoundCell c : t.cells()) {
+                Box cell = new Box(c.left(), c.top(), c.right(), c.bottom());
+                if (f.overlapArea(cell) < 0.5f * cell.area()) {
+                    continue;
+                }
+                covers = true;
+                Box under = new Box(Math.max(f.x(), cell.x()), Math.max(f.top(), cell.top()),
+                        Math.min(f.right(), cell.right()), Math.min(f.bottom(), cell.bottom()));
+                if (!holdsWord(under, segments)) {
+                    return false;
+                }
+            }
+        }
+        return covers;
+    }
+
+    private static boolean holdsWord(Box b, List<Line> segments) {
         for (Line l : segments) {
             for (Word w : l.words) {
-                if (Regions.insideAny(Regions.wordX(w), Regions.wordY(l), List.of(f), 0.5f)) {
+                if (b.contains(Regions.wordX(w), Regions.wordY(l))) {
                     return true;
                 }
             }
