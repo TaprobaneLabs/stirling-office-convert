@@ -98,8 +98,9 @@ class OcrLineBreaksTest {
         float least = Float.MAX_VALUE;
         float most = 0;
         int at = 0;
-        for (List<String> line : lines) {
-            String text = String.join(" ", line);
+        StringBuilder detail = new StringBuilder();
+        for (int li = 0; li < lines.size(); li++) {
+            String text = String.join(" ", lines.get(li));
             at = word.text().indexOf(text, at);
             assertTrue(at >= 0, "the line's text in the paragraph: " + text);
             float inWord = 0;
@@ -109,10 +110,14 @@ class OcrLineBreaksTest {
             float layer = TYPE.getStringWidth(text) / 1000 * size - 2 * BEARING * size;
             least = Math.min(least, inWord / layer);
             most = Math.max(most, inWord / layer);
+            detail.append(String.format(java.util.Locale.ROOT, "%n  %.2f pt %s: %.4f  %s", ocr[li],
+                    new java.util.TreeSet<>(word.styles().subList(at, at + text.length())), inWord / layer,
+                    text.length() > 30 ? text.substring(0, 30) : text));
             at += text.length();
         }
-        assertTrue(most - least <= 0.01f, "the lines' widths within a percent of each other: " + least + " to " + most);
-        assertTrue(most <= 1.001f, "none longer than the scan's: " + most);
+        assertTrue(most - least <= 0.01f, "the lines' widths within a percent of each other: " + least + " to " + most
+                + detail);
+        assertTrue(most <= 1.001f, "none longer than the scan's: " + most + detail);
     }
 
     private String convert(List<List<String>> lines) throws Exception {
@@ -186,7 +191,7 @@ class OcrLineBreaksTest {
     }
 
     /** A paragraph of the document, its text, and each character's width in Word. */
-    private record Chars(String paragraph, StringBuilder text, List<Float> widths) {}
+    private record Chars(String paragraph, StringBuilder text, List<Float> widths, List<String> styles) {}
 
     /**
      * The paragraph holding {@code marker}, each character as wide as Arial makes it at its run's size (half points, else
@@ -201,6 +206,7 @@ class OcrLineBreaksTest {
         String p = para.group();
         StringBuilder chars = new StringBuilder();
         List<Float> widths = new ArrayList<>();
+        List<String> styles = new ArrayList<>();
         Matcher run = Pattern.compile("<w:r>(?:<w:rPr>(.*?)</w:rPr>)?((?:<w:t[^>]*>[^<]*</w:t>)+)</w:r>").matcher(p);
         while (run.find()) {
             String rPr = run.group(1) == null ? "" : run.group(1);
@@ -215,10 +221,11 @@ class OcrLineBreaksTest {
                 for (char c : t.group(1).toCharArray()) {
                     chars.append(c);
                     widths.add(ARIAL.getStringWidth(String.valueOf(c)) / 1000 * size * scale + extra);
+                    styles.add(size + "pt w" + Math.round(scale * 100) + (extra != 0 ? " sp" + extra : ""));
                 }
             }
         }
-        return new Chars(p, chars, widths);
+        return new Chars(p, chars, widths, styles);
     }
 
     /** The paragraph broken again as Word breaks it: greedily at spaces, each character as wide as Word sets it. */
