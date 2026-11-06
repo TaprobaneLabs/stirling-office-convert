@@ -865,7 +865,8 @@ public final class DocumentBuilder {
                 if (!under.isEmpty()) {
                     // shapesUnder() finds shapes only above a paragraph that comes next
                     float nextTop = paragraphs.wordTop(((PageLayout.ParaItem) next).para());
-                    bottom = underRow(under, bottom, filledFrom(col, bottom), overlap(offset, slot.ref()), nextTop);
+                    bottom = underRow(under, bottom, filledFrom(col, bottom), overlap(offset, slot.ref()), nextTop,
+                            col.right() - col.left());
                 }
             }
         } else {
@@ -1325,6 +1326,9 @@ public final class DocumentBuilder {
     /** The least room kept between a paragraph and the shapes riding a line under it. */
     private static final float RIDE_GAP = 2f;
 
+    /** The share of its column a line's shapes span to give back room as a dividing rule does (see underRow). */
+    private static final float DIVIDER = 0.5f;
+
     private List<Inline.Shape> shapesUnder(ParaDraft d, float bottom, PageLayout.Item next) {
         return next instanceof PageLayout.ParaItem np ? floats.takeUnder(d, bottom, paragraphs.wordTop(np.para())) : List.of();
     }
@@ -1339,19 +1343,25 @@ public final class DocumentBuilder {
      * Word set taller) has used that much of the room under it. When the line would then push the next paragraph past its
      * place, at {@code nextTop}, it gives back as much of that room as the push, down to {@link #RIDE_GAP} above its
      * shapes: they still follow the paragraph, and what comes after keeps its place. DOE OIG's budget rule, under rows Word
-     * sets 22 pt lower, took its 13 pt from the PDF on top of them and pushed the next heading 10 pt onto its own rule. A
-     * line that pushes nothing keeps its height: given back there, a Federal Register page's third column rose over the
-     * header's rule.
+     * sets 22 pt lower, took its 13 pt from the PDF on top of them and pushed the next heading 10 pt onto its own rule.
+     * Only shapes spanning at least {@link #DIVIDER} of the column do, as a rule dividing the column does: a short rule over
+     * a column's notes keeps its line's height. Given back there (Federal Register 2025-05239, the 50 pt rule over the
+     * second column's notes), the room went to the column's spacing above, and Word set the third column over the page's
+     * header rule.
      */
-    private float underRow(List<Inline.Shape> shapes, float top, float filled, float lower, float nextTop)
-            throws IOException {
+    private float underRow(List<Inline.Shape> shapes, float top, float filled, float lower, float nextTop,
+            float columnWidth) throws IOException {
         float bottom = top;
         float shapesTop = Float.MAX_VALUE;
+        float left = Float.MAX_VALUE;
+        float right = -Float.MAX_VALUE;
         for (Inline.Shape s : shapes) {
             bottom = Math.max(bottom, s.y() + s.height());
             shapesTop = Math.min(shapesTop, s.y());
+            left = Math.min(left, s.x());
+            right = Math.max(right, s.x() + s.width());
         }
-        float pushed = bottom + lower - nextTop;
+        float pushed = right - left >= DIVIDER * columnWidth ? bottom + lower - nextTop : 0f;
         float lift = Math.max(0f, Math.min(Math.min(lower, pushed), shapesTop - top - RIDE_GAP));
         bottom -= lift;
         if (filled - 1f < bottom) {
