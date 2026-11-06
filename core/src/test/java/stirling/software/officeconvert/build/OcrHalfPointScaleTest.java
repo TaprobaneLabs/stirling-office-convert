@@ -36,8 +36,9 @@ class OcrHalfPointScaleTest {
         // At 5.04 points Word's 5 makes the line 0.8% narrower; at 4.8, 4.2% wider
         assertEquals(146, RunBuilder.scaleOf(glyph(OCR, 5.04f, 1.45f, true)));
         assertEquals(139, RunBuilder.scaleOf(glyph(OCR, 4.80f, 1.45f, true)));
-        // A size Word sets as it is keeps OcrWords' whole percent
+        // A size Word sets as it is keeps its scale, rounded down
         assertEquals(145, RunBuilder.scaleOf(glyph(OCR, 5.0f, 1.45f, true)));
+        assertEquals(145, RunBuilder.scaleOf(glyph(OCR, 5.0f, 1.4596f, true)));
         assertEquals(143, RunBuilder.scaleOf(glyph(OCR, 5.5f, 1.43f, true)));
     }
 

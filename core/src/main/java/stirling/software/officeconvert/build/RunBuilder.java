@@ -1308,7 +1308,7 @@ final class RunBuilder {
      */
     static int scaleOf(Glyph g) {
         if (g.invisible && g.vertAlign == 0 && g.font.substituted()) {
-            // A hair over before rounding down: OcrWords' scale is already a whole percent
+            // A hair over before rounding down, so a whole percent stays itself through the float arithmetic
             return Math.clamp((int) Math.floor(g.hscale * g.size / wordSize(g) * 100f + SCALE_HAIR), 1, 600);
         }
         int pct = Math.round(g.hscale * 100f);
