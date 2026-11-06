@@ -1297,11 +1297,25 @@ final class RunBuilder {
      * The character scale Word sets a glyph's run at, in whole percent. A scale within 3% of 100 is a PDF's noise, except
      * in invisible text: an OCR word's scale takes it to where the next word starts (OcrWords), and Word's lines would
      * otherwise end up to 3% from the scan's.
+     *
+     * <p>Invisible text in a stand-in face (an OCR layer's) also gives back what Word's half-point size takes from its
+     * width or adds, rounded down so a line never runs past the scan's. The width fix's spacing ({@link #widthFixes})
+     * moves in twentieths of a point a character, 1.4% of a line at 5 points, and an OCR tool sizes each line from its
+     * own box: on IRS Form 8822's scan, lines set at 5.04 points came out at 5, 1.2% short of their neighbours that
+     * rounded up from 4.8 and were condensed back, so no edge kept the Privacy Act notice's first line and Word took the
+     * next line's first word onto it. A face Word has keeps its scale: its fix is measured against Word's own widths at
+     * the PDF's size.
      */
     static int scaleOf(Glyph g) {
+        if (g.invisible && g.vertAlign == 0 && g.font.substituted()) {
+            // A hair over before rounding down: OcrWords' scale is already a whole percent
+            return Math.clamp((int) Math.floor(g.hscale * g.size / wordSize(g) * 100f + SCALE_HAIR), 1, 600);
+        }
         int pct = Math.round(g.hscale * 100f);
         return Math.abs(pct - 100) < 3 && !g.invisible ? 100 : Math.clamp(pct, 1, 600);
     }
+
+    private static final float SCALE_HAIR = 1e-3f;
 
     static boolean isPrivateUse(String s) {
         for (int i = 0; i < s.length(); i++) {
