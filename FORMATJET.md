@@ -124,4 +124,5 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | Next release | On a scan, keep a panel's grey ground from becoming a picture that takes the panel's text: not where stacked lines of OCR text cover a fifth of it or more (#103) | Not offered yet |
 | Next release | Set an OCR line on one baseline, so a tilted line on a photo stays one row instead of coming apart mid-word (#104) | Not offered yet |
 | Next release | Keep a scan's band of white text whole, as one picture holding its words, instead of a picture from the middle of its first line beside the rest set in black (#105) | Not offered yet |
+| Next release | Take a stroked line off level by up to 0.5% of its length as a rule, and let a rule dividing its column under rows Word sets lower give back the room that would push the next paragraph, so a budget table's rule follows its rows without pushing the heading under it (#107) | Not offered yet |
 | Next release | Join a column's segments into rows against the row's mean baseline, not its first segment's, so a tilted line cut into pieces stays one row (#106) | Not offered yet |

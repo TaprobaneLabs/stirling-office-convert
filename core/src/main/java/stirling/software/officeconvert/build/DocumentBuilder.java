@@ -855,14 +855,18 @@ public final class DocumentBuilder {
             if (lastOnPage && Continuation.looksUnfinished(d, stats.bodySize)) {
                 carry = new Carry(d, col.left(), col.right(), spaceBefore, pageBreak, ref, !layout.notes().isEmpty());
             } else {
-                List<Inline.Shape> under = shapesUnder(d, bottom, nextInFlow(col, item));
+                PageLayout.Item next = nextInFlow(col, item);
+                List<Inline.Shape> under = shapesUnder(d, bottom, next);
                 Paragraph p = flowParagraph(d, col.left(), col.right(), spaceBefore, pageBreak);
                 emit(p);
                 float grown = growth(p);
                 columnGrowth += grown;
                 bottom += grown;
                 if (!under.isEmpty()) {
-                    bottom = underRow(under, bottom, filledFrom(col, bottom));
+                    // shapesUnder() finds shapes only above a paragraph that comes next
+                    float nextTop = paragraphs.wordTop(((PageLayout.ParaItem) next).para());
+                    bottom = underRow(under, bottom, filledFrom(col, bottom), overlap(offset, slot.ref()), nextTop,
+                            col.right() - col.left());
                 }
             }
         } else {
@@ -1319,6 +1323,12 @@ public final class DocumentBuilder {
 
     private static final float SHADE_OUT = 1.5f;
 
+    /** The least room kept between a paragraph and the shapes riding a line under it. */
+    private static final float RIDE_GAP = 2f;
+
+    /** The share of its column a line's shapes span to give back room as a dividing rule does (see underRow). */
+    private static final float DIVIDER = 0.5f;
+
     private List<Inline.Shape> shapesUnder(ParaDraft d, float bottom, PageLayout.Item next) {
         return next instanceof PageLayout.ParaItem np ? floats.takeUnder(d, bottom, paragraphs.wordTop(np.para())) : List.of();
     }
@@ -1328,12 +1338,32 @@ public final class DocumentBuilder {
      * row of text boxes leaves the column no room: Word moves a line such boxes leave no room for below them, and the
      * boxes' height came twice. USGS Fact Sheet 2024-3021's contact box, whose drawn outline rides the paragraph above it,
      * went to a page of its own with all after it.
+     * <p>
+     * A paragraph Word already sets {@code lower} than the PDF (its space above couldn't take up the rows above it, which
+     * Word set taller) has used that much of the room under it. When the line would then push the next paragraph past its
+     * place, at {@code nextTop}, it gives back as much of that room as the push, down to {@link #RIDE_GAP} above its
+     * shapes: they still follow the paragraph, and what comes after keeps its place. DOE OIG's budget rule, under rows Word
+     * sets 22 pt lower, took its 13 pt from the PDF on top of them and pushed the next heading 10 pt onto its own rule.
+     * Only shapes spanning at least {@link #DIVIDER} of the column do, as a rule dividing the column does: a short rule over
+     * a column's notes keeps its line's height. Given back there (Federal Register 2025-05239, the 50 pt rule over the
+     * second column's notes), the room went to the column's spacing above, and Word set the third column over the page's
+     * header rule.
      */
-    private float underRow(List<Inline.Shape> shapes, float top, float filled) throws IOException {
+    private float underRow(List<Inline.Shape> shapes, float top, float filled, float lower, float nextTop,
+            float columnWidth) throws IOException {
         float bottom = top;
+        float shapesTop = Float.MAX_VALUE;
+        float left = Float.MAX_VALUE;
+        float right = -Float.MAX_VALUE;
         for (Inline.Shape s : shapes) {
             bottom = Math.max(bottom, s.y() + s.height());
+            shapesTop = Math.min(shapesTop, s.y());
+            left = Math.min(left, s.x());
+            right = Math.max(right, s.x() + s.width());
         }
+        float pushed = right - left >= DIVIDER * columnWidth ? bottom + lower - nextTop : 0f;
+        float lift = Math.max(0f, Math.min(Math.min(lower, pushed), shapesTop - top - RIDE_GAP));
+        bottom -= lift;
         if (filled - 1f < bottom) {
             bottom = Math.max(top, filled - 1f);
         }
@@ -1341,7 +1371,7 @@ public final class DocumentBuilder {
         row.sourceTop = top;
         row.sourceBottom = top + row.lineHeight;
         for (Inline.Shape s : shapes) {
-            row.inlines.add(s.riding(s.y() - top));
+            row.inlines.add(s.riding(s.y() - lift - top));
         }
         emit(row);
         return row.sourceBottom;
