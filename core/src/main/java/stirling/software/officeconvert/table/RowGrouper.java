@@ -66,62 +66,7 @@ final class RowGrouper {
                 bands++;
             }
         }
-        return bands >= 3 && (lines.size() <= bands * 3 || bandsAreRows());
-    }
-
-    /**
-     * Whether every band between the table's rules reads as one row, however many lines it takes: no column of figures
-     * holds a figure on two of its lines, and a column with text on two or more of its lines runs on through it, most of
-     * those lines continuing the one above rather than starting an item of their own. Form 8822's mailing table rules
-     * off each group of states with its service centre's address, six to twelve lines a group; the address breaks after
-     * each part ("Department of the", "Treasury", "Internal Revenue"), so its lines read as rows of their own, and a
-     * scan of the form came out a spreadsheet row per line. Sections of rows under rules keep their rows: their figures,
-     * or the item each line starts, say so.
-     */
-    private boolean bandsAreRows() {
-        int first = 0;
-        for (int i = 1; i <= lines.size(); i++) {
-            if (i == lines.size() || ruledBefore[i]) {
-                if (!oneRow(first, i - 1)) {
-                    return false;
-                }
-                first = i;
-            }
-        }
-        return true;
-    }
-
-    private boolean oneRow(int first, int last) {
-        boolean multiLine = false;
-        boolean runsOn = false;
-        for (int c = 0; c < lines.get(first).columns(); c++) {
-            List<PdfWord> above = null;
-            int figures = 0;
-            int breaks = 0;
-            int continued = 0;
-            for (int li = first; li <= last; li++) {
-                CellLine line = lines.get(li);
-                if (!line.has(c)) {
-                    continue;
-                }
-                if (columns.numeric()[c] && NumericValue.looksNumeric(TextLine.joinWords(line.cell(c)))) {
-                    figures++;
-                }
-                if (above != null) {
-                    breaks++;
-                    continued += startsNewItem(above, line.cell(c)) ? 0 : 1;
-                }
-                above = line.cell(c);
-            }
-            if (figures >= 2) {
-                return false;
-            }
-            if (breaks > 0) {
-                multiLine = true;
-                runsOn |= continued * 2 > breaks;
-            }
-        }
-        return !multiLine || runsOn;
+        return bands >= 3 && lines.size() <= bands * 3;
     }
 
     private List<LineRange> bands() {
