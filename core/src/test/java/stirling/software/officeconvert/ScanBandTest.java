@@ -36,7 +36,7 @@ import org.junit.jupiter.api.io.TempDir;
  * band's height, and a logo's box joined to its end), is one picture from its own left edge holding its words, as a
  * title banner is: before, the masks of its words cut it in two, and it came out as a picture from the middle of its
  * first line, beside the rest of its text set in black on white. A panel of many lines stays text, and so does a
- * table's shaded header row, unless the OCR missed its words.
+ * table's shaded header row; the headings the OCR missed still show in a picture.
  */
 class ScanBandTest {
 
@@ -142,7 +142,7 @@ class ScanBandTest {
 
     /**
      * The same header row with headings the OCR missed, as it can white words on a halftone, all of them or all but
-     * one: the picture is the one place they show, so it stays.
+     * one: the row is still a picture, the one place they show (from after the words it read, which are masked).
      */
     @Test
     void aHeaderRowTheOcrMissedStaysAPicture() throws Exception {

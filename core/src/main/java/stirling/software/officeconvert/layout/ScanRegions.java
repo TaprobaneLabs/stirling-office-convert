@@ -15,7 +15,11 @@ final class ScanRegions {
 
     private ScanRegions() {}
 
-    static List<Box> find(ImageDraw scan, List<Line> ocrLines, float pageW, float pageH) {
+    /**
+     * The pictures in a scan: its ink that no OCR word covers. {@code tables} are the page's tables, whose words they
+     * set, so words on a dark ground inside them are masked as on white.
+     */
+    static List<Box> find(ImageDraw scan, List<Line> ocrLines, List<Box> tables, float pageW, float pageH) {
         if (!plausibleShape(scan) || !ImageBudget.affordable(scan.image())) {
             return List.of();
         }
@@ -39,7 +43,7 @@ final class ScanRegions {
         for (int r = 0; r < rows; r++) {
             ink[r] = whole[r].clone();
         }
-        List<int[]> grounded = maskWords(ink, whole, ocrLines, scan, cols, rows);
+        List<int[]> grounded = maskWords(ink, whole, ocrLines, tables, scan, cols, rows);
         List<int[]> parts = components(ink);
         if (maskPanels(ink, grounded, parts, ocrLines, scan, cols, rows, pageW, pageH)) {
             parts = components(ink);
@@ -203,11 +207,13 @@ final class ScanRegions {
     /**
      * Takes each word's ink out of {@code ink}, so that text never makes a picture of its own, but leaves words on a
      * dark ground alone: masked, two lines of white text that filled a band's height cut it in two, and the band came
-     * out as a picture from the middle of its first line (a CDC fact sheet's footer). Returns the cells of the words
-     * left, each as {first row, end row, first column, end column}.
+     * out as a picture from the middle of its first line (a CDC fact sheet's footer). Words in a table are masked all
+     * the same: the table sets them, and a shaded header row kept whole would show its lettering beside them, while
+     * masked it still leaves a picture of the headings the OCR missed. Returns the cells of the words left, each as
+     * {first row, end row, first column, end column}.
      */
-    private static List<int[]> maskWords(boolean[][] ink, boolean[][] whole, List<Line> lines, ImageDraw scan, int cols,
-            int rows) {
+    private static List<int[]> maskWords(boolean[][] ink, boolean[][] whole, List<Line> lines, List<Box> tables,
+            ImageDraw scan, int cols, int rows) {
         float boxW = scan.right() - scan.x();
         float boxH = scan.bottom() - scan.top();
         List<int[]> grounded = new ArrayList<>();
@@ -219,7 +225,8 @@ final class ScanRegions {
                     Math.max(0, (int) Math.floor((w.x - scan.x()) / boxW * cols) - 1),
                     Math.min(cols, (int) Math.ceil((w.right - scan.x()) / boxW * cols) + 1)
                 };
-                if (inkShare(whole, cells) >= DARK_GROUND) {
+                if (inkShare(whole, cells) >= DARK_GROUND
+                        && !Regions.insideAny(Regions.wordX(w), Regions.wordY(l), tables, 1f)) {
                     grounded.add(cells);
                 } else {
                     mask(ink, cells);
