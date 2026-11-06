@@ -86,6 +86,35 @@ class ScanBandTest {
         assertTrue(widestPicture(body) >= (right - left) * 12700, body);
     }
 
+    /**
+     * A banner of white text with the line of the page's frame running down from its end, and a heading beside that
+     * line: the banner's picture stops at the banner, and the heading stays text. Kept whole with the line, the picture
+     * reached down over the heading and took it (a phone photo of CDC's fact sheet).
+     */
+    @Test
+    void aFramesLineDoesNotStretchABannersPicture() throws Exception {
+        String title = "Banner Title of a Scanned Fact Sheet";
+        List<Words> words = bodyText();
+        words.add(new Words(title, 82, 84, 11));
+        words.add(new Words("What is it?", 300, 122, 11));
+        String slide = slide(scan(g -> {
+            g.setColor(new Color(90, 90, 88));
+            g.fillRoundRect(px(72), px(60), px(328), px(38), px(12), px(12));
+            g.fillRect(px(396), px(96), px(3), px(40));
+            g.setColor(WHITE_INK);
+            g.setFont(new Font(Font.SERIF, Font.PLAIN, 23));
+            g.drawString(title, px(82), px(84));
+            g.setColor(new Color(40, 40, 40));
+            g.drawString("What is it?", px(300), px(122));
+        }, words));
+        assertTrue(slide.contains("What is it?"), "the heading beside the frame's line stays text: " + slide);
+        List<float[]> pictures = pictures(slide);
+        assertEquals(1, pictures.size(), "the banner: " + slide);
+        float foot = pictures.getFirst()[2] + pictures.getFirst()[3];
+        assertTrue(foot <= 104, "down to the banner's foot, not the line's: " + foot);
+        assertFalse(slide.contains("Banner Title"), "the banner's words are in its picture");
+    }
+
     /** Black type on white paper is still masked, however heavy: a heading stays text, with no picture of it. */
     @Test
     void aHeavyHeadingOnWhiteStaysText() throws Exception {
@@ -268,12 +297,14 @@ class ScanBandTest {
         }
     }
 
-    /** Each picture's left edge and width on the slide, in points. */
+    /** Each picture's left edge, width, top and height on the slide, in points. */
     private static List<float[]> pictures(String slide) {
         List<float[]> out = new ArrayList<>();
-        Matcher m = Pattern.compile("<p:pic>.*?<a:off x=\"(-?\\d+)\" y=\"-?\\d+\"/><a:ext cx=\"(\\d+)\"").matcher(slide);
+        Matcher m = Pattern.compile(
+                "<p:pic>.*?<a:off x=\"(-?\\d+)\" y=\"(-?\\d+)\"/><a:ext cx=\"(\\d+)\" cy=\"(\\d+)\"").matcher(slide);
         while (m.find()) {
-            out.add(new float[] {Long.parseLong(m.group(1)) / 12700f, Long.parseLong(m.group(2)) / 12700f});
+            out.add(new float[] {Long.parseLong(m.group(1)) / 12700f, Long.parseLong(m.group(3)) / 12700f,
+                Long.parseLong(m.group(2)) / 12700f, Long.parseLong(m.group(4)) / 12700f});
         }
         return out;
     }

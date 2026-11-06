@@ -3,6 +3,7 @@ package stirling.software.officeconvert.layout;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -44,12 +45,14 @@ final class ScanRegions {
             ink[r] = whole[r].clone();
         }
         List<int[]> grounded = maskWords(ink, whole, ocrLines, tables, scan, cols, rows);
-        List<int[]> parts = components(ink);
+        int[][] labels = new int[rows][cols];
+        List<int[]> parts = components(ink, labels);
         if (maskPanels(ink, grounded, parts, ocrLines, scan, cols, rows, pageW, pageH)) {
-            parts = components(ink);
+            parts = components(ink, labels);
         }
         List<Box> out = new ArrayList<>();
-        for (int[] c : parts) {
+        for (int i = 0; i < parts.size(); i++) {
+            int[] c = holds(parts.get(i), grounded) ? trimmed(parts.get(i), labels, i + 1) : parts.get(i);
             int area = (c[2] - c[0] + 1) * (c[3] - c[1] + 1);
             Box b = box(c, scan, cols, rows, pageW, pageH);
             if (c[4] >= 0.35f * area && b.area() >= 0.012f * pageW * pageH && b.width() >= 20 && b.height() >= 14
@@ -278,14 +281,75 @@ final class ScanRegions {
             ImageDraw scan, int cols, int rows, float pageW, float pageH) {
         boolean masked = false;
         for (int[] c : parts) {
-            List<int[]> held = grounded.stream().filter(g -> (g[2] + g[3]) / 2 >= c[0] && (g[2] + g[3]) / 2 <= c[2]
-                    && (g[0] + g[1]) / 2 >= c[1] && (g[0] + g[1]) / 2 <= c[3]).toList();
+            List<int[]> held = grounded.stream().filter(g -> within(g, c)).toList();
             if (!held.isEmpty() && textRows(box(c, scan, cols, rows, pageW, pageH), lines) > BAND_ROWS) {
                 held.forEach(g -> mask(ink, g));
+                grounded.removeAll(held);
                 masked = true;
             }
         }
         return masked;
+    }
+
+    /** Whether the word whose cells are {@code g} has its middle in the part of the scan {@code c}. */
+    private static boolean within(int[] g, int[] c) {
+        return (g[2] + g[3]) / 2 >= c[0] && (g[2] + g[3]) / 2 <= c[2] && (g[0] + g[1]) / 2 >= c[1]
+                && (g[0] + g[1]) / 2 <= c[3];
+    }
+
+    private static boolean holds(int[] c, List<int[]> grounded) {
+        return grounded.stream().anyMatch(g -> within(g, c));
+    }
+
+    /** A row or column at a band's edge with less ink than this share of its fullest one's is a thin tail. */
+    private static final float THIN = 0.05f;
+
+    /**
+     * A band without the thin tails at its edges: the rows at its top and bottom, and the columns at its sides, whose
+     * ink is under {@link #THIN} of its fullest row's or column's, such as the line of a page's frame running on from a
+     * banner. With the banner's words masked, the line was cut off with them; kept whole, it stretched the banner's
+     * picture down over the heading under it, which the picture then took (a phone photo of CDC's fact sheet). Only the
+     * band's own cells count ({@code labels} holding {@code id}), not those of a photo just under it.
+     */
+    private static int[] trimmed(int[] c, int[][] labels, int id) {
+        int[] across = new int[c[3] - c[1] + 1];
+        int[] down = new int[c[2] - c[0] + 1];
+        for (int r = c[1]; r <= c[3]; r++) {
+            for (int k = c[0]; k <= c[2]; k++) {
+                if (labels[r][k] == id) {
+                    across[r - c[1]]++;
+                    down[k - c[0]]++;
+                }
+            }
+        }
+        float rowTail = THIN * Arrays.stream(across).max().orElse(0);
+        float colTail = THIN * Arrays.stream(down).max().orElse(0);
+        int top = c[1];
+        int bottom = c[3];
+        int left = c[0];
+        int right = c[2];
+        while (top < bottom && across[top - c[1]] < rowTail) {
+            top++;
+        }
+        while (bottom > top && across[bottom - c[1]] < rowTail) {
+            bottom--;
+        }
+        while (left < right && down[left - c[0]] < colTail) {
+            left++;
+        }
+        while (right > left && down[right - c[0]] < colTail) {
+            right--;
+        }
+        if (top == c[1] && bottom == c[3] && left == c[0] && right == c[2]) {
+            return c;
+        }
+        int[] t = {left, top, right, bottom, 0};
+        for (int r = top; r <= bottom; r++) {
+            for (int k = left; k <= right; k++) {
+                t[4] += labels[r][k] == id ? 1 : 0;
+            }
+        }
+        return t;
     }
 
     /** The rows of text in {@code b}: its lines, those side by side or overlapping counted once. */
@@ -331,8 +395,18 @@ final class ScanRegions {
     }
 
     private static List<int[]> components(boolean[][] ink) {
+        return components(ink, null);
+    }
+
+    /** The parts of {@code ink}, each as its box and cell count; {@code labels}, if given, gets each cell's part. */
+    private static List<int[]> components(boolean[][] ink, int[][] labels) {
         int rows = ink.length;
         int cols = ink[0].length;
+        if (labels != null) {
+            for (int[] row : labels) {
+                Arrays.fill(row, 0);
+            }
+        }
         boolean[][] seen = new boolean[rows][cols];
         List<int[]> out = new ArrayList<>();
         int[] stack = new int[rows * cols];
@@ -354,6 +428,9 @@ final class ScanRegions {
                     comp[2] = Math.max(comp[2], cc);
                     comp[3] = Math.max(comp[3], cr);
                     comp[4]++;
+                    if (labels != null) {
+                        labels[cr][cc] = out.size() + 1;
+                    }
                     for (int dr = -1; dr <= 1; dr++) {
                         for (int dc = -1; dc <= 1; dc++) {
                             int nr = cr + dr;
