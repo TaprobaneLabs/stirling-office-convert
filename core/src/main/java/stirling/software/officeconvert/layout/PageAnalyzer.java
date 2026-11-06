@@ -218,7 +218,11 @@ public final class PageAnalyzer {
         if (ocr) {
             ImageDraw scan = fullPageImage(page, gfx.images());
             if (scan != null) {
-                figures.addAll(ScanRegions.find(scan, segments, page.width(), page.height()));
+                for (Box f : ScanRegions.find(scan, segments, page.width(), page.height())) {
+                    if (!repeatsTableWords(f, tableBoxes, segments)) {
+                        figures.add(f);
+                    }
+                }
             }
         }
 
@@ -420,6 +424,25 @@ public final class PageAnalyzer {
             }
         }
         return null;
+    }
+
+    /**
+     * A part of a scan mostly inside a table, wider than a picture in one cell, over words of the scan's text: a shaded
+     * row (a header band), whose words the table sets, so that as a picture too its white lettering would show beside
+     * them. A band whose words the OCR missed stays a picture: it is all that shows them.
+     */
+    private static boolean repeatsTableWords(Box f, List<Box> tableBoxes, List<Line> segments) {
+        if (tableBoxes.stream().noneMatch(t -> f.overlapArea(t) >= 0.5f * f.area()) || cellArt(f, tableBoxes)) {
+            return false;
+        }
+        for (Line l : segments) {
+            for (Word w : l.words) {
+                if (Regions.insideAny(Regions.wordX(w), Regions.wordY(l), List.of(f), 0.5f)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean cellArt(Box f, List<Box> tableBoxes) {

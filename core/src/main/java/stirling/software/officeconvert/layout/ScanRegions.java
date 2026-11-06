@@ -3,6 +3,7 @@ package stirling.software.officeconvert.layout;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import stirling.software.officeconvert.extract.ImageBudget;
@@ -38,9 +39,13 @@ final class ScanRegions {
         for (int r = 0; r < rows; r++) {
             ink[r] = whole[r].clone();
         }
-        maskWords(ink, ocrLines, scan, cols, rows);
+        List<int[]> grounded = maskWords(ink, whole, ocrLines, scan, cols, rows);
+        List<int[]> parts = components(ink);
+        if (maskPanels(ink, grounded, parts, ocrLines, scan, cols, rows, pageW, pageH)) {
+            parts = components(ink);
+        }
         List<Box> out = new ArrayList<>();
-        for (int[] c : components(ink)) {
+        for (int[] c : parts) {
             int area = (c[2] - c[0] + 1) * (c[3] - c[1] + 1);
             Box b = box(c, scan, cols, rows, pageW, pageH);
             if (c[4] >= 0.35f * area && b.area() >= 0.012f * pageW * pageH && b.width() >= 20 && b.height() >= 14) {
@@ -189,22 +194,102 @@ final class ScanRegions {
         return ink;
     }
 
-    private static void maskWords(boolean[][] ink, List<Line> lines, ImageDraw scan, int cols, int rows) {
+    /**
+     * A word whose masked cells are at least this share ink is light lettering on a dark ground (a band, a banner, a
+     * logo's box): the ink is the ground's, and the letters have none to take away.
+     */
+    private static final float DARK_GROUND = 0.75f;
+
+    /**
+     * Takes each word's ink out of {@code ink}, so that text never makes a picture of its own, but leaves words on a
+     * dark ground alone: masked, two lines of white text that filled a band's height cut it in two, and the band came
+     * out as a picture from the middle of its first line (a CDC fact sheet's footer). Returns the cells of the words
+     * left, each as {first row, end row, first column, end column}.
+     */
+    private static List<int[]> maskWords(boolean[][] ink, boolean[][] whole, List<Line> lines, ImageDraw scan, int cols,
+            int rows) {
         float boxW = scan.right() - scan.x();
         float boxH = scan.bottom() - scan.top();
+        List<int[]> grounded = new ArrayList<>();
         for (Line l : lines) {
             for (Word w : l.words) {
-                int c0 = (int) Math.floor((w.x - scan.x()) / boxW * cols) - 1;
-                int c1 = (int) Math.ceil((w.right - scan.x()) / boxW * cols) + 1;
-                int r0 = (int) Math.floor((l.top - scan.top()) / boxH * rows) - 1;
-                int r1 = (int) Math.ceil((l.bottom - scan.top()) / boxH * rows) + 1;
-                for (int r = Math.max(0, r0); r < Math.min(rows, r1); r++) {
-                    for (int c = Math.max(0, c0); c < Math.min(cols, c1); c++) {
-                        ink[r][c] = false;
-                    }
+                int[] cells = {
+                    Math.max(0, (int) Math.floor((l.top - scan.top()) / boxH * rows) - 1),
+                    Math.min(rows, (int) Math.ceil((l.bottom - scan.top()) / boxH * rows) + 1),
+                    Math.max(0, (int) Math.floor((w.x - scan.x()) / boxW * cols) - 1),
+                    Math.min(cols, (int) Math.ceil((w.right - scan.x()) / boxW * cols) + 1)
+                };
+                if (inkShare(whole, cells) >= DARK_GROUND) {
+                    grounded.add(cells);
+                } else {
+                    mask(ink, cells);
                 }
             }
         }
+        return grounded;
+    }
+
+    /** A dark ground holding more rows of text than this is a panel (a sidebar), not a band: its words stay text. */
+    private static final int BAND_ROWS = 3;
+
+    /**
+     * Masks the words left on a dark ground in each part of the scan that holds more than {@link #BAND_ROWS} rows of
+     * text, as on white: kept whole, a sidebar of white text would be a picture of all its words. True when any were.
+     */
+    private static boolean maskPanels(boolean[][] ink, List<int[]> grounded, List<int[]> parts, List<Line> lines,
+            ImageDraw scan, int cols, int rows, float pageW, float pageH) {
+        boolean masked = false;
+        for (int[] c : parts) {
+            List<int[]> held = grounded.stream().filter(g -> (g[2] + g[3]) / 2 >= c[0] && (g[2] + g[3]) / 2 <= c[2]
+                    && (g[0] + g[1]) / 2 >= c[1] && (g[0] + g[1]) / 2 <= c[3]).toList();
+            if (!held.isEmpty() && textRows(box(c, scan, cols, rows, pageW, pageH), lines) > BAND_ROWS) {
+                held.forEach(g -> mask(ink, g));
+                masked = true;
+            }
+        }
+        return masked;
+    }
+
+    /** The rows of text in {@code b}: its lines, those side by side or overlapping counted once. */
+    private static int textRows(Box b, List<Line> lines) {
+        List<Line> held = new ArrayList<>();
+        for (Line l : lines) {
+            float cy = (l.top + l.bottom) / 2f;
+            if (cy >= b.top() && cy <= b.bottom() && l.words.stream()
+                    .anyMatch(w -> (w.x + w.right) / 2f >= b.x() && (w.x + w.right) / 2f <= b.right())) {
+                held.add(l);
+            }
+        }
+        held.sort(Comparator.comparingDouble(l -> l.top));
+        int n = 0;
+        float bottom = Float.NEGATIVE_INFINITY;
+        for (Line l : held) {
+            if (l.top >= bottom) {
+                n++;
+            }
+            bottom = Math.max(bottom, l.bottom);
+        }
+        return n;
+    }
+
+    private static void mask(boolean[][] ink, int[] cells) {
+        for (int r = cells[0]; r < cells[1]; r++) {
+            for (int c = cells[2]; c < cells[3]; c++) {
+                ink[r][c] = false;
+            }
+        }
+    }
+
+    private static float inkShare(boolean[][] ink, int[] cells) {
+        int n = 0;
+        int all = 0;
+        for (int r = cells[0]; r < cells[1]; r++) {
+            for (int c = cells[2]; c < cells[3]; c++) {
+                n += ink[r][c] ? 1 : 0;
+                all++;
+            }
+        }
+        return all == 0 ? 0 : (float) n / all;
     }
 
     private static List<int[]> components(boolean[][] ink) {
