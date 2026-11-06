@@ -855,14 +855,17 @@ public final class DocumentBuilder {
             if (lastOnPage && Continuation.looksUnfinished(d, stats.bodySize)) {
                 carry = new Carry(d, col.left(), col.right(), spaceBefore, pageBreak, ref, !layout.notes().isEmpty());
             } else {
-                List<Inline.Shape> under = shapesUnder(d, bottom, nextInFlow(col, item));
+                PageLayout.Item next = nextInFlow(col, item);
+                List<Inline.Shape> under = shapesUnder(d, bottom, next);
                 Paragraph p = flowParagraph(d, col.left(), col.right(), spaceBefore, pageBreak);
                 emit(p);
                 float grown = growth(p);
                 columnGrowth += grown;
                 bottom += grown;
                 if (!under.isEmpty()) {
-                    bottom = underRow(under, bottom, filledFrom(col, bottom), overlap(offset, slot.ref()));
+                    // shapesUnder() finds shapes only above a paragraph that comes next
+                    float nextTop = paragraphs.wordTop(((PageLayout.ParaItem) next).para());
+                    bottom = underRow(under, bottom, filledFrom(col, bottom), overlap(offset, slot.ref()), nextTop);
                 }
             }
         } else {
@@ -1333,18 +1336,23 @@ public final class DocumentBuilder {
      * went to a page of its own with all after it.
      * <p>
      * A paragraph Word already sets {@code lower} than the PDF (its space above couldn't take up the rows above it, which
-     * Word set taller) has used that much of the room under it, so the line gives that room back, down to {@link #RIDE_GAP}
-     * above its shapes: they still follow the paragraph, and what comes after keeps its place. DOE OIG's budget rule, under
-     * rows Word sets 22 pt lower, took its 13 pt from the PDF on top of them and pushed the next heading onto its own rule.
+     * Word set taller) has used that much of the room under it. When the line would then push the next paragraph past its
+     * place, at {@code nextTop}, it gives back as much of that room as the push, down to {@link #RIDE_GAP} above its
+     * shapes: they still follow the paragraph, and what comes after keeps its place. DOE OIG's budget rule, under rows Word
+     * sets 22 pt lower, took its 13 pt from the PDF on top of them and pushed the next heading 10 pt onto its own rule. A
+     * line that pushes nothing keeps its height: given back there, a Federal Register page's third column rose over the
+     * header's rule.
      */
-    private float underRow(List<Inline.Shape> shapes, float top, float filled, float lower) throws IOException {
+    private float underRow(List<Inline.Shape> shapes, float top, float filled, float lower, float nextTop)
+            throws IOException {
         float bottom = top;
         float shapesTop = Float.MAX_VALUE;
         for (Inline.Shape s : shapes) {
             bottom = Math.max(bottom, s.y() + s.height());
             shapesTop = Math.min(shapesTop, s.y());
         }
-        float lift = Math.max(0f, Math.min(lower, shapesTop - top - RIDE_GAP));
+        float pushed = bottom + lower - nextTop;
+        float lift = Math.max(0f, Math.min(Math.min(lower, pushed), shapesTop - top - RIDE_GAP));
         bottom -= lift;
         if (filled - 1f < bottom) {
             bottom = Math.max(top, filled - 1f);
