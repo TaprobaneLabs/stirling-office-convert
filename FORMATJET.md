@@ -120,3 +120,4 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | Next release | Set an OCR line's words at one scale, so roughly boxed words come out one width, and stop a word boxed over the next ones at the next one (#99) | Not offered yet |
 | Next release | On a tilted line, find a next word that starts inside a word's box on that word's own baseline (#100) | Not offered yet |
 | Next release | Read a turned glyph's size and stretch from the same scales as an upright one's, so a page turned with its words stretched keeps their size (#101) | Not offered yet: a bug in upstream's first commit |
+| Next release | On a scan, keep a panel's grey ground from becoming a picture that takes the panel's text: not where stacked lines of OCR text cover a fifth of it or more (#103) | Not offered yet |
