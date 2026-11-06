@@ -78,10 +78,11 @@ class OcrLineBreaksTest {
 
     /**
      * An OCR tool sizes each line from its own box, so one paragraph's lines come at 4.79 to 5.24 points, which Word sets
-     * at 5. Each line must come out in Word at the same share of its width in the OCR layer, within a percent, or Word
-     * breaks the paragraph elsewhere. The width fix's spacing moves in twentieths of a point a character, 1.4% of a line
-     * at 5 points: a line at 5.07 stayed 1.4% short while one at exactly 5 kept its width (IRS Form 8822's scan, whose
-     * Privacy Act notice lost its first line's break).
+     * at 5. At its run's size and character scale, before any character spacing (the width fix's, in twentieths of a
+     * point a character, 1.4% of a line at 5 points, and the fit's), each line must come out in Word at the same share of
+     * its width in the OCR layer, within a percent: a line at 5.07 had stayed 1.4% short while one at 4.79 came out 4%
+     * long, and the fit, measuring the lines against each other, broke the paragraph elsewhere (IRS Form 8822's scan,
+     * whose Privacy Act notice lost its first line's break).
      */
     @Test
     void anOcrParagraphsLinesKeepTheirWidthsWhicheverWayTheirSizesRound() throws Exception {
@@ -105,7 +106,7 @@ class OcrLineBreaksTest {
             assertTrue(at >= 0, "the line's text in the paragraph: " + text);
             float inWord = 0;
             for (int k = at; k < at + text.length(); k++) {
-                inWord += word.widths().get(k);
+                inWord += word.scaled().get(k);
             }
             float layer = TYPE.getStringWidth(text) / 1000 * size - 2 * BEARING * size;
             least = Math.min(least, inWord / layer);
@@ -191,7 +192,8 @@ class OcrLineBreaksTest {
     }
 
     /** A paragraph of the document, its text, and each character's width in Word. */
-    private record Chars(String paragraph, StringBuilder text, List<Float> widths, List<String> styles) {}
+    /** {@code scaled}: each character's width at its run's size and scale, before its character spacing. */
+    private record Chars(String paragraph, StringBuilder text, List<Float> widths, List<Float> scaled, List<String> styles) {}
 
     /**
      * The paragraph holding {@code marker}, each character as wide as Arial makes it at its run's size (half points, else
@@ -206,6 +208,7 @@ class OcrLineBreaksTest {
         String p = para.group();
         StringBuilder chars = new StringBuilder();
         List<Float> widths = new ArrayList<>();
+        List<Float> scaled = new ArrayList<>();
         List<String> styles = new ArrayList<>();
         Matcher run = Pattern.compile("<w:r>(?:<w:rPr>(.*?)</w:rPr>)?((?:<w:t[^>]*>[^<]*</w:t>)+)</w:r>").matcher(p);
         while (run.find()) {
@@ -220,12 +223,13 @@ class OcrLineBreaksTest {
             while (t.find()) {
                 for (char c : t.group(1).toCharArray()) {
                     chars.append(c);
-                    widths.add(ARIAL.getStringWidth(String.valueOf(c)) / 1000 * size * scale + extra);
+                    scaled.add(ARIAL.getStringWidth(String.valueOf(c)) / 1000 * size * scale);
+                    widths.add(scaled.getLast() + extra);
                     styles.add(size + "pt w" + Math.round(scale * 100) + (extra != 0 ? " sp" + extra : ""));
                 }
             }
         }
-        return new Chars(p, chars, widths, styles);
+        return new Chars(p, chars, widths, scaled, styles);
     }
 
     /** The paragraph broken again as Word breaks it: greedily at spaces, each character as wide as Word sets it. */
