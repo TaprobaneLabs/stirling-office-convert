@@ -118,6 +118,35 @@ class ScanBandTest {
         }
     }
 
+    /**
+     * The same banner and line with dots of a chart beside them instead of a heading, too small for pictures of their
+     * own: the second pass's cluster still takes the dots with the banner, as it holds no words beyond the banner's.
+     */
+    @Test
+    void aBannersClusterKeepsArtworkBesideIt() throws Exception {
+        String title = "Banner Sheet";
+        List<Words> words = new ArrayList<>();
+        words.add(new Words(title, 82, 84, 11));
+        String slide = slide(scan(g -> {
+            g.setColor(new Color(90, 90, 88));
+            g.fillRoundRect(px(72), px(60), px(328), px(38), px(12), px(12));
+            g.fillRect(px(396), px(96), px(3), px(40));
+            g.setColor(new Color(40, 40, 40));
+            for (int x = 110; x <= 230; x += 12) {
+                for (int y = 104; y <= 140; y += 12) {
+                    g.fillRect(px(x + (y % 24) / 2f), px(y), px(6), px(6));
+                }
+            }
+            g.setColor(WHITE_INK);
+            g.setFont(new Font(Font.SERIF, Font.PLAIN, 23));
+            g.drawString(title, px(82), px(84));
+        }, words));
+        List<float[]> pictures = pictures(slide);
+        assertEquals(1, pictures.size(), "the banner with the chart's dots: " + slide);
+        float foot = pictures.getFirst()[2] + pictures.getFirst()[3];
+        assertTrue(foot >= 140, "down over the dots: " + foot);
+    }
+
     /** Black type on white paper is still masked, however heavy: a heading stays text, with no picture of it. */
     @Test
     void aHeavyHeadingOnWhiteStaysText() throws Exception {

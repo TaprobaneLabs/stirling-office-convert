@@ -70,8 +70,10 @@ final class ScanRegions {
             if (c[4] < SPARSE * area || b.area() < 0.012f * pageW * pageH || inside(c, ink) < BARE * c[4]
                     || wordsIn(b, ocrLines) > FEW_WORDS || b.width() > MAX_ASPECT * b.height()
                     || b.height() > MAX_ASPECT * b.width() || textGround(b, ocrLines)
-                    || trimmedBands.stream().anyMatch(t -> holds(b, t))) {
-                // A cluster holding a band trimmed of its tails would put the tails back, with what they reach
+                    || trimmedBands.stream()
+                            .anyMatch(t -> holds(b, t) && wordsIn(b, ocrLines) > wordsIn(t, ocrLines))) {
+                // A cluster holding a band trimmed of its tails may add artwork beside it, but no words beyond the
+                // band's: its box would reach over text the tails ran past
                 continue;
             }
             out.removeIf(o -> holds(b, o));
