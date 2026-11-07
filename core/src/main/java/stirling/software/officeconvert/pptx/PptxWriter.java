@@ -28,6 +28,7 @@ public final class PptxWriter implements SlideSink {
     private final Map<String, Integer> fonts = new HashMap<>();
     private final Map<String, Integer> titleFonts = new HashMap<>();
     private Scripts.Profile scripts = new Scripts.Profile();
+    private OpenFaces faces = new OpenFaces(Map.of());
     private long width;
     private long height;
     private int firstPage;
@@ -43,6 +44,11 @@ public final class PptxWriter implements SlideSink {
     @Override
     public void scripts(Scripts.Profile profile) {
         this.scripts = profile;
+    }
+
+    @Override
+    public void openFonts(Map<String, String> families) {
+        this.faces = new OpenFaces(families);
     }
 
     @Override
@@ -75,7 +81,7 @@ public final class PptxWriter implements SlideSink {
     @Override
     public void slide(Slide slide) throws IOException {
         slides++;
-        SlideXml xml = new SlideXml(slide, this::slideOf, fonts, scripts);
+        SlideXml xml = new SlideXml(slide, this::slideOf, fonts, scripts, faces);
         String body = xml.xml(slide);
         entry("ppt/slides/slide" + slides + ".xml", body);
         entry("ppt/slides/_rels/slide" + slides + ".xml.rels", xml.rels().xml());
@@ -101,8 +107,9 @@ public final class PptxWriter implements SlideSink {
     public void finish(String title, String author) throws IOException {
         String body = mostUsed(fonts, "Calibri");
         String heading = mostUsed(titleFonts, body);
-        entry("ppt/presentation.xml", PptxParts.presentation(slides, width, height));
-        entry("ppt/_rels/presentation.xml.rels", PptxParts.presentationRels(slides));
+        entry("ppt/presentation.xml", PptxParts.presentation(slides, width, height, faces.fontList()));
+        entry("ppt/_rels/presentation.xml.rels", PptxParts.presentationRels(slides, faces.rels()));
+        faces.writeParts(this::entry);
         entry("ppt/slideMasters/slideMaster1.xml", PptxParts.master(width, height));
         entry("ppt/slideMasters/_rels/slideMaster1.xml.rels", PptxParts.masterRels());
         entry("ppt/slideLayouts/" + SlideXml.TITLE_LAYOUT, PptxParts.titleLayout());
@@ -116,7 +123,7 @@ public final class PptxWriter implements SlideSink {
         entry("docProps/core.xml", PptxParts.core(title, author));
         entry("docProps/app.xml", PptxParts.app(slides));
         entry("_rels/.rels", PptxParts.packageRels());
-        entry("[Content_Types].xml", PptxParts.contentTypes(slides));
+        entry("[Content_Types].xml", PptxParts.contentTypes(slides, !faces.isEmpty()));
         zip.finish();
     }
 

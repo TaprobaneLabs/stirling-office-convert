@@ -24,10 +24,10 @@ final class SlideXml {
     private final TableXml tables;
     private int nextId = 2;
 
-    SlideXml(Slide slide, TextXml.Links links, Map<String, Integer> fonts, Scripts.Profile scripts) {
+    SlideXml(Slide slide, TextXml.Links links, Map<String, Integer> fonts, Scripts.Profile scripts, OpenFaces faces) {
         boolean titled = slide.shapes().stream().anyMatch(s -> s instanceof TextShape t && t.title());
         this.rels = new SlideRels(titled ? TITLE_LAYOUT : BLANK_LAYOUT);
-        this.text = new TextXml(rels, links, fonts, scripts);
+        this.text = new TextXml(rels, links, fonts, scripts, faces);
         this.tables = new TableXml(text);
     }
 

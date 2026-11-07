@@ -3,6 +3,7 @@ package stirling.software.officeconvert.pptx;
 import java.util.List;
 import java.util.Map;
 
+import stirling.software.officeconvert.build.SubstituteMetrics;
 import stirling.software.officeconvert.layout.Marker;
 import stirling.software.officeconvert.model.Inline;
 import stirling.software.officeconvert.model.Paragraph.Align;
@@ -26,17 +27,19 @@ final class TextXml {
     private final Links links;
     private final Map<String, Integer> fonts;
     private final Scripts.Profile scripts;
+    private final OpenFaces faces;
     private boolean invisible;
 
     interface Links {
         int slideOf(int page);
     }
 
-    TextXml(SlideRels rels, Links links, Map<String, Integer> fonts, Scripts.Profile scripts) {
+    TextXml(SlideRels rels, Links links, Map<String, Integer> fonts, Scripts.Profile scripts, OpenFaces faces) {
         this.rels = rels;
         this.links = links;
         this.fonts = fonts;
         this.scripts = scripts;
+        this.faces = faces;
     }
 
     void paragraph(StringBuilder sb, TextPara p, boolean unseen) {
@@ -318,8 +321,9 @@ final class TextXml {
         if (s.font() != null) {
             String f = Ooxml.esc(s.font());
             Scripts.Fonts slots = Scripts.fonts(s.font(), text, scripts);
+            String latin = slots.latin().equals(s.font()) ? faces.name(s.font(), s.bold(), s.italic()) : slots.latin();
             String sym = s.symbol() ? " pitchFamily=\"2\" charset=\"2\"" : "";
-            sb.append("<a:latin typeface=\"").append(Ooxml.esc(slots.latin())).append('"').append(sym).append("/><a:ea typeface=\"")
+            sb.append("<a:latin typeface=\"").append(Ooxml.esc(latin)).append('"').append(sym).append("/><a:ea typeface=\"")
                     .append(Ooxml.esc(slots.eastAsian())).append("\"/><a:cs typeface=\"").append(Ooxml.esc(slots.complex())).append("\"/>");
             if (s.symbol()) {
                 sb.append("<a:sym typeface=\"").append(f).append("\" pitchFamily=\"2\" charset=\"2\"/>");
@@ -345,11 +349,28 @@ final class TextXml {
     static int spacing(RunStyle s, String text) {
         float spc = s.spacing();
         if (s.scale() != 100) {
-            float unit = text == null ? Float.NaN : ScriptWidths.perUnit(text, s.bold());
-            spc += (s.scale() / 100f - 1f) * (Float.isNaN(unit) ? 0.5f : unit) * s.size();
+            spc += scaleSpacing(s, text);
         }
         spc = Math.clamp(spc, -0.1f * s.size(), 0.5f * s.size());
         return Math.clamp(Math.round(spc * 100f), -400000, 400000);
+    }
+
+    /**
+     * The character spacing that widens or narrows a run as its character scale does in Word: PowerPoint has no scale. A
+     * stand-in's own widths make the run as wide as the scale would; without them, a script's typical width, or half an
+     * em. Half an em overshot Times New Roman's 0.44: the Federal Register's Melior, set in Times New Roman at 114%,
+     * came out about 4 pt wider a line than the PDF, and its columns wrapped 50 lines more on PowerPoint's slides.
+     */
+    private static float scaleSpacing(RunStyle s, String text) {
+        float stretch = s.scale() / 100f - 1f;
+        if (text != null && !text.isEmpty()) {
+            float width = SubstituteMetrics.width(text, s.font(), s.bold(), s.italic(), s.size());
+            if (!Float.isNaN(width)) {
+                return stretch * width / text.codePointCount(0, text.length());
+            }
+        }
+        float unit = text == null ? Float.NaN : ScriptWidths.perUnit(text, s.bold());
+        return stretch * (Float.isNaN(unit) ? 0.5f : unit) * s.size();
     }
 
     private static boolean rightToLeft(String s) {

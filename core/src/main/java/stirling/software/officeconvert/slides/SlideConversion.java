@@ -145,6 +145,7 @@ public final class SlideConversion {
 
         try (SlideSink sink = writer.open(out)) {
             sink.scripts(stats.scripts);
+            sink.openFonts(stats.openFonts);
             sink.begin(slide[0], slide[1], first, count);
             boolean hyphenated = autoHyphenated(doc) || stats.autoHyphenated();
             SlideBuilder builder = new SlideBuilder(doc, stats, sink, options.figureDpi(), options.pictures(), hyphenated,
