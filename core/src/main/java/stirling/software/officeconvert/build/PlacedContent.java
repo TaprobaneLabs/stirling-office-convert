@@ -57,16 +57,57 @@ public final class PlacedContent {
 
     public Paragraph runs(ParaDraft d, int skipWords, float left, float right) {
         Paragraph p = new Paragraph();
+        p.bidi = bidi(d);
+        runs.fill(p, d.lines, skipWords, left, right, d.size(), d.hardBreaks, d.pageBreaks);
+        return p;
+    }
+
+    /** Whether a paragraph reads right to left, as {@link #runs} sets it. */
+    public boolean bidi(ParaDraft d) {
         int rtl = 0;
         boolean anyRtl = false;
         for (Line l : d.lines) {
             rtl += LogicalOrder.rtlBase(l) ? 1 : 0;
             anyRtl |= LogicalOrder.hasRtl(l);
         }
-        p.bidi = d.rtl || rtl * 2 > d.lines.size() || anyRtl && d.align == Paragraph.Align.RIGHT && stats.scripts.rightToLeft();
-        runs.fill(p, d.lines, skipWords, left, right, d.size(), d.hardBreaks, d.pageBreaks);
+        return d.rtl || rtl * 2 > d.lines.size() || anyRtl && d.align == Paragraph.Align.RIGHT && stats.scripts.rightToLeft();
+    }
+
+    /**
+     * Where a slide's text box wraps a paragraph's lines: at {@code wrap}, its lines starting at {@code firstStart} and
+     * {@code restStart}, and never past {@code limit}, the box's text edge.
+     */
+    public record Wrap(float wrap, float firstStart, float restStart, float limit) {}
+
+    /**
+     * The paragraph's runs fitted to its PDF lines in a slide's text box, as the DOCX writer fits them to a page: the
+     * wrap edge each line's break holds at, extra character spacing where a ragged line would take the next one's first
+     * word, and a justified paragraph's lines narrowed one by one where no edge holds them all. {@link #fittedWrap()}
+     * then gives the edge to wrap at, or NaN where it stays {@code at.wrap()}. A left-aligned or justified paragraph
+     * written left to right only.
+     */
+    public Paragraph runs(ParaDraft d, int skipWords, float left, float right, Paragraph.Align align, Wrap at) {
+        lastEdge = Float.NaN;
+        Paragraph p = new Paragraph();
+        p.bidi = bidi(d);
+        boolean justified = align == Paragraph.Align.JUSTIFY && !Float.isNaN(d.justifySlack);
+        RunBuilder.Fit fit = null;
+        if (!p.bidi && skipWords == 0 && (justified || align == Paragraph.Align.LEFT)) {
+            float edge = at.wrap() - SectionPlanner.RIGHT_SLACK;
+            fit = new RunBuilder.Fit(edge, justified ? d.justifySlack : SectionPlanner.RIGHT_SLACK, justified, justified,
+                    at.firstStart(), at.restStart(), 0, at.limit() - edge);
+            lastEdge = edge;
+        }
+        runs.fill(p, d.lines, skipWords, left, right, d.size(), d.hardBreaks, d.pageBreaks, false, fit);
         return p;
     }
+
+    /** The wrap edge the last fitted paragraph's lines hold at, or NaN. */
+    public float fittedWrap() {
+        return Float.isNaN(lastEdge) || Float.isNaN(runs.fitted()) ? Float.NaN : lastEdge + runs.fitted();
+    }
+
+    private float lastEdge = Float.NaN;
 
     public static RunStyle style(Glyph g, float hostSize) {
         return RunBuilder.styleOf(g, hostSize);

@@ -76,6 +76,23 @@ final class OfficeFonts {
         return null;
     }
 
+    /**
+     * Whether any of a paragraph's text is in an Office family {@link #restore} names in its stand-in's place. Its runs
+     * are measured in the stand-in, and restored with no spacing or scale, so they can't be fitted to its lines.
+     */
+    static boolean restores(ParaDraft d) {
+        for (Line l : d.lines) {
+            for (Word w : l.words) {
+                for (Glyph g : w.glyphs) {
+                    if (family(g) != null) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     static void restore(Paragraph runs, ParaDraft d) {
         Map<String, String> byLook = new HashMap<>();
         boolean any = false;
