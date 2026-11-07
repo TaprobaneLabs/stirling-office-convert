@@ -304,9 +304,6 @@ final class TextFrames {
         Draft prev = null;
         float drift = 0;
         for (Draft g : group) {
-            Paragraph runs = content.runs(g.d, g.bullet != null ? 1 : 0, boxLeft, boxRight);
-            OfficeFonts.restore(runs, g.d);
-            iconsOut(runs, g.d, placeIcons ? icons : null);
             float spaceBefore = 0;
             if (prev != null) {
                 float want = g.boxTop() - prev.boxBottom() - drift;
@@ -317,7 +314,8 @@ final class TextFrames {
             float marginRight = 0;
             float indent = 0;
             Align align = g.align;
-            boolean rtl = runs.bidi && (align == Align.RIGHT || align == Align.JUSTIFY);
+            boolean bidi = content.bidi(g.d);
+            boolean rtl = bidi && (align == Align.RIGHT || align == Align.JUSTIFY);
             if (rtl) {
                 marginRight = Math.max(0, boxRight - startEdge(g));
                 indent = boxRight - g.d.first().right - marginRight;
@@ -349,6 +347,20 @@ final class TextFrames {
                     }
                 }
             }
+            Paragraph runs;
+            if (g.bullet == null && !g.ocr && !bidi && (align == Align.LEFT || align == Align.JUSTIFY)) {
+                float start = boxLeft + marginLeft;
+                PlacedContent.Wrap at = new PlacedContent.Wrap(boxRight - marginRight, start + indent, start, boxRight);
+                runs = content.runs(g.d, 0, boxLeft, boxRight, align, at);
+                float fitted = content.fittedWrap();
+                if (!Float.isNaN(fitted)) {
+                    marginRight = Math.max(0, boxRight - fitted);
+                }
+            } else {
+                runs = content.runs(g.d, g.bullet != null ? 1 : 0, boxLeft, boxRight);
+            }
+            OfficeFonts.restore(runs, g.d);
+            iconsOut(runs, g.d, placeIcons ? icons : null);
             boolean listed = align == Align.LEFT || align == Align.JUSTIFY || rtl && align == Align.RIGHT;
             if (g.bullet != null && !listed) {
                 runs = content.runs(g.d, 0, boxLeft, boxRight);
