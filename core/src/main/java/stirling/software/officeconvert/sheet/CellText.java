@@ -3,6 +3,7 @@ package stirling.software.officeconvert.sheet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import stirling.software.officeconvert.extract.Glyph;
 import stirling.software.officeconvert.layout.Line;
@@ -122,9 +123,20 @@ record CellText(
         return c >= 0xE000 && c <= 0xF8FF ? "•" : marker;
     }
 
+    /**
+     * Without soft hyphens, and without object replacement characters (U+FFFC), which a PDF's
+     * text maps to glyphs it can't name: MMWR's masthead letters came out as a cell of 32 of them.
+     * A run of them, with the spaces around it, leaves one space.
+     */
     private static String clean(String s) {
-        return s.replace("\u00AD", "").strip();
+        String text = s.replace("\u00AD", "");
+        if (text.indexOf('\uFFFC') >= 0) {
+            text = OBJECT_MARKS.matcher(text).replaceAll(" ");
+        }
+        return text.strip();
     }
+
+    private static final Pattern OBJECT_MARKS = Pattern.compile(" *\uFFFC[\uFFFC ]*");
 
     private static boolean isCjk(char c) {
         return c >= 0x2E80 && c <= 0x9FFF || c >= 0xAC00 && c <= 0xD7A3 || c >= 0xF900 && c <= 0xFAFF
