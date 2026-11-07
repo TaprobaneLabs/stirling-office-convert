@@ -348,7 +348,8 @@ final class TextFrames {
                 }
             }
             Paragraph runs;
-            if (g.bullet == null && !g.ocr && !bidi && (align == Align.LEFT || align == Align.JUSTIFY)) {
+            if (g.bullet == null && !g.ocr && !bidi && (align == Align.LEFT || align == Align.JUSTIFY)
+                    && !OfficeFonts.restores(g.d)) {
                 float start = boxLeft + marginLeft;
                 PlacedContent.Wrap at = new PlacedContent.Wrap(boxRight - marginRight, start + indent, start, boxRight);
                 runs = content.runs(g.d, 0, boxLeft, boxRight, align, at);
