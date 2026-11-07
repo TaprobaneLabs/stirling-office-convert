@@ -1,7 +1,9 @@
 package stirling.software.officeconvert.table;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,6 +62,20 @@ class LatticeBandTest {
         assertEquals(1, rowSpan(with, "$1,802.00"));
         assertEquals(1, rowSpan(with, "01 Points"));
         assertEquals(1, rowSpan(with, "$405.00"));
+
+        // The band's lower edge keeps the rows apart but isn't drawn, so Word and Excel draw no line there
+        assertTrue(cell(with, "A. Origination Charges").borders().top(), "the rule over the band");
+        assertFalse(cell(with, "A. Origination Charges").borders().bottom(), "no rule under the band");
+        assertFalse(cell(with, "01 Points").borders().top());
+    }
+
+    private static DraftTable.Cell cell(DraftTable table, String text) {
+        for (DraftTable.Cell cell : table.cells()) {
+            if (TextLine.joinWords(cell.words()).startsWith(text)) {
+                return cell;
+            }
+        }
+        throw new AssertionError("no cell starts with " + text);
     }
 
     private static DraftTable only(List<LatticeFinder.Found> found) {
@@ -70,12 +86,7 @@ class LatticeBandTest {
     }
 
     private static int rowSpan(DraftTable table, String text) {
-        for (DraftTable.Cell cell : table.cells()) {
-            if (TextLine.joinWords(cell.words()).startsWith(text)) {
-                return cell.rowSpan();
-            }
-        }
-        throw new AssertionError("no cell starts with " + text);
+        return cell(table, text).rowSpan();
     }
 
     /** Adds {@code text}'s words at {@code x}, 9 pt type, a space apart. */

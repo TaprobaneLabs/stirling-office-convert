@@ -133,7 +133,7 @@ final class LatticeFinder {
         if ((long) (xs.length - 1) * (ys.length - 1) > MAX_GRID_CELLS) {
             return null;
         }
-        RuledGrid grid = RuledGrid.measure(xs, ys, withBandEdges(hs, fills), vs);
+        RuledGrid grid = RuledGrid.measure(xs, ys, hs, vs, bandEdges(fills));
         grid.addTextColumnLines(inside);
         DraftTable table = cells(page, grid, inside);
         if (!looksLikeTable(table) || proseOutside(table, grid)) {
@@ -143,21 +143,18 @@ final class LatticeFinder {
     }
 
     /**
-     * The table's horizontal rulings with its filled bands' top and bottom edges, for measuring which row
-     * lines are drawn, not for finding them. A Closing Disclosure's section heading is a grey band with no
-     * rule under it, so its cells were joined to the first item's: "A. Origination Charges" over "01 0.25 % of
-     * Loan Amount", "$1,802.00" over "$405.00".
+     * The filled bands' top and bottom edges, which keep the rows on either side apart: neither finds a grid line
+     * nor counts as a drawn border. A Closing Disclosure's section heading is a grey band with no rule under it,
+     * so its cells were joined to the first item's: "A. Origination Charges" over "01 0.25 % of Loan Amount",
+     * "$1,802.00" over "$405.00".
      */
-    static List<Ruling> withBandEdges(List<Ruling> hs, List<FillBox> fills) {
-        if (fills.isEmpty()) {
-            return hs;
-        }
-        List<Ruling> all = new ArrayList<>(hs);
+    static List<Ruling> bandEdges(List<FillBox> fills) {
+        List<Ruling> edges = new ArrayList<>(fills.size() * 2);
         for (FillBox f : fills) {
-            all.add(new Ruling(f.top(), f.x(), f.right(), 0f, f.rgb()));
-            all.add(new Ruling(f.bottom(), f.x(), f.right(), 0f, f.rgb()));
+            edges.add(new Ruling(f.top(), f.x(), f.right(), 0f, f.rgb()));
+            edges.add(new Ruling(f.bottom(), f.x(), f.right(), 0f, f.rgb()));
         }
-        return all;
+        return edges;
     }
 
     private static float[][] gridEdges(List<Ruling> hs, List<Ruling> vs) {
