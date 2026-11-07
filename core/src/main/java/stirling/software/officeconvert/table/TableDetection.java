@@ -61,10 +61,11 @@ public final class TableDetection {
     public static List<Found> detect(PageContent content) {
         List<Ruling> horizontals = Rulings.merge(content.horizontals());
         List<Ruling> verticals = Rulings.merge(content.verticals());
+        List<FillBox> fills = content.fills().size() > MAX_GUIDES ? List.of() : content.fills();
         List<LatticeFinder.Found> lattices = new ArrayList<>();
         List<LatticeFinder.Found> frames = new ArrayList<>();
         for (LatticeFinder.Found f :
-                LatticeFinder.find(content.pageNumber(), horizontals, verticals, content.words())) {
+                LatticeFinder.find(content.pageNumber(), horizontals, verticals, content.words(), fills)) {
             (f.table() != null ? lattices : frames).add(f);
         }
         List<List<PdfWord>> framed = new ArrayList<>();
@@ -80,7 +81,6 @@ public final class TableDetection {
             (frame >= 0 ? framed.get(frame) : free).add(w);
         }
         List<Ruling> rules = horizontals.size() > MAX_GUIDES ? List.of() : horizontals;
-        List<FillBox> fills = content.fills().size() > MAX_GUIDES ? List.of() : content.fills();
         List<DraftTable> drafts = new ArrayList<>();
         for (LatticeFinder.Found f : lattices) {
             drafts.add(f.table());

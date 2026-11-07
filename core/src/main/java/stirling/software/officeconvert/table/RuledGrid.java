@@ -16,39 +16,69 @@ final class RuledGrid {
 
     private static final float EDGE_COVERAGE = 0.6f;
 
+    private static final float TOLERANCE = LINE_TOLERANCE + 0.5f;
+
     final float[] xs;
     final float[] ys;
     private final boolean[][] vertical;
     private final boolean[][] horizontal;
+    /** Lines between rows: the drawn ones, plus filled bands' edges, which keep rows apart but aren't drawn. */
+    private final boolean[][] rowBreaks;
 
-    private RuledGrid(float[] xs, float[] ys, boolean[][] vertical, boolean[][] horizontal) {
+    private RuledGrid(
+            float[] xs, float[] ys, boolean[][] vertical, boolean[][] horizontal, boolean[][] rowBreaks) {
         this.xs = xs;
         this.ys = ys;
         this.vertical = vertical;
         this.horizontal = horizontal;
+        this.rowBreaks = rowBreaks;
     }
 
     static RuledGrid measure(float[] xs, float[] ys, List<Ruling> hs, List<Ruling> vs) {
+        return measure(xs, ys, hs, vs, List.of());
+    }
+
+    /**
+     * {@code bandEdges} keep the rows on either side apart without counting as drawn borders, which Word and Excel
+     * would draw as black lines.
+     */
+    static RuledGrid measure(
+            float[] xs, float[] ys, List<Ruling> hs, List<Ruling> vs, List<Ruling> bandEdges) {
         int rows = ys.length - 1;
         int cols = xs.length - 1;
-        float tolerance = LINE_TOLERANCE + 0.5f;
         boolean[][] vertical = new boolean[rows][cols + 1];
-        boolean[][] horizontal = new boolean[rows + 1][cols];
         for (int c = 0; c <= cols; c++) {
-            List<Ruling> near = near(vs, xs[c], tolerance);
+            List<Ruling> near = near(vs, xs[c], TOLERANCE);
             for (int r = 0; r < rows; r++) {
                 vertical[r][c] =
-                        Rulings.coverage(near, xs[c], ys[r], ys[r + 1], tolerance) >= EDGE_COVERAGE;
+                        Rulings.coverage(near, xs[c], ys[r], ys[r + 1], TOLERANCE) >= EDGE_COVERAGE;
             }
         }
-        for (int r = 0; r <= rows; r++) {
-            List<Ruling> near = near(hs, ys[r], tolerance);
+        boolean[][] horizontal = horizontals(xs, ys, hs);
+        boolean[][] rowBreaks = horizontal;
+        if (!bandEdges.isEmpty()) {
+            boolean[][] edges = horizontals(xs, ys, bandEdges);
+            rowBreaks = new boolean[rows + 1][cols];
+            for (int r = 0; r <= rows; r++) {
+                for (int c = 0; c < cols; c++) {
+                    rowBreaks[r][c] = horizontal[r][c] || edges[r][c];
+                }
+            }
+        }
+        return new RuledGrid(xs, ys, vertical, horizontal, rowBreaks);
+    }
+
+    private static boolean[][] horizontals(float[] xs, float[] ys, List<Ruling> hs) {
+        int cols = xs.length - 1;
+        boolean[][] horizontal = new boolean[ys.length][cols];
+        for (int r = 0; r < ys.length; r++) {
+            List<Ruling> near = near(hs, ys[r], TOLERANCE);
             for (int c = 0; c < cols; c++) {
                 horizontal[r][c] =
-                        Rulings.coverage(near, ys[r], xs[c], xs[c + 1], tolerance) >= EDGE_COVERAGE;
+                        Rulings.coverage(near, ys[r], xs[c], xs[c + 1], TOLERANCE) >= EDGE_COVERAGE;
             }
         }
-        return new RuledGrid(xs, ys, vertical, horizontal);
+        return horizontal;
     }
 
     private static List<Ruling> near(List<Ruling> rulings, float pos, float tolerance) {
@@ -133,7 +163,7 @@ final class RuledGrid {
                 if (c + 1 < cols && !vertical[r][c + 1]) {
                     groups.union(r * cols + c, r * cols + c + 1);
                 }
-                if (r + 1 < rows && !horizontal[r + 1][c]) {
+                if (r + 1 < rows && !rowBreaks[r + 1][c]) {
                     groups.union(r * cols + c, (r + 1) * cols + c);
                 }
             }

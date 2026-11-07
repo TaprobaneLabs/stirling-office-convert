@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+import stirling.software.officeconvert.table.PageContent.FillBox;
 import stirling.software.officeconvert.table.PageContent.PdfWord;
 import stirling.software.officeconvert.table.PageContent.Ruling;
 
@@ -32,6 +33,15 @@ final class LatticeFinder {
 
     static List<Found> find(
             int page, List<Ruling> horizontals, List<Ruling> verticals, List<PdfWord> words) {
+        return find(page, horizontals, verticals, words, List.of());
+    }
+
+    /**
+     * The ruled tables on a page. {@code fills} are its filled bands: their top and bottom edges count as
+     * drawn where they lie on the grid's row lines, so a shaded row isn't joined to the row under it.
+     */
+    static List<Found> find(
+            int page, List<Ruling> horizontals, List<Ruling> verticals, List<PdfWord> words, List<FillBox> fills) {
         List<Ruling> hs = longEnough(horizontals);
         List<Ruling> vs = longEnough(verticals);
         if (hs.size() < 2 || vs.size() < 2 || hs.size() > MAX_RULINGS || vs.size() > MAX_RULINGS) {
@@ -42,7 +52,7 @@ final class LatticeFinder {
             List<Ruling> componentHs = component.get(0);
             List<Ruling> componentVs = component.get(1);
             if (componentHs.size() >= 2 && componentVs.size() >= 2) {
-                Found f = build(page, componentHs, componentVs, words);
+                Found f = build(page, componentHs, componentVs, words, fills);
                 if (f != null) {
                     found.add(f);
                 }
@@ -88,7 +98,8 @@ final class LatticeFinder {
         return new ArrayList<>(byRoot.values());
     }
 
-    private static Found build(int page, List<Ruling> hs, List<Ruling> vs, List<PdfWord> words) {
+    private static Found build(
+            int page, List<Ruling> hs, List<Ruling> vs, List<PdfWord> words, List<FillBox> fills) {
         float[][] edges = gridEdges(hs, vs);
         float[] xs = edges[0];
         float[] ys = edges[1];
@@ -122,13 +133,28 @@ final class LatticeFinder {
         if ((long) (xs.length - 1) * (ys.length - 1) > MAX_GRID_CELLS) {
             return null;
         }
-        RuledGrid grid = RuledGrid.measure(xs, ys, hs, vs);
+        RuledGrid grid = RuledGrid.measure(xs, ys, hs, vs, bandEdges(fills));
         grid.addTextColumnLines(inside);
         DraftTable table = cells(page, grid, inside);
         if (!looksLikeTable(table) || proseOutside(table, grid)) {
             return null;
         }
         return new Found(RuledBandSplitter.split(table), region);
+    }
+
+    /**
+     * The filled bands' top and bottom edges, which keep the rows on either side apart: neither finds a grid line
+     * nor counts as a drawn border. A Closing Disclosure's section heading is a grey band with no rule under it,
+     * so its cells were joined to the first item's: "A. Origination Charges" over "01 0.25 % of Loan Amount",
+     * "$1,802.00" over "$405.00".
+     */
+    static List<Ruling> bandEdges(List<FillBox> fills) {
+        List<Ruling> edges = new ArrayList<>(fills.size() * 2);
+        for (FillBox f : fills) {
+            edges.add(new Ruling(f.top(), f.x(), f.right(), 0f, f.rgb()));
+            edges.add(new Ruling(f.bottom(), f.x(), f.right(), 0f, f.rgb()));
+        }
+        return edges;
     }
 
     private static float[][] gridEdges(List<Ruling> hs, List<Ruling> vs) {
