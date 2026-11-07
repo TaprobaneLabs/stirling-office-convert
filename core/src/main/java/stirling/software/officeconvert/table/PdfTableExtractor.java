@@ -48,16 +48,16 @@ public class PdfTableExtractor {
         PageContent content = PageContentReader.read(document, pageNumber);
         List<Ruling> horizontals = Rulings.merge(content.horizontals());
         List<Ruling> verticals = Rulings.merge(content.verticals());
+        List<FillBox> fills = content.fills().size() > MAX_GUIDES ? List.of() : content.fills();
         List<LatticeFinder.Found> lattices = new ArrayList<>();
         List<LatticeFinder.Found> frames = new ArrayList<>();
         for (LatticeFinder.Found f :
-                LatticeFinder.find(pageNumber, horizontals, verticals, content.words())) {
+                LatticeFinder.find(pageNumber, horizontals, verticals, content.words(), fills)) {
             (f.table() != null ? lattices : frames).add(f);
         }
         WordRegions regions = partition(content.words(), lattices, frames);
 
         List<Ruling> rules = horizontals.size() > MAX_GUIDES ? List.of() : horizontals;
-        List<FillBox> fills = content.fills().size() > MAX_GUIDES ? List.of() : content.fills();
         List<DraftTable> drafts = new ArrayList<>();
         for (LatticeFinder.Found f : lattices) {
             drafts.add(f.table());
