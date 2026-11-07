@@ -3,6 +3,7 @@ package stirling.software.officeconvert.pptx;
 import java.util.List;
 import java.util.Map;
 
+import stirling.software.officeconvert.build.SubstituteMetrics;
 import stirling.software.officeconvert.layout.Marker;
 import stirling.software.officeconvert.model.Inline;
 import stirling.software.officeconvert.model.Paragraph.Align;
@@ -348,11 +349,28 @@ final class TextXml {
     static int spacing(RunStyle s, String text) {
         float spc = s.spacing();
         if (s.scale() != 100) {
-            float unit = text == null ? Float.NaN : ScriptWidths.perUnit(text, s.bold());
-            spc += (s.scale() / 100f - 1f) * (Float.isNaN(unit) ? 0.5f : unit) * s.size();
+            spc += scaleSpacing(s, text);
         }
         spc = Math.clamp(spc, -0.1f * s.size(), 0.5f * s.size());
         return Math.clamp(Math.round(spc * 100f), -400000, 400000);
+    }
+
+    /**
+     * The character spacing that widens or narrows a run as its character scale does in Word: PowerPoint has no scale. A
+     * stand-in's own widths make the run as wide as the scale would; without them, a script's typical width, or half an
+     * em. Half an em overshot Times New Roman's 0.44: the Federal Register's Melior, set in Times New Roman at 114%,
+     * came out about 4 pt wider a line than the PDF, and its columns wrapped 50 lines more on PowerPoint's slides.
+     */
+    private static float scaleSpacing(RunStyle s, String text) {
+        float stretch = s.scale() / 100f - 1f;
+        if (text != null && !text.isEmpty()) {
+            float width = SubstituteMetrics.width(text, s.font(), s.bold(), s.italic(), s.size());
+            if (!Float.isNaN(width)) {
+                return stretch * width / text.codePointCount(0, text.length());
+            }
+        }
+        float unit = text == null ? Float.NaN : ScriptWidths.perUnit(text, s.bold());
+        return stretch * (Float.isNaN(unit) ? 0.5f : unit) * s.size();
     }
 
     private static boolean rightToLeft(String s) {
