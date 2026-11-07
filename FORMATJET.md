@@ -129,3 +129,4 @@ FormatJet's pdf-office engine: PDF to Word, Excel and PowerPoint.
 | `0.2.2-fj.19` | Give an OCR layer's text the width Word's half-point size takes from it, so a scanned paragraph's lines keep their widths against each other and their breaks in Word (#109) | Not offered yet |
 | Next release | Join a spreadsheet cell's wrapped Korean lines with a space, as Word and PowerPoint outputs do: Hangul isn't written without spaces, and joined without one, every line end ran two words together (#110) | Not offered yet |
 | Next release | Leave object replacement characters (U+FFFC), which a PDF's text maps to glyphs it can't name, out of spreadsheet cells, so MMWR's masthead no longer makes a cell of them (#111) | Not offered yet |
+| Next release | Count a filled band's top and bottom edges as drawn row lines in a ruled table, so a Closing Disclosure's grey section heading isn't joined to the item under it (#113) | Not offered yet |
