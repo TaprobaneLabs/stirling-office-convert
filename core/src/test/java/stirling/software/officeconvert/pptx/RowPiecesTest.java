@@ -77,7 +77,8 @@ class RowPiecesTest {
     void emptyCellsAreSizedToTheirRow() {
         Table t = leaders();
         StringBuilder sb = new StringBuilder();
-        TextXml text = new TextXml(new SlideRels("../slideLayouts/slideLayout1.xml"), page -> 0, new HashMap<>(), null);
+        TextXml text = new TextXml(new SlideRels("../slideLayouts/slideLayout1.xml"), page -> 0, new HashMap<>(), null,
+                new OpenFaces(java.util.Map.of()));
         new TableXml(text).table(sb, new TableShape(10, 100, t), 2);
         assertTrue(sb.toString().contains("<a:endParaRPr sz=\"923\""), sb.toString());
     }

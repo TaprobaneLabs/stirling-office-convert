@@ -10,15 +10,17 @@ final class PptxParts {
 
     private PptxParts() {}
 
-    static String presentation(int slides, long cx, long cy) {
+    /** {@code fontList}: the presentation's {@code p:embeddedFontLst}, or empty. */
+    static String presentation(int slides, long cx, long cy, String fontList) {
         StringBuilder sb = new StringBuilder(Ooxml.HEADER).append("<p:presentation").append(Ooxml.NAMESPACES)
+                .append(fontList.isEmpty() ? "" : " embedTrueTypeFonts=\"1\"")
                 .append(" saveSubsetFonts=\"1\"><p:sldMasterIdLst><p:sldMasterId id=\"2147483648\" r:id=\"rId1\"/>")
                 .append("</p:sldMasterIdLst><p:sldIdLst>");
         for (int i = 0; i < slides; i++) {
             sb.append("<p:sldId id=\"").append(256 + i).append("\" r:id=\"rId").append(10 + i).append("\"/>");
         }
         sb.append("</p:sldIdLst><p:sldSz cx=\"").append(cx).append("\" cy=\"").append(cy)
-                .append("\"/><p:notesSz cx=\"6858000\" cy=\"9144000\"/><p:defaultTextStyle>")
+                .append("\"/><p:notesSz cx=\"6858000\" cy=\"9144000\"/>").append(fontList).append("<p:defaultTextStyle>")
                 .append("<a:defPPr><a:defRPr lang=\"en-US\"/></a:defPPr>");
         for (int level = 1; level <= 9; level++) {
             sb.append("<a:lvl").append(level).append("pPr marL=\"").append((level - 1) * 457200L)
@@ -34,7 +36,8 @@ final class PptxParts {
                 + "-cs\"/></a:defRPr>";
     }
 
-    static String presentationRels(int slides) {
+    /** {@code fontRels}: the relationships to the embedded fonts, or empty. */
+    static String presentationRels(int slides, String fontRels) {
         StringBuilder sb = new StringBuilder(Ooxml.HEADER).append("<Relationships xmlns=\"").append(RELS_NS).append("\">");
         rel(sb, "rId1", "slideMaster", "slideMasters/slideMaster1.xml");
         rel(sb, "rId2", "theme", "theme/theme1.xml");
@@ -44,7 +47,7 @@ final class PptxParts {
         for (int i = 0; i < slides; i++) {
             rel(sb, "rId" + (10 + i), "slide", "slides/slide" + (i + 1) + ".xml");
         }
-        return sb.append("</Relationships>").toString();
+        return sb.append(fontRels).append("</Relationships>").toString();
     }
 
     private static void rel(StringBuilder sb, String id, String type, String target) {
@@ -178,13 +181,16 @@ final class PptxParts {
         return Ooxml.HEADER + "<a:tblStyleLst xmlns:a=\"" + Ooxml.NS_A + "\" def=\"{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}\"/>";
     }
 
-    static String contentTypes(int slides) {
+    static String contentTypes(int slides, boolean fonts) {
         StringBuilder sb = new StringBuilder(Ooxml.HEADER)
                 .append("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">")
                 .append("<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>")
                 .append("<Default Extension=\"xml\" ContentType=\"application/xml\"/>")
                 .append("<Default Extension=\"png\" ContentType=\"image/png\"/>")
                 .append("<Default Extension=\"jpeg\" ContentType=\"image/jpeg\"/>");
+        if (fonts) {
+            sb.append("<Default Extension=\"fntdata\" ContentType=\"").append(OpenFaces.CONTENT_TYPE).append("\"/>");
+        }
         override(sb, "/ppt/presentation.xml", CT + "presentation.main+xml");
         override(sb, "/ppt/slideMasters/slideMaster1.xml", CT + "slideMaster+xml");
         override(sb, "/ppt/slideLayouts/" + SlideXml.TITLE_LAYOUT, CT + "slideLayout+xml");

@@ -27,17 +27,19 @@ final class TextXml {
     private final Links links;
     private final Map<String, Integer> fonts;
     private final Scripts.Profile scripts;
+    private final OpenFaces faces;
     private boolean invisible;
 
     interface Links {
         int slideOf(int page);
     }
 
-    TextXml(SlideRels rels, Links links, Map<String, Integer> fonts, Scripts.Profile scripts) {
+    TextXml(SlideRels rels, Links links, Map<String, Integer> fonts, Scripts.Profile scripts, OpenFaces faces) {
         this.rels = rels;
         this.links = links;
         this.fonts = fonts;
         this.scripts = scripts;
+        this.faces = faces;
     }
 
     void paragraph(StringBuilder sb, TextPara p, boolean unseen) {
@@ -319,8 +321,9 @@ final class TextXml {
         if (s.font() != null) {
             String f = Ooxml.esc(s.font());
             Scripts.Fonts slots = Scripts.fonts(s.font(), text, scripts);
+            String latin = slots.latin().equals(s.font()) ? faces.name(s.font(), s.bold(), s.italic()) : slots.latin();
             String sym = s.symbol() ? " pitchFamily=\"2\" charset=\"2\"" : "";
-            sb.append("<a:latin typeface=\"").append(Ooxml.esc(slots.latin())).append('"').append(sym).append("/><a:ea typeface=\"")
+            sb.append("<a:latin typeface=\"").append(Ooxml.esc(latin)).append('"').append(sym).append("/><a:ea typeface=\"")
                     .append(Ooxml.esc(slots.eastAsian())).append("\"/><a:cs typeface=\"").append(Ooxml.esc(slots.complex())).append("\"/>");
             if (s.symbol()) {
                 sb.append("<a:sym typeface=\"").append(f).append("\" pitchFamily=\"2\" charset=\"2\"/>");
