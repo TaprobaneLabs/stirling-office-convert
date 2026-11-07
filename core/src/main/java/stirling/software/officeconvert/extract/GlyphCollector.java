@@ -467,7 +467,9 @@ final class GlyphCollector extends PDFStreamEngine {
             carry(tp);
             return;
         }
-        String unicode = clean(invisible ? tp.getUnicode() : recovery.text(tp, tp.getUnicode()));
+        PDFont pdFont = tp.getFont();
+        FontInfo font = fonts.resolve(pdFont);
+        String unicode = clean(symbolCode(invisible ? tp.getUnicode() : recovery.text(tp, tp.getUnicode()), font));
         if (unicode == null && outerActual != null) {
             unicode = HIDDEN;
         }
@@ -478,8 +480,6 @@ final class GlyphCollector extends PDFStreamEngine {
                 mode.isStroke() && !mode.isFill() ? gs.getStrokingColor() : gs.getNonStrokingColor();
         int rgb = toRgb(colour);
 
-        PDFont pdFont = tp.getFont();
-        FontInfo font = fonts.resolve(pdFont);
         float size = fontSize(tp);
         float[] m = metrics(pdFont);
         float space = spaceWidth(tp, pdFont, size, m[2]);
@@ -757,6 +757,21 @@ final class GlyphCollector extends PDFStreamEngine {
         } catch (IOException | RuntimeException e) {
             return 0;
         }
+    }
+
+    /**
+     * A symbol font's glyph whose text the PDF gives only as a C1 control (U+0080 to U+009F), as a bullet. InDesign maps
+     * a Wingdings glyph it can't name to its glyph number: CDC's kidney disease fact sheet gives its square bullets as
+     * U+0083 and U+008A. {@link #clean} reads a text font's C1 controls as Windows-1252, rightly, but those bullets came
+     * out "ƒ" and "Š". Neither the code nor the subset font names the glyph, so it's kept as a plain bullet, the mark a
+     * list's marker becomes in every output anyway.
+     */
+    static String symbolCode(String unicode, FontInfo font) {
+        if (unicode == null || unicode.length() != 1 || font == null || !font.symbolic()) {
+            return unicode;
+        }
+        char c = unicode.charAt(0);
+        return c >= 0x80 && c <= 0x9F ? "•" : unicode;
     }
 
     private static final String CP1252 =
