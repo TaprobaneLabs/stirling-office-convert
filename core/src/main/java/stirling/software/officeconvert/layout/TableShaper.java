@@ -206,18 +206,55 @@ final class TableShaper {
         return filled >= 2 && markers * 10 >= filled * 7;
     }
 
+    /**
+     * How far above a table's first row, or below its last, a rule still frames it: 3 pt, or half the table's type size.
+     * A paper's top rule sits about 4 pt above a 10 pt header (arXiv 2403.01461's Table 3: 3.96 pt). Past a fixed 3 pt it
+     * was left out, the rule under the header took its place, and the header was trimmed off, leaving two rows that
+     * weren't taken for a table. {@link #trimToRules} reaches this far only for a frame, a rule over the first row and
+     * one under the last: a lone rule just above a table (the last table's bottom rule) would make it trim instead.
+     */
+    static float ruleReach(TableDetection.Found t, List<PdfWord> words) {
+        float size = 0;
+        for (PdfWord w : words) {
+            float cx = (w.x() + w.right()) / 2f;
+            float cy = (w.top() + w.bottom()) / 2f;
+            if (cx >= t.left() && cx <= t.right() && cy >= t.top() && cy <= t.bottom()) {
+                size = Math.max(size, w.fontSize());
+            }
+        }
+        return Math.max(3f, 0.5f * size);
+    }
+
+    /** Whether a horizontal rule across most of the table's width lies between {@code from} and {@code to}. */
+    private static boolean spanningRule(List<stirling.software.officeconvert.extract.PageGraphics.Rule> rules,
+            TableDetection.Found t, float from, float to) {
+        float width = t.right() - t.left();
+        for (var r : rules) {
+            if (r.horizontal() && r.length() >= width * 0.8f && r.start() <= t.left() + width * 0.2f
+                    && r.end() >= t.right() - width * 0.2f && r.pos() >= from && r.pos() <= to) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static TableDetection.Found trimToRules(TableDetection.Found t, List<stirling.software.officeconvert.extract.PageGraphics.Rule> rules,
             List<PdfWord> words) {
         if (t.ruled()) {
             return t;
         }
         float width = t.right() - t.left();
+        float reach = ruleReach(t, words);
+        // Only a frame, a rule over the first row and one under the last, takes the wider reach
+        if (!spanningRule(rules, t, t.top() - reach, t.top()) || !spanningRule(rules, t, t.bottom(), t.bottom() + reach)) {
+            reach = 3f;
+        }
         float top = Float.MAX_VALUE;
         float bottom = -Float.MAX_VALUE;
         int n = 0;
         for (var r : rules) {
             if (!r.horizontal() || r.length() < width * 0.8f || r.start() > t.left() + width * 0.2f
-                    || r.end() < t.right() - width * 0.2f || r.pos() < t.top() - 3 || r.pos() > t.bottom() + 3) {
+                    || r.end() < t.right() - width * 0.2f || r.pos() < t.top() - reach || r.pos() > t.bottom() + reach) {
                 continue;
             }
             top = Math.min(top, r.pos());
