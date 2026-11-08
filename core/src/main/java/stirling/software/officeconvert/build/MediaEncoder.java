@@ -30,7 +30,6 @@ import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
-import org.apache.pdfbox.rendering.PDFRenderer;
 
 import stirling.software.officeconvert.Pictures;
 import stirling.software.officeconvert.extract.ImageBudget;
@@ -49,6 +48,9 @@ final class MediaEncoder {
 
     private static final float PAPER_DPI = 110f;
 
+    /** Pixels around a rendered region whose drawing still counts: antialiased edges reach into it. */
+    private static final float WINDOW_MARGIN = 2f;
+
     record Encoded(byte[] bytes, String ext, int width, int height) {}
 
     private static final long MAX_PIXELS = 16_000_000L;
@@ -60,9 +62,9 @@ final class MediaEncoder {
     private final PDDocument document;
     private final float figureDpi;
     private final boolean lossless;
-    private PDFRenderer renderer;
-    private PDFRenderer textFreeRenderer;
-    private final java.util.Map<Integer, PDFRenderer> turnedRenderers = new java.util.HashMap<>();
+    private FigureRenderer renderer;
+    private FigureRenderer textFreeRenderer;
+    private final java.util.Map<Integer, FigureRenderer> turnedRenderers = new java.util.HashMap<>();
     private FigureRenderer paperRenderer;
     private FigureRenderer groundRenderer;
     private int lastFigurePage = -1;
@@ -175,7 +177,7 @@ final class MediaEncoder {
     Encoded figure(PDPage page, int pageIndex, AffineTransform toDisplay, Box box, boolean withText, int turnedFrom) {
         try {
             if (!withText) {
-                PDFRenderer r = turnedFrom < 0 ? textFree() : turnedOnly(turnedFrom);
+                FigureRenderer r = turnedFrom < 0 ? textFree() : turnedOnly(turnedFrom);
                 return png(render(r, page, pageIndex, toDisplay, box, scaleFor(box)));
             }
             if (pageIndex == lastFigurePage) {
@@ -270,7 +272,7 @@ final class MediaEncoder {
         return scale;
     }
 
-    private PDFRenderer renderer() {
+    private FigureRenderer renderer() {
         if (renderer == null) {
             renderer = new FigureRenderer(document, true);
             renderer.setSubsamplingAllowed(true);
@@ -294,7 +296,7 @@ final class MediaEncoder {
         return paperRenderer;
     }
 
-    private PDFRenderer turnedOnly(int direction) {
+    private FigureRenderer turnedOnly(int direction) {
         return turnedRenderers.computeIfAbsent(direction, d -> {
             FigureRenderer r = FigureRenderer.turnedOnly(document, d);
             r.setSubsamplingAllowed(true);
@@ -302,7 +304,7 @@ final class MediaEncoder {
         });
     }
 
-    private PDFRenderer textFree() {
+    private FigureRenderer textFree() {
         if (textFreeRenderer == null) {
             textFreeRenderer = new FigureRenderer(document, false);
             textFreeRenderer.setSubsamplingAllowed(true);
@@ -325,10 +327,13 @@ final class MediaEncoder {
         return (long) Math.max(1, Math.round(box.width() * scale)) * Math.max(1, Math.round(box.height() * scale));
     }
 
-    private static BufferedImage render(PDFRenderer renderer, PDPage page, int pageIndex, AffineTransform toDisplay,
+    private static BufferedImage render(FigureRenderer renderer, PDPage page, int pageIndex, AffineTransform toDisplay,
             Box box, float scale) throws IOException, java.awt.geom.NoninvertibleTransformException {
         int w = Math.max(1, Math.round(box.width() * scale));
         int h = Math.max(1, Math.round(box.height() * scale));
+        Box kept = box.grow(WINDOW_MARGIN / scale);
+        renderer.window(toDisplay.createInverse().createTransformedShape(
+                new Rectangle2D.Float(kept.x(), kept.top(), kept.width(), kept.height())).getBounds2D());
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
         Graphics2D g = img.createGraphics();
         try {
