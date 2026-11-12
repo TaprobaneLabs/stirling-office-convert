@@ -223,11 +223,12 @@ final class TextFrames {
         }
         boolean ocr = unseen(d);
         float grow = ocr ? OcrSizes.factor(d) : 1f;
-        float size = OcrSizes.grown(firstLineSize(first), grow);
-        float pitch = d.pitch > 0 ? d.pitch : 1.2f * size;
-        float lineHeight = LineBoxes.settle(Math.clamp(pitch, 0.7f * size, 3f * size), size);
         boolean rtl = Marker.startIndex(first) > 0;
         Align align = bullet != null && d.lines.size() == 1 ? rtl ? Align.RIGHT : Align.LEFT : d.align;
+        int marker = bullet != null && listed(align, content.bidi(d)) ? Marker.startIndex(first) : -1;
+        float size = OcrSizes.grown(firstLineSize(first, marker), grow);
+        float pitch = d.pitch > 0 ? d.pitch : 1.2f * size;
+        float lineHeight = LineBoxes.settle(Math.clamp(pitch, 0.7f * size, 3f * size), size);
         int order = -1;
         boolean hidden = false;
         if (paint != null) {
@@ -253,10 +254,26 @@ final class TextFrames {
         return true;
     }
 
-    private static float firstLineSize(Line l) {
+    /**
+     * Whether a bulleted paragraph's bullet is written as the slide's own: other alignments keep the marker as a run of
+     * the paragraph's text.
+     */
+    private static boolean listed(Align align, boolean bidi) {
+        return align == Align.LEFT || align == Align.JUSTIFY || bidi && align == Align.RIGHT;
+    }
+
+    /**
+     * The size of a paragraph's first line, leaving out its bullet when the slide writes it as its own ({@code marker},
+     * the marker word's index, or -1), sized apart: the line spacing is a share of this size. NOAA GeoXO's 18-point
+     * bullets before 11-point text made its 13-point lines 60%, which PowerPoint takes of the 11-point runs.
+     */
+    private static float firstLineSize(Line l, int marker) {
         float max = 0;
-        for (Word w : l.words) {
-            for (Glyph g : w.glyphs) {
+        for (int i = 0; i < l.words.size(); i++) {
+            if (i == marker) {
+                continue;
+            }
+            for (Glyph g : l.words.get(i).glyphs) {
                 if (g.vertAlign == 0 && !g.isSpace()) {
                     max = Math.max(max, g.size);
                 }
@@ -363,7 +380,7 @@ final class TextFrames {
             }
             OfficeFonts.restore(runs, g.d);
             iconsOut(runs, g.d, placeIcons ? icons : null);
-            boolean listed = align == Align.LEFT || align == Align.JUSTIFY || rtl && align == Align.RIGHT;
+            boolean listed = listed(align, bidi);
             if (g.bullet != null && !listed) {
                 runs = content.runs(g.d, 0, boxLeft, boxRight);
                 OfficeFonts.restore(runs, g.d);
