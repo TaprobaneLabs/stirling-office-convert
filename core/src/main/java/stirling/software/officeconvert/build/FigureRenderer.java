@@ -146,8 +146,12 @@ final class FigureRenderer extends PDFRenderer {
             private boolean painting;
             private final OperatorBudget budget = new OperatorBudget("rendering a figure");
 
-            /** Operators running with a pattern for colour: PDFBox draws a tiling pattern's cell then, in its own space. */
-            private int patterned;
+            /**
+             * Drawing that isn't in page space, where nothing is skipped: a tiling pattern's cell, which PDFBox draws while
+             * an operator paints with the pattern, and an annotation, which PDFBox turns with the Java2D graphics alone
+             * when it's NoRotate on a turned page.
+             */
+            private int ownSpace;
 
             @Override
             protected void processOperator(Operator operator, List<COSBase> operands) throws IOException {
@@ -158,13 +162,13 @@ final class FigureRenderer extends PDFRenderer {
                 boolean pattern = gs.getNonStrokingColorSpace() instanceof PDPattern
                         || gs.getStrokingColorSpace() instanceof PDPattern;
                 if (pattern) {
-                    patterned++;
+                    ownSpace++;
                 }
                 try {
                     super.processOperator(operator, operands);
                 } finally {
                     if (pattern) {
-                        patterned--;
+                        ownSpace--;
                     }
                 }
             }
@@ -259,12 +263,9 @@ final class FigureRenderer extends PDFRenderer {
                 }
             }
 
-            /**
-             * Whether {@code r}, in page space, lies wholly outside the part of the page this render keeps. Never in a
-             * pattern's cell, which isn't drawn in page space.
-             */
+            /** Whether {@code r}, in page space, lies wholly outside the part of the page this render keeps. */
             private boolean missed(Rectangle2D r) {
-                return kept != null && patterned == 0 && r != null
+                return kept != null && ownSpace == 0 && r != null
                         && (r.getMaxX() < kept.getMinX() || r.getMinX() > kept.getMaxX()
                                 || r.getMaxY() < kept.getMinY() || r.getMinY() > kept.getMaxY());
             }
@@ -288,7 +289,12 @@ final class FigureRenderer extends PDFRenderer {
             @Override
             public void showAnnotation(PDAnnotation annotation) throws IOException {
                 if (!paper) {
-                    super.showAnnotation(annotation);
+                    ownSpace++;
+                    try {
+                        super.showAnnotation(annotation);
+                    } finally {
+                        ownSpace--;
+                    }
                 }
             }
 

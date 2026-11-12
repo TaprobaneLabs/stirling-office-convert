@@ -1,12 +1,16 @@
 package stirling.software.officeconvert.build;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.awt.Rectangle;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
@@ -17,6 +21,9 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.pattern.PDTilingPattern;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.junit.jupiter.api.Test;
 
 import stirling.software.officeconvert.extract.GreyGroupPages;
@@ -62,6 +69,60 @@ class FigureRendererTest {
                 }
             }
         }
+    }
+
+    /**
+     * PDFBox turns a NoRotate annotation on a turned page with the Java2D graphics alone, so its fills' bounds aren't
+     * where it shows: a window over where it shows, and away from its rectangle, still draws it.
+     */
+    @Test
+    void aNoRotateAnnotationOnATurnedPageKeepsWhatItShows() throws Exception {
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(new PDRectangle(200, 200));
+            page.setRotation(90);
+            doc.addPage(page);
+            PDAppearanceStream look = new PDAppearanceStream(doc);
+            look.setBBox(new PDRectangle(100, 30));
+            try (OutputStream o = look.getContentStream().createOutputStream()) {
+                o.write("1 0 0 rg 0 0 100 30 re f".getBytes(StandardCharsets.US_ASCII));
+            }
+            PDAppearanceDictionary appearance = new PDAppearanceDictionary();
+            appearance.setNormalAppearance(look);
+            PDAnnotationLink note = new PDAnnotationLink();
+            note.setRectangle(new PDRectangle(40, 120, 100, 30));
+            note.setNoRotate(true);
+            note.setAppearance(appearance);
+            page.setAnnotations(List.of(note));
+
+            BufferedImage whole = new FigureRenderer(doc, true).renderImage(0);
+            Rectangle red = redBounds(whole);
+            // Where the annotation shows, in page space: the page's turn undone, 2 pixels in from its edges
+            AffineTransform toImage = new AffineTransform();
+            toImage.translate(200, 0);
+            toImage.rotate(Math.toRadians(90));
+            toImage.translate(0, 200);
+            toImage.scale(1, -1);
+            FigureRenderer windowed = new FigureRenderer(doc, true);
+            windowed.window(toImage.createInverse().createTransformedShape(
+                    new Rectangle2D.Double(red.x + 2, red.y + 2, red.width - 4, red.height - 4)).getBounds2D());
+            int x = red.x + red.width / 2;
+            int y = red.y + red.height / 2;
+            int rgb = windowed.renderImage(0).getRGB(x, y);
+            assertEquals(0xFF0000, rgb & 0xFFFFFF, Integer.toHexString(rgb));
+        }
+    }
+
+    private static Rectangle redBounds(BufferedImage image) {
+        Rectangle box = null;
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                if ((image.getRGB(x, y) & 0xFFFFFF) == 0xFF0000) {
+                    box = box == null ? new Rectangle(x, y, 1, 1) : box.union(new Rectangle(x, y, 1, 1));
+                }
+            }
+        }
+        assertNotNull(box, "the annotation is drawn");
+        return box;
     }
 
     /**
