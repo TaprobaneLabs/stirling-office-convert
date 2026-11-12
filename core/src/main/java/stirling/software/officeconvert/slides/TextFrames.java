@@ -223,7 +223,7 @@ final class TextFrames {
         }
         boolean ocr = unseen(d);
         float grow = ocr ? OcrSizes.factor(d) : 1f;
-        float size = OcrSizes.grown(firstLineSize(first), grow);
+        float size = OcrSizes.grown(firstLineSize(first, bullet != null ? Marker.startIndex(first) : -1), grow);
         float pitch = d.pitch > 0 ? d.pitch : 1.2f * size;
         float lineHeight = LineBoxes.settle(Math.clamp(pitch, 0.7f * size, 3f * size), size);
         boolean rtl = Marker.startIndex(first) > 0;
@@ -253,10 +253,18 @@ final class TextFrames {
         return true;
     }
 
-    private static float firstLineSize(Line l) {
+    /**
+     * The size of a paragraph's first line, leaving out its bullet ({@code marker}, the marker word's index, or -1): the
+     * slide gives the bullet its own size, and the line spacing is a share of this one. NOAA GeoXO's 18-point bullets
+     * before 11-point text made its 13-point lines 60%, which PowerPoint takes of the 11-point runs.
+     */
+    private static float firstLineSize(Line l, int marker) {
         float max = 0;
-        for (Word w : l.words) {
-            for (Glyph g : w.glyphs) {
+        for (int i = 0; i < l.words.size(); i++) {
+            if (i == marker) {
+                continue;
+            }
+            for (Glyph g : l.words.get(i).glyphs) {
                 if (g.vertAlign == 0 && !g.isSpace()) {
                     max = Math.max(max, g.size);
                 }
