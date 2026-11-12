@@ -219,7 +219,9 @@ final class TextXml {
     }
 
     void runs(StringBuilder sb, List<Inline> inlines) {
-        for (Inline in : inlines) {
+        int shown = shown(inlines);
+        for (int i = 0; i < shown; i++) {
+            Inline in = inlines.get(i);
             switch (in) {
                 case Inline.Text t -> run(sb, t.text(), t.style(), t.link(), t.anchorPage());
                 case Inline.Tab t -> {
@@ -243,6 +245,32 @@ final class TextXml {
                 }
             }
         }
+    }
+
+    /**
+     * How many of a paragraph's inlines to write: not its trailing tabs and spaces, which show nothing. PowerPoint
+     * moves a tab with no stop left before the edge to a default stop past it, a line further down: a form's tabs to a
+     * checkbox and a drawn blank, both left out, pushed every row under them down (CFPB's Closing Disclosure and Loan
+     * Estimate). Underlined, struck or highlighted ones show, so they stay.
+     */
+    static int shown(List<Inline> inlines) {
+        int end = inlines.size();
+        while (end > 0 && blank(inlines, inlines.get(end - 1))) {
+            end--;
+        }
+        return end;
+    }
+
+    private static boolean blank(List<Inline> inlines, Inline in) {
+        RunStyle style;
+        if (in instanceof Inline.Tab t) {
+            style = t.style() != null ? t.style() : styleNear(inlines, in);
+        } else if (in instanceof Inline.Text t && t.text().isBlank()) {
+            style = t.style();
+        } else {
+            return false;
+        }
+        return style == null || !style.underline() && !style.strike() && style.highlight() < 0;
     }
 
     private void run(StringBuilder sb, String text, RunStyle style, String link, int anchorPage) {

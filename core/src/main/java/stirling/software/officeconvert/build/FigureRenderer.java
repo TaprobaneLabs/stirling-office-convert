@@ -15,9 +15,11 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType3Font;
+import org.apache.pdfbox.pdmodel.graphics.color.PDPattern;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.form.PDTransparencyGroup;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
+import org.apache.pdfbox.pdmodel.graphics.state.PDGraphicsState;
 import org.apache.pdfbox.pdmodel.graphics.state.PDTextState;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
@@ -51,6 +53,8 @@ final class FigureRenderer extends PDFRenderer {
     private Rectangle2D span;
     /** Image draws the next render leaves out. */
     private List<Drawn> leftOut = List.of();
+    /** The part of the page the next render keeps, in page space; null for all of it. */
+    private Rectangle2D window;
 
     /** An image draw on the PDF page: the image's bounds, and the part of them its clip shows. */
     record Drawn(Rectangle2D bounds, Rectangle2D shown) {}
@@ -125,18 +129,47 @@ final class FigureRenderer extends PDFRenderer {
         leftOut = draws;
     }
 
+    /**
+     * The part of the page the next render keeps. PDFBox draws a transparency group or a soft mask in full, whatever
+     * the target's clip, so a figure would draw every masked photo on its page; the render skips those that miss it.
+     */
+    void window(Rectangle2D region) {
+        window = region;
+    }
+
     @Override
     protected PageDrawer createPageDrawer(PageDrawerParameters parameters) throws IOException {
         Rectangle2D target = span;
         List<Drawn> skipped = leftOut;
+        Rectangle2D kept = window;
         return new PageDrawer(parameters) {
             private boolean painting;
             private final OperatorBudget budget = new OperatorBudget("rendering a figure");
 
+            /**
+             * Drawing that isn't in page space, where nothing is skipped: a tiling pattern's cell, which PDFBox draws while
+             * an operator paints with the pattern, and an annotation, which PDFBox turns with the Java2D graphics alone
+             * when it's NoRotate on a turned page.
+             */
+            private int ownSpace;
+
             @Override
             protected void processOperator(Operator operator, List<COSBase> operands) throws IOException {
-                if (budget.run(operator)) {
+                if (!budget.run(operator)) {
+                    return;
+                }
+                PDGraphicsState gs = getGraphicsState();
+                boolean pattern = gs.getNonStrokingColorSpace() instanceof PDPattern
+                        || gs.getStrokingColorSpace() instanceof PDPattern;
+                if (pattern) {
+                    ownSpace++;
+                }
+                try {
                     super.processOperator(operator, operands);
+                } finally {
+                    if (pattern) {
+                        ownSpace--;
+                    }
                 }
             }
 
@@ -149,7 +182,7 @@ final class FigureRenderer extends PDFRenderer {
 
             @Override
             public void showTransparencyGroup(PDTransparencyGroup form) throws IOException {
-                if (budget.form()) {
+                if (!missed(groupBounds(form)) && budget.form()) {
                     super.showTransparencyGroup(RgbGroup.of(form));
                 }
             }
@@ -168,6 +201,10 @@ final class FigureRenderer extends PDFRenderer {
 
             @Override
             public void fillPath(int windingRule) throws IOException {
+                if (missed(getLinePath().getBounds2D())) {
+                    getLinePath().reset();
+                    return;
+                }
                 if (!paper || painting) {
                     super.fillPath(windingRule);
                     return;
@@ -204,6 +241,9 @@ final class FigureRenderer extends PDFRenderer {
 
             @Override
             public void shadingFill(COSName shadingName) throws IOException {
+                if (missed(clipBounds())) {
+                    return;
+                }
                 if (!paper || painting) {
                     super.shadingFill(shadingName);
                 } else if (pageSized(clipBounds())) {
@@ -218,15 +258,43 @@ final class FigureRenderer extends PDFRenderer {
 
             @Override
             public void drawImage(PDImage pdImage) throws IOException {
-                if ((!paper || painting) && ImageBudget.affordable(pdImage) && !leftOut()) {
+                if ((!paper || painting) && !missed(unitSquare()) && ImageBudget.affordable(pdImage) && !leftOut()) {
                     super.drawImage(pdImage);
                 }
+            }
+
+            /** Whether {@code r}, in page space, lies wholly outside the part of the page this render keeps. */
+            private boolean missed(Rectangle2D r) {
+                return kept != null && ownSpace == 0 && r != null
+                        && (r.getMaxX() < kept.getMinX() || r.getMinX() > kept.getMaxX()
+                                || r.getMaxY() < kept.getMinY() || r.getMinY() > kept.getMaxY());
+            }
+
+            /** A form's bounding box on the page; its content is clipped to it. */
+            private Rectangle2D groupBounds(PDFormXObject form) {
+                PDRectangle box = form.getBBox();
+                if (box == null) {
+                    return null;
+                }
+                Matrix m = Matrix.concatenate(getGraphicsState().getCurrentTransformationMatrix(), form.getMatrix());
+                return box.transform(m).getBounds2D();
+            }
+
+            /** Where an image draw lands: the unit square under the current transformation. */
+            private Rectangle2D unitSquare() {
+                return getGraphicsState().getCurrentTransformationMatrix().createAffineTransform()
+                        .createTransformedShape(new Rectangle2D.Double(0, 0, 1, 1)).getBounds2D();
             }
 
             @Override
             public void showAnnotation(PDAnnotation annotation) throws IOException {
                 if (!paper) {
-                    super.showAnnotation(annotation);
+                    ownSpace++;
+                    try {
+                        super.showAnnotation(annotation);
+                    } finally {
+                        ownSpace--;
+                    }
                 }
             }
 
@@ -245,8 +313,7 @@ final class FigureRenderer extends PDFRenderer {
                 if (skipped.isEmpty()) {
                     return false;
                 }
-                Rectangle2D b = getGraphicsState().getCurrentTransformationMatrix().createAffineTransform()
-                        .createTransformedShape(new Rectangle2D.Double(0, 0, 1, 1)).getBounds2D();
+                Rectangle2D b = unitSquare();
                 Rectangle2D clip = clipBounds();
                 Rectangle2D shown = clip == null ? b : b.createIntersection(clip);
                 for (Drawn d : skipped) {
