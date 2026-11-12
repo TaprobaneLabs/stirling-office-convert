@@ -107,6 +107,7 @@ final class TextFrames {
         if (drafts.isEmpty()) {
             return null;
         }
+        fitLoneLines(drafts);
         float textLeft = Math.min(tb.textLeft(), minLeft(drafts));
         float textRight = Math.max(tb.textRight(), maxRight(drafts));
         float textTop = drafts.getFirst().boxTop();
