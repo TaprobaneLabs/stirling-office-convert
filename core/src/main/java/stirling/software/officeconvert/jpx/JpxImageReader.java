@@ -102,9 +102,12 @@ public final class JpxImageReader extends ImageReader {
         }
         int reduce = 31 - Integer.numberOfLeadingZeros(Math.min(sx, sy));
         JpxOptions options = JpxOptions.defaults().withReduce(reduce).withRegion(whole ? null : region);
-        JpxImage jpx = JpxDecoder.decode(bytes(), options);
-        BufferedImage reduced = jpx.toBufferedImage();
-        return Subsample.pick(reduced, region, sx, sy, jpx.reduce());
+        Rectangle wanted = region;
+        String part = region.x + "," + region.y + "," + region.width + "," + region.height + "/" + sx + "," + sy;
+        return DecodedImages.decode(bytes(), part, () -> {
+            JpxImage jpx = JpxDecoder.decode(bytes(), options);
+            return Subsample.pick(jpx.toBufferedImage(), wanted, sx, sy, jpx.reduce());
+        });
     }
 
     private void check(int imageIndex) {
@@ -126,7 +129,7 @@ public final class JpxImageReader extends ImageReader {
     private BufferedImage decodeFull() throws IOException {
         size();
         if (full == null) {
-            full = JpxDecoder.decode(bytes()).toBufferedImage();
+            full = DecodedImages.decode(bytes(), "full", () -> JpxDecoder.decode(bytes()).toBufferedImage());
         }
         return full;
     }
