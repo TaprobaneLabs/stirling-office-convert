@@ -2,6 +2,7 @@ package stirling.software.officeconvert.slides;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -35,6 +36,21 @@ class TextFramesBulletTest {
      */
     @Test
     void aBulletsOwnSizeDoesntSetItsParagraphsLineSpacing() throws IOException {
+        TextPara p = para(Paragraph.Align.LEFT);
+        assertNotNull(p.bullet());
+        assertEquals(TEXT, p.size(), 0.01f, p.toString());
+        assertEquals(PITCH, p.lineHeight(), 0.3f, p.toString());
+    }
+
+    /** A centred paragraph keeps its marker as text, where PowerPoint sizes the line by it (Codex's review). */
+    @Test
+    void aMarkerKeptAsTextStillSetsItsParagraphsSize() throws IOException {
+        TextPara p = para(Paragraph.Align.CENTER);
+        assertNull(p.bullet());
+        assertEquals(BULLET, p.size(), 0.01f, p.toString());
+    }
+
+    private static TextPara para(Paragraph.Align align) throws IOException {
         List<Glyph> glyphs = new ArrayList<>();
         glyphs.add(glyph("•", LEFT, 500, BULLET, 0));
         word(glyphs, "Lightning", LEFT + 10, 500);
@@ -43,15 +59,13 @@ class TextFramesBulletTest {
         word(glyphs, "predict", LEFT + 50, 500 + PITCH);
         ParaDraft d = new ParaDraft(LEFT, LEFT + 220);
         d.lines.addAll(LineBuilder.build(glyphs));
-        d.align = Paragraph.Align.LEFT;
+        d.align = align;
         d.pitch = PITCH;
         assertNotNull(Bullets.of(d));
         try (PDDocument doc = new PDDocument()) {
             PlacedContent content = new PlacedContent(doc, new DocStats(), new NoMedia(), 150f, false);
             List<TextFrames.Framed> framed = new TextFrames(content, 612f).frames(List.of(d), new ArrayList<>(), null);
-            TextPara p = framed.getFirst().shape().paras().getFirst();
-            assertEquals(TEXT, p.size(), 0.01f, p.toString());
-            assertEquals(PITCH, p.lineHeight(), 0.3f, p.toString());
+            return framed.getFirst().shape().paras().getFirst();
         }
     }
 
