@@ -113,7 +113,7 @@ final class VectorCheckboxes {
         for (int k = 0; k < boxes.size(); k++) {
             float[] b = boxes.get(k);
             if (comb(boxes, k) || used.contains(sides.get(k)[0]) || used.contains(sides.get(k)[1])
-                    || inLegend(boxes, painted, k)) {
+                    || inLegend(boxes, painted, k) || inked(b, sides.get(k), rules, marks)) {
                 continue;
             }
             Glyph mark = null;
@@ -152,6 +152,40 @@ final class VectorCheckboxes {
         }
         out.removeIf(crosses::contains);
         return new Found(out, used);
+    }
+
+    /**
+     * Whether something is drawn inside a box besides its sides and a white ground: a tick or cross drawn as strokes
+     * (Codex's review). Its glyph would be an empty ☐ and the drawn tick would go, so such a box stays drawn.
+     */
+    private static boolean inked(float[] b, Rule[] sides, List<Rule> rules, List<VectorMark> marks) {
+        float in = Math.max(JOIN, 0.15f * (b[2] - b[0]));
+        float x0 = b[0] + in;
+        float y0 = b[1] + in;
+        float x1 = b[2] - in;
+        float y1 = b[3] - in;
+        for (VectorMark m : marks) {
+            boolean outline = Math.abs(m.x() - b[0]) <= JOIN && Math.abs(m.right() - b[2]) <= JOIN
+                    && Math.abs(m.top() - b[1]) <= JOIN && Math.abs(m.bottom() - b[3]) <= JOIN;
+            boolean ink = !outline && (m.stroked() || m.shading() || m.filled() && !Decorations.isWhite(m.rgb()));
+            float cx = (m.x() + m.right()) / 2f;
+            float cy = (m.top() + m.bottom()) / 2f;
+            if (ink && cx > x0 && cx < x1 && cy > y0 && cy < y1 && m.right() - m.x() <= b[2] - b[0] + JOIN) {
+                return true;
+            }
+        }
+        for (Rule r : rules) {
+            if (r == sides[0] || r == sides[1] || r == sides[2] || r == sides[3]) {
+                continue;
+            }
+            float mid = (r.start() + r.end()) / 2f;
+            float cx = r.horizontal() ? mid : r.pos();
+            float cy = r.horizontal() ? r.pos() : mid;
+            if (cx > x0 && cx < x1 && cy > y0 && cy < y1 && r.length() <= b[2] - b[0] + JOIN) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

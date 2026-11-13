@@ -99,6 +99,26 @@ class VectorCheckboxesTest {
         assertNull(VectorCheckboxes.find(glyphs, rules, List.of(), List.of()));
     }
 
+    /**
+     * A tick drawn as strokes inside the box (Codex's review): an empty ☐ would lose it, so the box stays drawn. A white
+     * ground or the box's own outline drawn again doesn't count as ink.
+     */
+    @Test
+    void aBoxWithADrawnTickStaysDrawn() {
+        List<Rule> rules = new ArrayList<>();
+        List<Glyph> glyphs = new ArrayList<>();
+        box(rules, 100f, 9f);
+        word(glyphs, "Yes", 112f, SIZE, BASELINE);
+        VectorMark tick = new VectorMark(101.5f, BASELINE - 7.5f, 107.5f, BASELINE - 1.5f, 2, false, true, false, false, 0,
+                true, 0, 0.8f, false);
+        assertNull(VectorCheckboxes.find(glyphs, rules, List.of(), List.of(tick)));
+        VectorMark ground = new VectorMark(100.5f, BASELINE - 8.5f, 108.5f, BASELINE - 0.5f, 4, false, false, true, false,
+                0xFFFFFF, false, 0, 0f, false);
+        VectorMark outline = new VectorMark(100f, BASELINE - 9f, 109f, BASELINE, 4, false, false, false, false, 0, true, 0,
+                0.5f, false);
+        assertNotNull(VectorCheckboxes.find(glyphs, rules, List.of(), List.of(ground, outline)));
+    }
+
     /** A chart's legend key, a coloured square with an outline stroked over it, beside its series' name. */
     @Test
     void aLegendKeyStaysDrawn() {
