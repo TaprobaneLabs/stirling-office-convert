@@ -614,7 +614,7 @@ final class RunBuilder {
         heldWords = new BitSet();
         fitted = target == null ? Float.NaN : fit(lines, target, hardBreaks, squeezes);
         if (Float.isNaN(fitted) && target != null && target.justified()) {
-            squeezes = squeezesFor(lines, target.preferred());
+            squeezes = squeezesFor(lines, target.preferred(), target.ends());
         }
         p.noHangingPunctuation = keepsPunctuationIn(lines);
         for (int li = 0; li < lines.size(); li++) {
@@ -737,7 +737,7 @@ final class RunBuilder {
 
     private static final float MAX_EXPAND = 0.3f;
 
-    private float[] squeezesFor(List<Line> lines, float slack) {
+    private float[] squeezesFor(List<Line> lines, float slack, boolean ends) {
         float edge = -Float.MAX_VALUE;
         for (int i = 0; i + 1 < lines.size(); i++) {
             edge = Math.max(edge, lines.get(i).right);
@@ -797,8 +797,51 @@ final class RunBuilder {
                 }
             }
         }
+        if (ends && lines.size() > 1) {
+            out[lines.size() - 1] = lastSqueeze(lines.getLast(), edge);
+        }
         return out;
     }
+
+    /**
+     * The squeeze a justified paragraph's last line needs when it fills the PDF's measure: a paragraph cut where its
+     * column ends, whose last line in the PDF is a full one. Nothing justifies a paragraph's last line, so its spaces keep
+     * their width, and at that width a line set in a wider stand-in took a word onto a line of its own: PowerPoint, which
+     * writes each column as a text box, ran MMWR's columns a line past their boxes, over what follows. Only where the
+     * paragraph ends with the line in a slide's text box ({@link Fit#ends()}): in Word, where no column ran long, the squeeze
+     * reflowed MMWR 7302a1's paragraphs and lost 8 points of its words in place.
+     */
+    private float lastSqueeze(Line l, float edge) {
+        if (l.right < edge - LAST_FULL) {
+            return 0f;
+        }
+        float drawn = 0;
+        int chars = 0;
+        for (int wi = 0; wi < l.words.size(); wi++) {
+            if (wi > 0) {
+                if (l.gaps[wi] != Line.SPACE) {
+                    return 0f;
+                }
+                int n = l.sentenceSpace(wi) ? 2 : 1;
+                drawn += n * spaceAfter(l.words.get(wi - 1).last());
+                chars += n;
+            }
+            for (Glyph g : l.words.get(wi).glyphs) {
+                drawn += drawnWidth(g);
+                chars += g.text.length();
+            }
+        }
+        // A slide's text box wraps a paragraph squeezed line by line at its edge (TextFrames): its other lines' spaces
+        // narrow into the slack, a last line's don't
+        float full = drawn - (edge - l.x);
+        if (chars == 0 || full <= SQUEEZE_FROM) {
+            return 0f;
+        }
+        return (float) Math.ceil(Math.clamp((full + SQUEEZE_MARGIN) / chars, 0f, MAX_SQUEEZE) * 20f) / 20f;
+    }
+
+    /** How near the measure's edge a justified paragraph's last line ends, in points, to count as a full line. */
+    private static final float LAST_FULL = 1.5f;
 
     private float nextUnit(Line l, Line next) {
         String last = l.words.getLast().text;
@@ -872,10 +915,16 @@ final class RunBuilder {
      * {@code firstStart} and {@code restStart}: where Word starts the first and later lines, or NaN to measure each line
      * from where it starts in the PDF. {@code marker}: words the first line starts with that Word draws as the
      * paragraph's list number, left out of its measure, which starts where its text does. {@code ceiling}: the most room
-     * past {@code edge} the fit may give, where a float's edge would end the lines first.
+     * past {@code edge} the fit may give, where a float's edge would end the lines first. {@code ends}: the paragraph
+     * ends where its last line does, as a slide's text box ends it.
      */
     record Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart, int marker,
-            float ceiling) {
+            float ceiling, boolean ends) {
+
+        Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart, int marker,
+                float ceiling) {
+            this(edge, preferred, justified, whole, firstStart, restStart, marker, ceiling, false);
+        }
 
         Fit(float edge, float preferred, boolean justified, boolean whole, float firstStart, float restStart) {
             this(edge, preferred, justified, whole, firstStart, restStart, 0);

@@ -3,8 +3,12 @@ package stirling.software.officeconvert.layout;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -82,6 +86,74 @@ final class TableShaper {
             }
         }
     }
+
+    /**
+     * An unruled table whose cell's text runs on past its column, over cells of its row that hold nothing, with the cell
+     * spanning them when they're shaded as it is: else Word, Excel and PowerPoint wrap the text in its column. CFPB's
+     * Closing Disclosure sets its italic note across the header's last four columns; held to one, it wrapped to three
+     * lines over the rule under it.
+     * {@code perCell} is changed to match the table returned.
+     */
+    static TableDetection.Found spanOverflow(TableDetection.Found t, List<List<Word>> perCell) {
+        float[] e = t.colEdges();
+        if (t.ruled() || e == null || e.length != t.cols() + 1) {
+            return t;
+        }
+        List<FoundCell> cells = t.cells();
+        Map<Long, Integer> at = new HashMap<>();
+        for (int i = 0; i < cells.size(); i++) {
+            at.put((long) cells.get(i).row() * 4096 + cells.get(i).col(), i);
+        }
+        Set<Integer> spanned = new HashSet<>();
+        Map<Integer, FoundCell> grown = new HashMap<>();
+        for (int i = 0; i < cells.size(); i++) {
+            FoundCell c = cells.get(i);
+            List<Word> words = perCell.get(i);
+            if (c.rowSpan() != 1 || words.isEmpty() || spanned.contains(i)) {
+                continue;
+            }
+            float reach = -Float.MAX_VALUE;
+            float size = 0;
+            for (Word w : words) {
+                reach = Math.max(reach, w.right);
+                size = Math.max(size, w.first().size);
+            }
+            int end = c.col() + c.colSpan();
+            while (end < t.cols() && reach > e[end] + OVERFLOW * size) {
+                Integer j = at.get((long) c.row() * 4096 + end);
+                // A cell shaded unlike this one is a field of its own: spanned, it would take this one's shading
+                if (j == null || !perCell.get(j).isEmpty() || cells.get(j).rowSpan() != 1
+                        || !Objects.equals(cells.get(j).fill(), c.fill())) {
+                    break;
+                }
+                spanned.add(j);
+                end += cells.get(j).colSpan();
+            }
+            if (end > c.col() + c.colSpan()) {
+                grown.put(i, new FoundCell(c.row(), c.col(), 1, end - c.col(), c.left(), c.top(), e[end], c.bottom(),
+                        c.borderTop(), c.borderBottom(), c.borderLeft(), c.borderRight(), c.fill(), c.hAlign(), c.vAlign(),
+                        c.text()));
+            }
+        }
+        if (grown.isEmpty()) {
+            return t;
+        }
+        List<FoundCell> kept = new ArrayList<>();
+        List<List<Word>> keptWords = new ArrayList<>();
+        for (int i = 0; i < cells.size(); i++) {
+            if (!spanned.contains(i)) {
+                kept.add(grown.getOrDefault(i, cells.get(i)));
+                keptWords.add(perCell.get(i));
+            }
+        }
+        perCell.clear();
+        perCell.addAll(keptWords);
+        return new TableDetection.Found(t.rows(), t.cols(), e, t.ruled(), t.headerRows(), t.padding(), kept, t.left(),
+                t.top(), t.right(), t.bottom());
+    }
+
+    /** How far past its column's edge a cell's text reaches, in its size, to span the next: more than punctuation hangs. */
+    private static final float OVERFLOW = 0.5f;
 
     private static boolean continues(List<Word> words, Word w) {
         Glyph g = w.first();
