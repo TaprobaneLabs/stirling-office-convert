@@ -101,6 +101,51 @@ final class LineRoom {
                 edge = rights[i];
             }
         }
-        return best >= 3 ? Math.max(edge, Math.min(max, colRight)) : Math.max(max, colRight);
+        return best >= 3 ? Math.max(edge, Math.min(bodyRight(lines, edge, max), colRight)) : Math.max(max, colRight);
+    }
+
+    /**
+     * The furthest right a line in the body's size reaches: the size of the lines that end at the column's common edge.
+     * Lines in another size, such as a title's pieces set into the column, don't widen the measure: USGS Fact Sheet
+     * 2024-3036's right column ends its ragged lines by 576 pt, and its title's pieces reaching 591 pt made every line that
+     * ended 15 pt short look like a paragraph's last, so its paragraphs broke where the next word would have fitted.
+     */
+    private static float bodyRight(List<Line> lines, float edge, float max) {
+        for (Line l : lines) {
+            // An OCR layer's sizes come from the scan's ink and vary line to line, and its paragraphs aren't fitted to
+            // their lines, so one joined to the next reflows in Word and PowerPoint: IRS Form 8822's scan lost 8 points
+            // of its words in place when its notice's first line joined the rest
+            if (OcrWords.ocrText(l.words.getFirst().first())) {
+                return max;
+            }
+        }
+        float[] sizes = new float[lines.size()];
+        int n = 0;
+        for (Line l : lines) {
+            if (Math.abs(l.right - edge) <= EDGE) {
+                sizes[n++] = l.size;
+            }
+        }
+        Arrays.sort(sizes, 0, n);
+        float size = sizes[n / 2];
+        float right = edge;
+        float top = Float.MAX_VALUE;
+        float bottom = -Float.MAX_VALUE;
+        for (Line l : lines) {
+            if (Math.abs(l.size - size) <= 0.12f * size) {
+                right = Math.max(right, l.right);
+                top = Math.min(top, l.top);
+                bottom = Math.max(bottom, l.bottom);
+            }
+        }
+        for (Line l : lines) {
+            // A wider line among the body's lines, not above or below them, is part of what the column sets: IRS Form
+            // 4506-T's lines that run a table's cells on from the text beside it broke as its own lines, and joined
+            // Word reflowed them (10 points of its words in place lost)
+            if (l.right > right && l.bottom > top && l.top < bottom) {
+                return max;
+            }
+        }
+        return Math.min(right, max);
     }
 }
