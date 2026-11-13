@@ -132,4 +132,39 @@ class VectorCheckboxesTest {
                 true, 0xFFFFFF, false, 0x231F20, 1f, false);
         assertNull(VectorCheckboxes.find(glyphs, rules, List.of(), List.of(hatched)));
     }
+
+    /**
+     * The Closing Disclosure's loan disclosures: each item starts with a box, its text set off after it, ticked or not.
+     * Either way the box is the item's bullet, and a box set close to its label ("☐NO") stays in the line.
+     */
+    @Test
+    void aBoxStartingAnItemIsItsBulletTickedOrNot() {
+        List<Rule> rules = new ArrayList<>();
+        List<Glyph> glyphs = new ArrayList<>();
+        box(rules, 36f, 9f);
+        word(glyphs, "x", 38f, 8f, BASELINE - 1f);
+        word(glyphs, "will not allow", 48f, SIZE, BASELINE);
+        float below = 14f;
+        for (Rule r : List.copyOf(rules)) {
+            rules.add(new Rule(r.horizontal(), r.horizontal() ? r.pos() + below : r.pos(), r.horizontal() ? r.start()
+                    : r.start() + below, r.horizontal() ? r.end() : r.end() + below, r.thickness(), r.rgb()));
+        }
+        word(glyphs, "will allow", 48f, SIZE, BASELINE + below);
+        box(rules, 300f, 6.5f);
+        word(glyphs, "NO", 308.2f, SIZE, BASELINE);
+
+        VectorCheckboxes.Found found = VectorCheckboxes.find(glyphs, rules, List.of(), List.of());
+        assertNotNull(found);
+        List<Line> lines = LineBuilder.build(found.glyphs());
+        int items = 0;
+        for (Line l : lines) {
+            String first = l.words.getFirst().text;
+            if (first.startsWith(VectorCheckboxes.CROSSED) || first.startsWith(VectorCheckboxes.EMPTY)) {
+                boolean item = l.x < 100f;
+                assertEquals(item, LineTraits.startsListItem(l), l.text());
+                items += item ? 1 : 0;
+            }
+        }
+        assertEquals(2, items, "a ticked item and an empty one");
+    }
 }
