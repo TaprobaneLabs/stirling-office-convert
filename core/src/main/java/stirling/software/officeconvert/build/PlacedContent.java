@@ -95,7 +95,7 @@ public final class PlacedContent {
         if (!p.bidi && skipWords == 0 && (justified || align == Paragraph.Align.LEFT)) {
             float edge = at.wrap() - SectionPlanner.RIGHT_SLACK;
             fit = new RunBuilder.Fit(edge, justified ? d.justifySlack : SectionPlanner.RIGHT_SLACK, justified, justified,
-                    at.firstStart(), at.restStart(), 0, at.limit() - edge);
+                    at.firstStart(), at.restStart(), 0, at.limit() - edge, true);
             lastEdge = edge;
         }
         runs.fill(p, d.lines, skipWords, left, right, d.size(), d.hardBreaks, d.pageBreaks, false, fit);
