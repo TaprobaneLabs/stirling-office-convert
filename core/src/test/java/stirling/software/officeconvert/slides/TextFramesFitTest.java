@@ -61,6 +61,34 @@ class TextFramesFitTest {
     }
 
     /**
+     * A justified paragraph cut where its column ends, as MMWR's often are: its last line is a full one, and a note mark
+     * earlier in it leaves the fit to narrow its lines one by one. Nothing justifies a paragraph's last line, so it keeps
+     * its spaces' width, and unnarrowed PowerPoint took its last word onto a line of its own, a line past the box.
+     */
+    @Test
+    void aJustifiedParagraphsFullLastLineKeepsItsWordsInItsBox() throws IOException {
+        float right = tightRight("Times New Roman", 1.5f);
+        ParaDraft d = justified(right, TIMES, "Times New Roman");
+        Glyph mark = d.lines.getFirst().words.get(1).last();
+        Glyph note = new Glyph("1", mark.right(), 3f, mark.baseline - 3f, 6.5f, 4.5f, 1.3f, TIMES, 0, mark.seq, 1.6f, false,
+                false);
+        note.vertAlign = 1;
+        d.lines.getFirst().words.get(1).glyphs.add(note);
+        try (PDDocument doc = new PDDocument()) {
+            TextShape shape = frame(doc, d);
+            TextPara p = shape.paras().getFirst();
+            float room = shape.frame().width() - shape.insetLeft() - shape.insetRight() - p.marginLeft() - p.marginRight();
+            float[] spacing = spacingPerChar(p.content());
+            String last = LINES[LINES.length - 1];
+            float width = SubstituteMetrics.width(last, "Times New Roman", false, false, SIZE);
+            for (int i = spacing.length - last.length(); i < spacing.length; i++) {
+                width += spacing[i];
+            }
+            assertTrue(width <= room + 0.05f, "\"" + last + "\" " + width + " in " + room);
+        }
+    }
+
+    /**
      * A paragraph in Franklin Gothic Book, which the PDF set and PowerPoint has: the slide names it in place of its
      * Arial stand-in, with no spacing or scale, so a fit measured in Arial would pair its margin with other widths. It
      * isn't fitted: its margin stays where its lines end, and its runs name the Office font. (A paragraph in one font
