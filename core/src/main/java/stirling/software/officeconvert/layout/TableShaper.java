@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -88,8 +89,9 @@ final class TableShaper {
 
     /**
      * An unruled table whose cell's text runs on past its column, over cells of its row that hold nothing, with the cell
-     * spanning them: else Word, Excel and PowerPoint wrap the text in its column. CFPB's Closing Disclosure sets its
-     * italic note across the header's last four columns; held to one, it wrapped to three lines over the rule under it.
+     * spanning them when they're shaded as it is: else Word, Excel and PowerPoint wrap the text in its column. CFPB's
+     * Closing Disclosure sets its italic note across the header's last four columns; held to one, it wrapped to three
+     * lines over the rule under it.
      * {@code perCell} is changed to match the table returned.
      */
     static TableDetection.Found spanOverflow(TableDetection.Found t, List<List<Word>> perCell) {
@@ -119,7 +121,9 @@ final class TableShaper {
             int end = c.col() + c.colSpan();
             while (end < t.cols() && reach > e[end] + OVERFLOW * size) {
                 Integer j = at.get((long) c.row() * 4096 + end);
-                if (j == null || !perCell.get(j).isEmpty() || cells.get(j).rowSpan() != 1) {
+                // A cell shaded unlike this one is a field of its own: spanned, it would take this one's shading
+                if (j == null || !perCell.get(j).isEmpty() || cells.get(j).rowSpan() != 1
+                        || !Objects.equals(cells.get(j).fill(), c.fill())) {
                     break;
                 }
                 spanned.add(j);

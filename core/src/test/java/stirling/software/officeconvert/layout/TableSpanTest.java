@@ -68,4 +68,19 @@ class TableSpanTest {
         perCell.get(3).add(word("FHA", 450f));
         assertSame(t, TableShaper.spanOverflow(t, perCell));
     }
+
+    /** An empty cell shaded unlike the text's is a field of its own, which a span would give the text's shading. */
+    @Test
+    void aCellsTextStopsAtACellShadedOtherwise() {
+        List<List<Word>> perCell = new ArrayList<>();
+        TableDetection.Found row = row(perCell);
+        List<FoundCell> cells = new ArrayList<>(row.cells());
+        FoundCell field = cells.get(3);
+        cells.set(3, new FoundCell(0, 3, 1, 1, field.left(), field.top(), field.right(), field.bottom(), false, false, false,
+                false, 0xDDDDDD, null, null, ""));
+        TableDetection.Found t = new TableDetection.Found(1, EDGES.length - 1, EDGES, false, 0, 0f, cells, EDGES[0], 40f,
+                EDGES[5], 60f);
+        perCell.get(2).add(word("This form is a statement of final loan", 290f));
+        assertSame(t, TableShaper.spanOverflow(t, perCell));
+    }
 }
