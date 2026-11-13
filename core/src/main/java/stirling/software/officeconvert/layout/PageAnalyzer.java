@@ -83,6 +83,11 @@ public final class PageAnalyzer {
             glyphs = new ArrayList<>(glyphs);
             glyphs.addAll(bullets);
         }
+        VectorCheckboxes.Found checkboxes = ocr ? null : VectorCheckboxes.find(glyphs, gfx.rules(), gfx.fills(), gfx.marks());
+        if (checkboxes != null) {
+            glyphs = checkboxes.glyphs();
+            usedMarks.addAll(checkboxes.rules());
+        }
         markLinks(glyphs, page.links());
         List<Line> segments = new ArrayList<>(LineBuilder.build(glyphs));
         segments.removeIf(s -> stats.headerFooter.match(page, s) != null);
@@ -92,6 +97,7 @@ public final class PageAnalyzer {
         segments.removeAll(furnitureLines);
 
         List<Rule> rules = new ArrayList<>(gfx.rules());
+        rules.removeIf(usedMarks::contains);
         List<Fill> fills = new ArrayList<>(gfx.fills());
         fills.removeIf(usedMarks::contains);
         Decorations.underlines(segments, rules);
@@ -170,7 +176,8 @@ public final class PageAnalyzer {
             rules.addAll(ScanRules.find(scanned));
         }
         List<TableDetection.Found> tables = detectTables
-                ? tableFinder.find(page, frame.textLeft(), frame.textRight(), segments, rules, fills, concat(strong, pictures))
+                ? tableFinder.find(page, frame.textLeft(), frame.textRight(), segments, withBoxes(rules, checkboxes), fills,
+                        concat(strong, pictures))
                 : new ArrayList<>();
         List<Box> charts = new ArrayList<>();
         tables.removeIf(t -> {
@@ -635,6 +642,15 @@ public final class PageAnalyzer {
         List<T> out = new ArrayList<>(a);
         out.addAll(b);
         return out;
+    }
+
+    /**
+     * The page's rules with its checkboxes' sides back, for finding tables: the boxes are glyphs now, and nothing draws
+     * or underlines with their sides, but a table's rows are found with them where they were drawn. Without them, the
+     * Closing Disclosure's summaries table, whose last row holds four boxes, came apart into seven.
+     */
+    private static List<Rule> withBoxes(List<Rule> rules, VectorCheckboxes.Found checkboxes) {
+        return checkboxes == null ? rules : concat(rules, List.copyOf(checkboxes.rules()));
     }
 
     private List<PageLayout.Band> bands(

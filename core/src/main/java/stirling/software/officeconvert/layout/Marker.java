@@ -43,7 +43,7 @@ public record Marker(Kind kind, String text, int value, String prefix, String su
 
     private static final String CLOSERS = ".)]:\uFF0E\u3001\uFF09";
 
-    private static final String BULLETS = "•●◦▪■□‣⁃∙○◆◇►▶➢➤✓✔❖–\u2014-*·§➔→⇒✗☐☑✦★☆❑◘♦";
+    private static final String BULLETS = "•●◦▪■□‣⁃∙○◆◇►▶➢➤✓✔❖–\u2014-*·§➔→⇒✗☐☑☒✦★☆❑◘♦";
 
     private static final Pattern NUMBERED =
             Pattern.compile("^([(\\[]?)([0-9]{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,6})([.)\\]:]?)$");
