@@ -318,6 +318,7 @@ final class TableFinder {
         }
         if (!t.ruled()) {
             TableShaper.keepPhrasesWhole(t, perCell);
+            t = TableShaper.spanOverflow(t, perCell);
         }
         float pad = cellPadding(t, perCell);
         List<List<ParaDraft>> cellParas = new ArrayList<>();
