@@ -348,7 +348,9 @@ public final class SheetBuilder {
             s.next += s.next > 0 ? 1 : 0;
         }
         s.lastFigure = para.figure();
-        List<CellValue> pieces = settings.typed() && !para.figure()
+        // Scripted text stays text, as in tables: a note mark raised against an amount reads into it ("$703.33" and a
+        // raised "1" as $703.331)
+        List<CellValue> pieces = settings.typed() && !para.figure() && !ct.scripted()
                 ? labelAndFigures((t.prefix().isEmpty() ? "" : t.prefix() + " ") + ct.text(), document.decimals())
                 : null;
         if (pieces == null || !writeLabelled(s, pieces, ct)) {

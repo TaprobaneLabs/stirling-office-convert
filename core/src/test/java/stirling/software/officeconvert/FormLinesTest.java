@@ -58,6 +58,11 @@ class FormLinesTest {
                         "Questions about this release go to the press office.");
                 SpreadsheetPdfs.text(cs, SpreadsheetPdfs.REGULAR, 10, 72, 380, "Media contact:");
                 SpreadsheetPdfs.text(cs, SpreadsheetPdfs.REGULAR, 10, 260, 380, "(202) 691-5902");
+                SpreadsheetPdfs.text(cs, SpreadsheetPdfs.REGULAR, 10, 72, 350,
+                        "Escrow covers property taxes and homeowner's insurance, estimated for the year.");
+                SpreadsheetPdfs.text(cs, SpreadsheetPdfs.REGULAR, 10, 72, 320, "Estimated Escrow");
+                SpreadsheetPdfs.text(cs, SpreadsheetPdfs.REGULAR, 10, 420, 320, "$206.40");
+                SpreadsheetPdfs.text(cs, SpreadsheetPdfs.REGULAR, 6, 456.3f, 324, "1");
             }
             doc.save(pdf.toFile());
         }
@@ -84,6 +89,9 @@ class FormLinesTest {
                 "a contents line keeps its page number");
         assertTrue(Pattern.compile(">2022 +2024<").matcher(strings).find(), "a chart's labels stay together");
         assertTrue(Pattern.compile(">Media contact: +\\(202\\) 691-5902<").matcher(strings).find(), "a contact line stays whole");
+        assertFalse(number(sheet, "B", "206.401") || number(sheet, "B", "206.4"),
+                "an amount with a note mark raised against it stays text, not 206.401");
+        assertTrue(strings.contains("Estimated Escrow"), strings);
     }
 
     private static boolean number(String sheet, String column, String value) {
