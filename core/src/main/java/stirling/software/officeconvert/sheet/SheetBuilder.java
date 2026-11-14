@@ -470,7 +470,10 @@ public final class SheetBuilder {
         List<Row.Cell> cells = new ArrayList<>(List.of(new Row.Cell(0, pieces.getFirst(), style)));
         for (int c = 1; c < pieces.size(); c++) {
             CellValue v = pieces.get(c);
-            float width = TextWidth.of(v.text(), style.size(), style.bold()) + TableGrid.PADDING;
+            // A typed figure is sized as Excel shows a number, as TableGrid sizes a table's: measured as text, a small
+            // bold one got a column Excel filled with hashes
+            float width = v.isText() ? TextWidth.of(v.text(), style.size(), style.bold()) + TableGrid.PADDING
+                    : TextWidth.ofValue(v.text(), style.size(), style.bold());
             if (c < s.widths.size()) {
                 s.widths.set(c, Math.max(s.widths.get(c), width));
             } else {

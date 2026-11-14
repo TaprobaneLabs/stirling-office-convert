@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.pdfbox.Loader;
@@ -92,6 +93,38 @@ class FormLinesTest {
         assertFalse(number(sheet, "B", "206.401") || number(sheet, "B", "206.4"),
                 "an amount with a note mark raised against it stays text, not 206.401");
         assertTrue(strings.contains("Estimated Escrow"), strings);
+    }
+
+    /**
+     * A typed figure's column is sized as Excel shows a number, not as text: "0.908893877" in 7.5 pt bold got 52.67 pt
+     * of the 62.25 pt Excel's own fit needs (TextWidthTest), and Excel showed hashes.
+     */
+    @Test
+    void aSmallBoldFigureGetsTheWidthExcelShowsIt() throws IOException {
+        Path pdf = dir.resolve("ratio.pdf");
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LETTER);
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                SpreadsheetPdfs.text(cs, SpreadsheetPdfs.BOLD, 16, 72, 720, "Quarterly summary");
+                SpreadsheetPdfs.text(cs, SpreadsheetPdfs.REGULAR, 10, 72, 690,
+                        "The ratio below compares this quarter's output with the last quarter's output.");
+                SpreadsheetPdfs.text(cs, SpreadsheetPdfs.BOLD, 7.5f, 72, 660, "Output ratio");
+                SpreadsheetPdfs.text(cs, SpreadsheetPdfs.BOLD, 7.5f, 420, 660, "0.908893877");
+            }
+            doc.save(pdf.toFile());
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (PDDocument doc = Loader.loadPDF(pdf.toFile())) {
+            PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
+        }
+        String sheet = SpreadsheetPdfs.part(SpreadsheetPdfs.parts(out.toByteArray()), "xl/worksheets/sheet1.xml");
+        assertTrue(number(sheet, "B", "0.908893877"), "the figure typed beside its label: " + sheet);
+        Matcher col = Pattern.compile("<col min=\"2\" max=\"2\" width=\"([0-9.]+)\"").matcher(sheet);
+        assertTrue(col.find(), "column B sized: " + sheet);
+        // XlsxWriter writes widths in units of 5.25 pt
+        float points = Float.parseFloat(col.group(1)) * 5.25f;
+        assertTrue(points >= 62.25f - 0.03f, "wide enough for Excel to show the figure: " + points + " pt");
     }
 
     private static boolean number(String sheet, String column, String value) {
