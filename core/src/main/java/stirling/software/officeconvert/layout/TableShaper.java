@@ -553,7 +553,9 @@ final class TableShaper {
 
     static TableDetection.Found splitStacked(TableDetection.Found t, List<List<Word>> cellWords) {
         List<Split> splits = new ArrayList<>();
-        for (int r = 0; r < t.rows(); r++) {
+        // A header row's cells stack the words of each column's heading, one line each ("Benefit" over "Days" over
+        // "Used" on CMS's notices): it stays one row
+        for (int r = Math.max(0, t.headerRows()); r < t.rows(); r++) {
             float[] bounds = rowSplit(t, r, cellWords);
             if (bounds != null) {
                 splits.add(new Split(r, bounds));

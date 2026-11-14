@@ -65,6 +65,9 @@ final class TableFinder {
                 boolean outgrows = b.x() < region.x() - OUTGROW || b.right() > region.right() + OUTGROW
                         || b.top() < region.top() - OUTGROW || b.bottom() > region.bottom() + OUTGROW;
                 TableDetection.Found kept = outgrows ? rejudged(page, b, rest, rules, fills, strong) : t;
+                if (kept != null && kept.ruled()) {
+                    kept = headedAbove(page, region, kept, rest, rules, fills, strong);
+                }
                 if (kept != null && !Regions.overlapsMostly(boxOf(kept), claimed)) {
                     found.add(kept);
                     claimed.add(boxOf(kept));
@@ -91,6 +94,31 @@ final class TableFinder {
             }
         }
         return top == frame.top() ? frame : new Box(frame.x(), top, frame.right(), frame.bottom());
+    }
+
+    /** How far above its column region a ruled table's heading may reach. */
+    private static final float HEADING_REACH = 48f;
+
+    /**
+     * A ruled table found at the top of a column region, found again with the room above the region in reach: a band of
+     * columns may end inside a table's heading, as over CMS's sample claims, where the band ends between the heading's
+     * second and third lines, so the heading's first lines lay outside the region. The table found again keeps the
+     * first one's sides and foot and adds the heading's lines as rows above them; otherwise the first one stands.
+     */
+    private TableDetection.Found headedAbove(PageData page, Box region, TableDetection.Found t, List<Line> segments,
+            List<Rule> rules, List<Fill> fills, List<Box> strong) {
+        if (region.top() <= 0 || t.top() - region.top() > HEADING_REACH) {
+            return t;
+        }
+        Box reach = new Box(t.left() - 1, Math.max(0, region.top() - HEADING_REACH), t.right() + 1, t.bottom() + 1);
+        for (TableDetection.Found again : tablesIn(page, reach, segments, rules, fills, strong)) {
+            boolean same = Math.abs(again.left() - t.left()) < 2 && Math.abs(again.right() - t.right()) < 2
+                    && Math.abs(again.bottom() - t.bottom()) < 2;
+            if (again.ruled() && same && again.top() < t.top() - 1) {
+                return again;
+            }
+        }
+        return t;
     }
 
     private TableDetection.Found rejudged(PageData page, Box b, List<Line> segments, List<Rule> rules, List<Fill> fills,

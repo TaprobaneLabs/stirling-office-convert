@@ -93,11 +93,17 @@ final class ParagraphMeasure {
             centreIndents(p, centreRef, colLeft, colRight);
             return;
         }
-        if (!wrapped && flushRight && !flushLeft && Math.abs(p.last().right - maxRight) <= EDGE) {
+        boolean stack = flushLeft && rightStack(room, lines, leftSpread);
+        if (!wrapped && flushRight && (!flushLeft || stack) && Math.abs(p.last().right - maxRight) <= EDGE) {
             p.align = Align.RIGHT;
             p.left = 0;
             p.first = 0;
             p.right = Math.max(0, colRight - maxRight);
+            if (stack) {
+                // Each line its own, as TableBuilder.stack() keeps a column of numbers: with no indent to wrap them,
+                // Word ran a letter's address block onto one line
+                p.hardBreaks.set(1, lines.size());
+            }
             return;
         }
         boolean firstFull = room.wrap(first) - first.right <= EDGE + 1f;
@@ -123,6 +129,27 @@ final class ParagraphMeasure {
         if (!wrapped && maxRight > colRight) {
             p.right = -(maxRight - colRight);
         }
+    }
+
+    /** The most words a line of a heading stacked right-aligned holds. */
+    private static final int STACK_WORDS = 3;
+
+    /**
+     * Whether lines that end together and start together after the first are a heading set right-aligned a word or two
+     * a line, not a paragraph with its first line set apart: CMS's notices stack "Benefit" over "Days" over "Used",
+     * whose last two lines start together only as they're as wide. Every line starts inside the room, and holds few
+     * words: a paragraph's lines start at its room's edge, a nested list item's run on with more words.
+     */
+    private static boolean rightStack(LineRoom room, List<Line> lines, float leftSpread) {
+        if (leftSpread <= EDGE) {
+            return false;
+        }
+        for (Line l : lines) {
+            if (room.rel(l) <= EDGE || l.words.size() > STACK_WORDS) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean startsRight(LineRoom room, ParaDraft p) {
