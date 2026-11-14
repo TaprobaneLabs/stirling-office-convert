@@ -351,9 +351,7 @@ public final class SheetBuilder {
         List<CellValue> pieces = settings.typed() && !para.figure()
                 ? labelAndFigures((t.prefix().isEmpty() ? "" : t.prefix() + " ") + ct.text(), document.decimals())
                 : null;
-        if (pieces != null) {
-            writeLabelled(s, pieces, ct);
-        } else {
+        if (pieces == null || !writeLabelled(s, pieces, ct)) {
             writeText(s, text, ct);
         }
         s.lastWasTable = false;
@@ -453,24 +451,21 @@ public final class SheetBuilder {
     }
 
     /**
-     * Writes a label and its figures in a row: the label in the first column, wrapped there when it doesn't fit, each
-     * figure in the next, its column widened to hold it.
+     * Writes a label and its figures in a row, the label in the first column and each figure in the next, its column
+     * widened to hold it. False, writing nothing, when the label doesn't fit the first column: a table on the sheet sets
+     * its width, and DOE's sample invoice's "K. Federal Cost Share", wrapped there, broke between its letters.
      */
-    private void writeLabelled(Sheet s, List<CellValue> pieces, CellText ct) throws IOException {
+    private boolean writeLabelled(Sheet s, List<CellValue> pieces, CellText ct) throws IOException {
         CellStyle style = new CellStyle(ct.size(), ct.bold(), ct.italic(), ct.underline(), ct.strike(), ct.rgb(), -1,
                 null, null, null, null, CellStyle.HAlign.GENERAL, CellStyle.VAlign.TOP, false, NumberFormat.GENERAL);
         if (s.widths.isEmpty()) {
             s.widths.add(s.textWidth);
         }
         String label = pieces.getFirst().text();
-        float need = TextWidth.of(label, style.size(), style.bold()) + TableGrid.PADDING;
-        boolean wrap = need > s.widths.getFirst();
-        float height = Float.NaN;
-        if (wrap) {
-            int lines = TextWidth.lines(label, style.size(), style.bold(), s.widths.getFirst() - TableGrid.PADDING);
-            height = lines * TableGrid.lineHeight(style.size()) + 2f;
+        if (TextWidth.of(label, style.size(), style.bold()) + TableGrid.PADDING > s.widths.getFirst()) {
+            return false;
         }
-        List<Row.Cell> cells = new ArrayList<>(List.of(new Row.Cell(0, pieces.getFirst(), style.withWrap(wrap))));
+        List<Row.Cell> cells = new ArrayList<>(List.of(new Row.Cell(0, pieces.getFirst(), style)));
         for (int c = 1; c < pieces.size(); c++) {
             CellValue v = pieces.get(c);
             float width = TextWidth.of(v.text(), style.size(), style.bold()) + TableGrid.PADDING;
@@ -481,7 +476,8 @@ public final class SheetBuilder {
             }
             cells.add(new Row.Cell(c, v, v.isText() ? style : style.withFormat(v.format())));
         }
-        sink.row(new Row(s.next++, height, cells));
+        sink.row(new Row(s.next++, Float.NaN, cells));
+        return true;
     }
 
     private void writeTable(Sheet s, TableGrid g, PageData page, int skip) throws IOException {
