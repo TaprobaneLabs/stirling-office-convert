@@ -150,6 +150,49 @@ class LatticeHeadingTest {
         assertTrue(only(LatticeFinder.find(0, hs, vs, words, band)).top() > 330, "on a band it stays out");
     }
 
+    /**
+     * Two ruled grids stacked 5 pt apart (Codex's review): the first one's last row stands just over the second's first
+     * rule, as a heading would, but under the first one's foot rule. It stays the first table's, and the second keeps
+     * its own top.
+     */
+    @Test
+    void theRowOverAnotherGridsFootIsNoHeading() {
+        List<Ruling> hs = new ArrayList<>();
+        List<Ruling> vs = new ArrayList<>();
+        List<PdfWord> words = new ArrayList<>();
+        String[][] rows = {{"Rent", "$1,200.00"}, {"Fees", "$35.00"}, {"Water", "$45.10"}, {"Power", "$88.20"}};
+        float[] tops = {100, 145};
+        for (int g = 0; g < 2; g++) {
+            float top = tops[g];
+            for (float y : new float[] {top, top + 20, top + 40}) {
+                hs.add(new Ruling(y, 100, 400, 0.5f, 0));
+            }
+            for (float x : new float[] {100, 250, 400}) {
+                vs.add(new Ruling(x, top, top + 40, 0.5f, 0));
+            }
+            for (int r = 0; r < 2; r++) {
+                phrase(words, rows[g * 2 + r][0], 105, top + 16 + 20 * r, 10);
+                phrase(words, rows[g * 2 + r][1], 255, top + 16 + 20 * r, 10);
+            }
+        }
+
+        List<DraftTable> tables = new ArrayList<>();
+        for (LatticeFinder.Found f : LatticeFinder.find(0, hs, vs, words)) {
+            if (f.table() != null) {
+                tables.add(f.table());
+            }
+        }
+        assertEquals(2, tables.size(), "two tables");
+        assertTrue(tables.get(1).top() > 144, "the second keeps its top: " + tables.get(1).top());
+        int fees = 0;
+        for (DraftTable t : tables) {
+            for (DraftTable.Cell c : t.cells()) {
+                fees += join(c.words()).contains("Fees") ? 1 : 0;
+            }
+        }
+        assertEquals(1, fees, "the first table's last row once");
+    }
+
     /** Adds {@code text}'s words so that they end at {@code right}. */
     private static void rightAligned(List<PdfWord> words, String text, float right, float baseline) {
         float width = 0;
@@ -214,8 +257,12 @@ class LatticeHeadingTest {
 
     /** Adds {@code text}'s words at {@code x}, a space apart. */
     private static void phrase(List<PdfWord> words, String text, float x, float baseline) {
+        phrase(words, text, x, baseline, SIZE);
+    }
+
+    private static void phrase(List<PdfWord> words, String text, float x, float baseline, float size) {
         for (String w : text.split(" ")) {
-            float right = x + w.length() * SIZE * LETTER;
+            float right = x + w.length() * size * LETTER;
             int n = w.length();
             float[] left = new float[n];
             float[] rights = new float[n];
@@ -225,9 +272,9 @@ class LatticeHeadingTest {
                 rights[i] = x + (right - x) * (i + 1) / n;
                 glyphs[i] = String.valueOf(w.charAt(i));
             }
-            words.add(new PdfWord(w, x, right, baseline - SIZE * 0.8f, baseline + SIZE * 0.2f, baseline, SIZE, false,
-                    false, 0, SIZE * 0.28f, left, rights, glyphs));
-            x = right + SIZE * 0.28f;
+            words.add(new PdfWord(w, x, right, baseline - size * 0.8f, baseline + size * 0.2f, baseline, size, false,
+                    false, 0, size * 0.28f, left, rights, glyphs));
+            x = right + size * 0.28f;
         }
     }
 }

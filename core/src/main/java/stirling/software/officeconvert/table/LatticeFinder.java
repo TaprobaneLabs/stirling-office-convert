@@ -53,7 +53,7 @@ final class LatticeFinder {
             List<Ruling> componentHs = component.get(0);
             List<Ruling> componentVs = component.get(1);
             if (componentHs.size() >= 2 && componentVs.size() >= 2) {
-                Found f = build(page, componentHs, componentVs, words, fills);
+                Found f = build(page, componentHs, componentVs, words, fills, hs);
                 if (f != null) {
                     found.add(f);
                 }
@@ -99,8 +99,9 @@ final class LatticeFinder {
         return new ArrayList<>(byRoot.values());
     }
 
-    private static Found build(
-            int page, List<Ruling> hs, List<Ruling> vs, List<PdfWord> words, List<FillBox> fills) {
+    /** {@code pageHs}: every horizontal rule on the page, which bounds how far up the table's heading may reach. */
+    private static Found build(int page, List<Ruling> hs, List<Ruling> vs, List<PdfWord> words, List<FillBox> fills,
+            List<Ruling> pageHs) {
         float[][] edges = gridEdges(hs, vs);
         float[] xs = edges[0];
         float[] ys = edges[1];
@@ -119,7 +120,7 @@ final class LatticeFinder {
                 inside.add(w);
             }
         }
-        List<PdfWord> header = amountsFirst(inside, ys) ? headerAbove(words, outline, fills) : List.of();
+        List<PdfWord> header = amountsFirst(inside, ys) ? headerAbove(words, outline, fills, pageHs) : List.of();
         if (!header.isEmpty()) {
             float top = outline.top();
             for (PdfWord w : header) {
@@ -182,10 +183,12 @@ final class LatticeFinder {
      * past the table, or stands apart from the heading under it ("Referred by …" over the notice's headings), or spans
      * several of its columns ("Table 1: Visitors by month" over "Region" and "Q1").
      */
-    private static List<PdfWord> headerAbove(List<PdfWord> words, Box outline, List<FillBox> fills) {
+    private static List<PdfWord> headerAbove(List<PdfWord> words, Box outline, List<FillBox> fills,
+            List<Ruling> pageHs) {
+        float ceiling = ceiling(outline, pageHs);
         List<PdfWord> near = new ArrayList<>();
         for (PdfWord w : words) {
-            if (w.centreY() < outline.top() && w.bottom() > outline.top() - 8 * w.fontSize()) {
+            if (w.centreY() < outline.top() && w.bottom() > outline.top() - 8 * w.fontSize() && w.top() > ceiling) {
                 near.add(w);
             }
         }
@@ -227,6 +230,26 @@ final class LatticeFinder {
             taken++;
         }
         return out;
+    }
+
+    /** How much of a table's width a rule above it must span to end its heading's reach, as a share. */
+    private static final float CEILING_SPAN = 0.5f;
+
+    /**
+     * The lowest rule above a table that spans half its width or more, or none: a heading never reaches past one, as the
+     * rule closes what's over it. Two grids stacked 5 pt apart otherwise gave the second the first one's last row as its
+     * heading (Codex's review); an underline under a heading's words spans less.
+     */
+    private static float ceiling(Box outline, List<Ruling> pageHs) {
+        float ceiling = -Float.MAX_VALUE;
+        float width = outline.right() - outline.left();
+        for (Ruling r : pageHs) {
+            float span = Math.min(r.end(), outline.right()) - Math.max(r.start(), outline.left());
+            if (r.pos() < outline.top() - RuledGrid.LINE_TOLERANCE && span >= CEILING_SPAN * width) {
+                ceiling = Math.max(ceiling, r.pos());
+            }
+        }
+        return ceiling;
     }
 
     /** How much of a table's width the fills behind a heading's line cover when it's a band, as a share. */
