@@ -348,7 +348,14 @@ public final class SheetBuilder {
             s.next += s.next > 0 ? 1 : 0;
         }
         s.lastFigure = para.figure();
-        writeText(s, text, ct);
+        // Scripted text stays text, as in tables: a note mark raised against an amount reads into it ("$703.33" and a
+        // raised "1" as $703.331)
+        List<CellValue> pieces = settings.typed() && !para.figure() && !ct.scripted()
+                ? labelAndFigures((t.prefix().isEmpty() ? "" : t.prefix() + " ") + ct.text(), document.decimals())
+                : null;
+        if (pieces == null || !writeLabelled(s, pieces, ct)) {
+            writeText(s, text, ct);
+        }
         s.lastWasTable = false;
         s.lastBottom = t.bottom();
         s.lastSize = ct.size();
@@ -391,6 +398,91 @@ public final class SheetBuilder {
         int lines = TextWidth.lines(text, style.size(), style.bold(), s.total() - TableGrid.PADDING);
         float height = lines * TableGrid.lineHeight(style.size()) + 2f;
         sink.row(new Row(row, height, List.of(new Row.Cell(0, value, style.withWrap(true), 1, s.widths.size()))));
+    }
+
+    /**
+     * A form's line that sets a label and its figures apart, as CFPB's Loan Estimate does ("Monthly Principal & Interest"
+     * … "$703.33"), split into cells: the label, then each figure typed as a number in its format, or a Yes or No, as
+     * text. Null for anything else, which stays one cell: a line of prose, chart labels ("2022 … 2024"), a contents line
+     * ending in a page number, a contact line, and lines of more than {@link #MAX_PIECES} pieces, which are a table's
+     * rows the table finder missed.
+     */
+    static List<CellValue> labelAndFigures(String text, Conventions.DecimalMark mark) {
+        if (text.indexOf('\t') < 0 || text.indexOf('\n') >= 0) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        for (String p : text.split("\t")) {
+            if (!p.isBlank()) {
+                parts.add(p.strip());
+            }
+        }
+        if (parts.size() < 2 || parts.size() > MAX_PIECES || !worded(parts.getFirst())) {
+            return null;
+        }
+        List<CellValue> out = new ArrayList<>(List.of(CellValue.text(parts.getFirst())));
+        boolean figure = false;
+        for (String p : parts.subList(1, parts.size())) {
+            if (p.equalsIgnoreCase("yes") || p.equalsIgnoreCase("no")) {
+                out.add(CellValue.text(p));
+                continue;
+            }
+            CellValue v = NumberReader.read(p, mark);
+            if (v == null || v.format().kind() != NumberFormat.Kind.NUMBER && v.format().kind() != NumberFormat.Kind.PERCENT) {
+                return null;
+            }
+            out.add(v);
+            figure = true;
+        }
+        return figure ? out : null;
+    }
+
+    /** At most a label and two more pieces, as the Closing Disclosure's "Loan Amount … $162,000 … NO". */
+    static final int MAX_PIECES = 3;
+
+    /** Whether a label has a word in it: two letters running. */
+    private static boolean worded(String label) {
+        int run = 0;
+        for (int i = 0; i < label.length(); i++) {
+            run = Character.isLetter(label.charAt(i)) ? run + 1 : 0;
+            if (run >= 2) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Writes a label and its figures in a row, the label in the first column and each figure in the next, its column
+     * widened to hold it. False, writing nothing, when the label doesn't fit the first column: a table on the sheet sets
+     * its width, and DOE's sample invoice's "K. Federal Cost Share", wrapped there, broke between its letters.
+     */
+    private boolean writeLabelled(Sheet s, List<CellValue> pieces, CellText ct) throws IOException {
+        CellStyle style = new CellStyle(ct.size(), ct.bold(), ct.italic(), ct.underline(), ct.strike(), ct.rgb(), -1,
+                null, null, null, null, CellStyle.HAlign.GENERAL, CellStyle.VAlign.TOP, false, NumberFormat.GENERAL);
+        if (s.widths.isEmpty()) {
+            s.widths.add(s.textWidth);
+        }
+        String label = pieces.getFirst().text();
+        if (TextWidth.of(label, style.size(), style.bold()) + TableGrid.PADDING > s.widths.getFirst()) {
+            return false;
+        }
+        List<Row.Cell> cells = new ArrayList<>(List.of(new Row.Cell(0, pieces.getFirst(), style)));
+        for (int c = 1; c < pieces.size(); c++) {
+            CellValue v = pieces.get(c);
+            // A typed figure is sized as Excel shows a number, as TableGrid sizes a table's: measured as text, a small
+            // bold one got a column Excel filled with hashes
+            float width = v.isText() ? TextWidth.of(v.text(), style.size(), style.bold()) + TableGrid.PADDING
+                    : TextWidth.ofValue(v.text(), style.size(), style.bold());
+            if (c < s.widths.size()) {
+                s.widths.set(c, Math.max(s.widths.get(c), width));
+            } else {
+                s.widths.add(width);
+            }
+            cells.add(new Row.Cell(c, v, v.isText() ? style : style.withFormat(v.format())));
+        }
+        sink.row(new Row(s.next++, Float.NaN, cells));
+        return true;
     }
 
     private void writeTable(Sheet s, TableGrid g, PageData page, int skip) throws IOException {
