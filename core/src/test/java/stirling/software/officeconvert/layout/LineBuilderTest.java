@@ -26,6 +26,44 @@ class LineBuilderTest {
         }
     }
 
+    private static float glyph(List<Glyph> out, String text, float x, float width, float size) {
+        out.add(new Glyph(text, x, width, 100, size, size * 0.75f, size * 0.25f, FontInfo.DEFAULT, 0, out.size(),
+                0.3f * size, false, false));
+        return x + width;
+    }
+
+    /**
+     * CDC's polio sheet in Bengali, made by Word in Vrinda: "পোলিও" draws প, a glyph PDFBox can't name (the vowel sign's
+     * first part, dropped, its advance left as a gap of 0.68 em) and ো. No word starts with a vowel sign, so ো ends প's
+     * word; a letter after the same gap, or a mark after a letter of another script, starts its own.
+     */
+    @Test
+    void aVowelSignAfterAnUnnamedGlyphEndsTheLetterBeforeIt() {
+        List<Glyph> glyphs = new ArrayList<>();
+        float size = 11f;
+        float x = glyph(glyphs, "প", 36f, 9.7f, size);
+        x = glyph(glyphs, "ো", x + 0.68f * size, 3.9f, size);
+        x = glyph(glyphs, "ল", x, 7f, size);
+        x = glyph(glyphs, "ি", x, 3f, size);
+        x = glyph(glyphs, "ও", x, 7f, size);
+        x = glyph(glyphs, "ক", x + 0.68f * size, 7f, size);
+        x = glyph(glyphs, "খ", x, 7f, size);
+        x = glyph(glyphs, "গ", x, 7f, size);
+        x = glyph(glyphs, "x", x + 0.5f * size, 5f, size);
+        x = glyph(glyphs, "y", x, 5f, size);
+        x = glyph(glyphs, "z", x, 5f, size);
+        glyph(glyphs, "ো", x + 0.68f * size, 3.9f, size);
+
+        List<Line> lines = LineBuilder.build(glyphs);
+
+        assertEquals(1, lines.size());
+        List<String> words = new ArrayList<>();
+        for (Word w : lines.getFirst().words) {
+            words.add(w.text);
+        }
+        assertEquals(List.of("পোলিও", "কখগ", "xyz", "ো"), words);
+    }
+
     @Test
     void groupsGlyphsIntoWordsAndLines() {
         List<Glyph> glyphs = new ArrayList<>();
