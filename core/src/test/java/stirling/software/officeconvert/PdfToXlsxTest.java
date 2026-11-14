@@ -190,8 +190,33 @@ class PdfToXlsxTest {
         try (PDDocument doc = Loader.loadPDF(SpreadsheetPdfs.bandHeader(dir, false).toFile())) {
             PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults());
         }
-        String strings = SpreadsheetPdfs.part(SpreadsheetPdfs.parts(out.toByteArray()), "xl/sharedStrings.xml");
-        assertFalse(strings.contains(">Account<"), "two fills over the same half cover half: " + strings);
+        Map<String, byte[]> parts = SpreadsheetPdfs.parts(out.toByteArray());
+        String strings = SpreadsheetPdfs.part(parts, "xl/sharedStrings.xml");
+        String sheet = SpreadsheetPdfs.part(parts, "xl/worksheets/sheet1.xml");
+        // The labels, black just over the grid's first rule, head its columns as its first row (LatticeFinder's
+        // heading over a table's first rule). Date and Account keep the fills behind them; the row is no band, so
+        // Amount, on white paper, takes none
+        assertTrue(Pattern.compile("<c r=\"B[0-9]+\" s=\"[0-9]+\" t=\"s\"><v>" + index(strings, "Account") + "</v>")
+                .matcher(sheet).find(), "Account heading its column: " + sheet);
+        Matcher amount = Pattern.compile("<c r=\"D[0-9]+\" s=\"([0-9]+)\" t=\"s\"><v>" + index(strings, "Amount") + "</v>")
+                .matcher(sheet);
+        assertTrue(amount.find(), "Amount heading its column: " + sheet);
+        assertEquals("0", fillOf(SpreadsheetPdfs.part(parts, "xl/styles.xml"), Integer.parseInt(amount.group(1))),
+                "two fills over the same half cover half: no band");
+    }
+
+    /** The fill of cell style {@code xf}, from the styles' {@code cellXfs}. */
+    private static String fillOf(String styles, int xf) {
+        Matcher xfs = Pattern.compile("<cellXfs[^>]*>(.*?)</cellXfs>", Pattern.DOTALL).matcher(styles);
+        assertTrue(xfs.find(), "cell styles: " + styles);
+        Matcher each = Pattern.compile("<xf [^>]*>").matcher(xfs.group(1));
+        for (int i = 0; each.find(); i++) {
+            if (i == xf) {
+                Matcher fill = Pattern.compile("fillId=\"([0-9]+)\"").matcher(each.group());
+                return fill.find() ? fill.group(1) : "0";
+            }
+        }
+        throw new AssertionError("no cell style " + xf + " in " + styles);
     }
 
     @Test

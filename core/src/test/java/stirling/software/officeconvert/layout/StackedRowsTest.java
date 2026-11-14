@@ -47,16 +47,32 @@ class StackedRowsTest {
                 new String[] {"+$529.57", "+$69.45", "$1,784.53"}), "a row for each label and amount");
     }
 
+    /**
+     * CMS's claims tables stack each column's heading a word a line ("Benefit" over "Days" over "Used"), which reads as
+     * rows stacked in one: as the table's header row it stays one row.
+     */
+    @Test
+    void aHeaderRowsStackedHeadingsStayOneRow() {
+        String[] days = {"Benefit", "Days", "Used"};
+        String[] charges = {"Non-", "Covered", "Charges"};
+        assertEquals(3, rowsAfterSplit(days, charges, 0), "as a body row, cut a line a row");
+        assertEquals(1, rowsAfterSplit(days, charges, 1), "the header row stays whole");
+    }
+
     /** The rows {@code splitStacked} makes of one ruled row holding {@code a} and {@code b}, a line 8 pt apart. */
     private static int rowsAfterSplit(String[] a, String[] b) {
+        return rowsAfterSplit(a, b, 0);
+    }
+
+    private static int rowsAfterSplit(String[] a, String[] b, int headerRows) {
         float top = 100;
         float bottom = top + 8 * Math.max(a.length, b.length) + 4;
         List<TableDetection.FoundCell> cells = List.of(
                 cell(0, 223, 315, top, bottom),
                 cell(1, 315, 389, top, bottom));
         List<List<Word>> words = List.of(lines(a, 226, top), lines(b, 318, top));
-        TableDetection.Found t = new TableDetection.Found(1, 2, new float[] {223, 315, 389}, true, 0, 0f, cells, 223,
-                top, 389, bottom);
+        TableDetection.Found t = new TableDetection.Found(1, 2, new float[] {223, 315, 389}, true, headerRows, 0f, cells,
+                223, top, 389, bottom);
         return TableShaper.splitStacked(t, words).rows();
     }
 

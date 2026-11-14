@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Pattern;
 
 import stirling.software.officeconvert.table.PageContent.FillBox;
 import stirling.software.officeconvert.table.PageContent.PdfWord;
@@ -118,10 +119,22 @@ final class LatticeFinder {
                 inside.add(w);
             }
         }
+        List<PdfWord> header = amountsFirst(inside, ys) ? headerAbove(words, outline, fills) : List.of();
+        if (!header.isEmpty()) {
+            float top = outline.top();
+            for (PdfWord w : header) {
+                top = Math.min(top, w.top() - 1f);
+            }
+            float[] grown = new float[ys.length + 1];
+            grown[0] = top;
+            System.arraycopy(ys, 0, grown, 1, ys.length);
+            ys = grown;
+            inside.addAll(header);
+        }
         xs = dropThinBands(xs, inside, true);
         ys = dropThinBands(ys, inside, false);
         if (xs.length >= 3) {
-            xs = addTextGutters(xs, inside);
+            xs = addTextGutters(xs, inside, ys.length >= 3 ? ys[1] : Float.NaN);
         }
         if (inside.isEmpty()) {
             return null;
@@ -140,6 +153,146 @@ final class LatticeFinder {
             return null;
         }
         return new Found(RuledBandSplitter.split(table), region);
+    }
+
+    private static final int MAX_HEADER_LINES = 4;
+
+    /**
+     * How far above the first rule a table's heading may end, in its own size: CMS's ends 0.4 of it above, while a
+     * list or bulleted lines set over a table stood 0.87 and 1.1 above it.
+     */
+    private static final float HEADER_REACH = 0.8f;
+
+    /**
+     * The widest a heading's chunk may be, as a share of the table: a column's heading is a few words. A title or caption
+     * set on the table's first rule ("Layers on Hand and Eggs Produced by Type and Molt – United States", NASS; "Table
+     * NTR-1 - Summary of changes between …", NIST) runs across most of it.
+     */
+    private static final float HEADING_CHUNK = 0.4f;
+
+    /** How far apart a heading's lines may stand, in their size: a heading stacks its words a line at a time. */
+    private static final float HEADER_LEADING = 0.6f;
+
+    /**
+     * Column headings set above a table's first rule, as CMS's Medicare notices set "Benefit Days Used", "Claim
+     * Approved?" and the rest in three right-aligned lines over a dotted rule: the lines directly above it, the nearest
+     * within {@link #HEADER_REACH} and in two chunks or more, list marks left out, each further one close above the
+     * last with each of its chunks over one of the last's, every one inside the table's width with nothing else on its
+     * baseline. A caption or a line of prose above a table is one chunk, or a list item's text after its mark, or runs
+     * past the table, or stands apart from the heading under it ("Referred by …" over the notice's headings), or spans
+     * several of its columns ("Table 1: Visitors by month" over "Region" and "Q1").
+     */
+    private static List<PdfWord> headerAbove(List<PdfWord> words, Box outline, List<FillBox> fills) {
+        List<PdfWord> near = new ArrayList<>();
+        for (PdfWord w : words) {
+            if (w.centreY() < outline.top() && w.bottom() > outline.top() - 8 * w.fontSize()) {
+                near.add(w);
+            }
+        }
+        if (near.isEmpty()) {
+            return List.of();
+        }
+        List<TextLine> lines = new ArrayList<>(TextLine.group(near));
+        lines.sort((a, b) -> Float.compare(b.baseline(), a.baseline()));
+        List<PdfWord> out = new ArrayList<>();
+        float below = outline.top();
+        ChunkedLine under = null;
+        int taken = 0;
+        for (TextLine l : lines) {
+            List<PdfWord> text = new ArrayList<>();
+            for (PdfWord w : l.words()) {
+                boolean mark = ListMarkers.isBullet(w.text()) || text.isEmpty() && ListMarkers.isMarker(w.text());
+                if (!mark) {
+                    text.add(w);
+                }
+            }
+            if (text.isEmpty()) {
+                break;
+            }
+            ChunkedLine chunked = ChunkedLine.of(TextLine.of(text));
+            float gap = below - l.bottom();
+            boolean fits = l.x() >= outline.left() - 1 && l.right() <= outline.right() + 1;
+            boolean close = gap <= (under == null ? HEADER_REACH : HEADER_LEADING) * l.fontSize();
+            boolean narrow = true;
+            for (List<PdfWord> chunk : chunked.chunks()) {
+                narrow &= chunk.getLast().right() - chunk.getFirst().x() <= HEADING_CHUNK * (outline.right() - outline.left());
+            }
+            boolean shaped = narrow && (under == null ? chunked.tabular() : stacked(chunked, under));
+            if (taken >= MAX_HEADER_LINES || !fits || !close || !shaped || banded(l, outline, fills)) {
+                break;
+            }
+            out.addAll(l.words());
+            below = l.top();
+            under = chunked;
+            taken++;
+        }
+        return out;
+    }
+
+    /** How much of a table's width the fills behind a heading's line cover when it's a band, as a share. */
+    private static final float BAND_COVER = 0.8f;
+
+    /**
+     * Whether a heading's line stands on a filled band across the table: a header row drawn as a band (white on dark
+     * blue, as in the generated ledgers) joins the table later with its fill (TableShaper.addBandHeader), which a row
+     * taken here would lose. CMS's notices fill only one column's heading.
+     */
+    private static boolean banded(TextLine line, Box outline, List<FillBox> fills) {
+        float mid = (line.top() + line.bottom()) / 2f;
+        List<float[]> spans = new ArrayList<>();
+        for (FillBox f : fills) {
+            if (f.top() <= mid && f.bottom() >= mid && f.right() > outline.left() && f.x() < outline.right()) {
+                spans.add(new float[] {Math.max(f.x(), outline.left()), Math.min(f.right(), outline.right())});
+            }
+        }
+        spans.sort((a, b) -> Float.compare(a[0], b[0]));
+        float covered = 0;
+        float reach = -Float.MAX_VALUE;
+        for (float[] sp : spans) {
+            float from = Math.max(sp[0], reach);
+            if (sp[1] > from) {
+                covered += sp[1] - from;
+                reach = sp[1];
+            }
+        }
+        return covered >= BAND_COVER * (outline.right() - outline.left());
+    }
+
+    /** An amount: digits with a decimal point or thousands separators ("$4,886.98", "0.00"), not a year or a count. */
+    private static final Pattern AMOUNT = Pattern.compile(
+            "[-−(]?[$€£]?(?:\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+\\.\\d+)\\)?%?");
+
+    /**
+     * Whether a lattice's first band holds amounts, so it's a row of the table's body and the table's heading, if any,
+     * stands above its first rule (CMS's claims). A first band of words is the table's own heading ("Item 2024 2025
+     * percent" on NASS's tables), and what stands above the rule is a title.
+     */
+    private static boolean amountsFirst(List<PdfWord> inside, float[] ys) {
+        if (ys.length < 2) {
+            return false;
+        }
+        for (PdfWord w : inside) {
+            if (w.centreY() > ys[0] && w.centreY() < ys[1] && AMOUNT.matcher(w.text()).matches()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether each chunk of {@code line} stands over one chunk of the line {@code under} it, and only one. */
+    private static boolean stacked(ChunkedLine line, ChunkedLine under) {
+        for (List<PdfWord> chunk : line.chunks()) {
+            float left = chunk.getFirst().x();
+            float right = chunk.getLast().right();
+            int over = 0;
+            for (List<PdfWord> u : under.chunks()) {
+                over += left < u.getLast().right() && right > u.getFirst().x() ? 1 : 0;
+            }
+            if (over != 1) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -194,7 +347,7 @@ final class LatticeFinder {
         }
         for (PdfWord w : words) {
             int r = grid.rowAt(w.centreY());
-            for (PdfWord piece : splitAtBorders(w, grid.xs, grid.verticalsInRow(r))) {
+            for (PdfWord piece : splitAtBorders(w, grid.xs, grid.rulesInRow(r))) {
                 wordsByAnchor.get(anchor[r][grid.colAt(piece.centreX())]).add(piece);
             }
         }
@@ -344,7 +497,7 @@ final class LatticeFinder {
         return filled * 5 < anchors || merged * 2 > table.rows();
     }
 
-    private static float[] addTextGutters(float[] xs, List<PdfWord> words) {
+    private static float[] addTextGutters(float[] xs, List<PdfWord> words, float bodyTop) {
         List<List<PdfWord>> columns = new ArrayList<>();
         for (int c = 0; c + 1 < xs.length; c++) {
             columns.add(new ArrayList<>());
@@ -355,13 +508,13 @@ final class LatticeFinder {
         List<Float> result = new ArrayList<>();
         for (int c = 0; c + 1 < xs.length; c++) {
             result.add(xs[c]);
-            result.addAll(gutterPositions(columns.get(c), xs[c], xs[c + 1]));
+            result.addAll(gutterPositions(columns.get(c), xs[c], xs[c + 1], bodyTop));
         }
         result.add(xs[xs.length - 1]);
         return toArray(result);
     }
 
-    private static List<Float> gutterPositions(List<PdfWord> words, float left, float right) {
+    private static List<Float> gutterPositions(List<PdfWord> words, float left, float right, float bodyTop) {
         List<PdfWord> text = new ArrayList<>();
         for (PdfWord w : words) {
             if (!ListMarkers.isBullet(w.text())) {
@@ -369,18 +522,26 @@ final class LatticeFinder {
             }
         }
         List<ChunkedLine> lines = new ArrayList<>();
+        List<ChunkedLine> body = new ArrayList<>();
         int tabular = 0;
+        int bodyTabular = 0;
         for (TextLine line : TextLine.group(text)) {
             ChunkedLine chunked = ChunkedLine.of(line);
             lines.add(chunked);
-            if (chunked.tabular()) {
-                tabular++;
+            tabular += chunked.tabular() ? 1 : 0;
+            if ((line.top() + line.bottom()) / 2f > bodyTop) {
+                body.add(chunked);
+                bodyTabular += chunked.tabular() ? 1 : 0;
             }
         }
         if (tabular < 3 || tabular * 2 < lines.size()) {
             return List.of();
         }
-        TextColumns columns = TextColumns.find(lines);
+        // The rows under the heading's band place the gutters when there are enough of them: a heading set right-aligned
+        // over two lines reaches left past its column's figures, over the gutter ("Approved?" over "Destruction of
+        // skin growth (17000)" on CMS's Part B notice), and its words then fall in by their centres
+        boolean byBody = bodyTabular >= 3 && body.size() < lines.size() && bodyTabular * 2 >= body.size();
+        TextColumns columns = TextColumns.find(byBody ? body : lines);
         float[] edges = columns.edges();
         List<Float> gutters = new ArrayList<>();
         for (int c = 1; c < columns.count(); c++) {

@@ -2,9 +2,12 @@ package stirling.software.officeconvert.table;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import stirling.software.officeconvert.table.DraftTable.Borders;
 import stirling.software.officeconvert.table.PageContent.PdfWord;
@@ -18,12 +21,22 @@ final class RuledGrid {
 
     private static final float TOLERANCE = LINE_TOLERANCE + 0.5f;
 
+    /**
+     * How much of a word standing alone may reach past a text column's gutter, on its lesser side, before it spans the
+     * columns: a heading set right-aligned over two lines reaches left past its column's figures ("Approved?" on CMS's
+     * Part B notice, a quarter of it), and stays its own column's. A word in a phrase spans the gutter as before: BEA's
+     * "Seasonally adjusted at annual rates", centred over several columns.
+     */
+    private static final float REACH = 0.3f;
+
     final float[] xs;
     final float[] ys;
     private final boolean[][] vertical;
     private final boolean[][] horizontal;
     /** Lines between rows: the drawn ones, plus filled bands' edges, which keep rows apart but aren't drawn. */
     private final boolean[][] rowBreaks;
+    /** The column lines found in the text, not drawn: words aren't cut at them. */
+    private final boolean[][] textLines;
 
     private RuledGrid(
             float[] xs, float[] ys, boolean[][] vertical, boolean[][] horizontal, boolean[][] rowBreaks) {
@@ -32,6 +45,7 @@ final class RuledGrid {
         this.vertical = vertical;
         this.horizontal = horizontal;
         this.rowBreaks = rowBreaks;
+        this.textLines = new boolean[vertical.length][vertical.length == 0 ? 0 : vertical[0].length];
     }
 
     static RuledGrid measure(float[] xs, float[] ys, List<Ruling> hs, List<Ruling> vs) {
@@ -124,6 +138,16 @@ final class RuledGrid {
         for (PdfWord w : words) {
             byRow.get(rowAt(w.centreY())).add(w);
         }
+        Set<PdfWord> alone = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (List<PdfWord> row : byRow) {
+            for (TextLine line : TextLine.group(row)) {
+                for (List<PdfWord> chunk : ChunkedLine.of(line).chunks()) {
+                    if (chunk.size() == 1) {
+                        alone.add(chunk.getFirst());
+                    }
+                }
+            }
+        }
         for (int c = 1; c < xs.length - 1; c++) {
             float x = xs[c];
             boolean[] crossed = new boolean[rows];
@@ -136,7 +160,8 @@ final class RuledGrid {
                 boolean left = false;
                 boolean right = false;
                 for (PdfWord w : byRow.get(r)) {
-                    crossed[r] |= w.x() < x - 1f && w.right() > x + 1f;
+                    crossed[r] |= w.x() < x - 1f && w.right() > x + 1f
+                            && (!alone.contains(w) || Math.min(x - w.x(), w.right() - x) > REACH * w.width());
                     left |= w.right() <= x + 1f && w.x() >= xs[c - 1] - 1f;
                     right |= w.x() >= x - 1f && w.right() <= xs[c + 1] + 1f;
                 }
@@ -148,7 +173,10 @@ final class RuledGrid {
             }
             if (splitting > 0 && splitting > crossing) {
                 for (int r = 0; r < rows; r++) {
-                    vertical[r][c] |= !crossed[r];
+                    if (!vertical[r][c] && !crossed[r]) {
+                        vertical[r][c] = true;
+                        textLines[r][c] = true;
+                    }
                 }
             }
         }
@@ -241,6 +269,15 @@ final class RuledGrid {
 
     boolean[] verticalsInRow(int r) {
         return vertical[r];
+    }
+
+    /** The drawn lines in row {@code r} that cut a word running over them: rules, not the text's column lines. */
+    boolean[] rulesInRow(int r) {
+        boolean[] out = vertical[r].clone();
+        for (int c = 0; c < out.length; c++) {
+            out[c] &= !textLines[r][c];
+        }
+        return out;
     }
 
     private static boolean mostlyDrawn(boolean[] edges, int from, int to) {
