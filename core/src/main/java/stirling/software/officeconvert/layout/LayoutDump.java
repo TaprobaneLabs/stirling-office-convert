@@ -87,23 +87,54 @@ public final class LayoutDump {
         sb.append(" | ").append(clip(first)).append('\n');
     }
 
+    /** Every text line the page writes: paragraphs, text boxes, table cells, figures' labels, furniture and notes. */
     private static List<Line> lines(PageLayout layout) {
         List<Line> out = new ArrayList<>();
         for (PageLayout.Band band : layout.bands()) {
             for (PageLayout.Column col : band.columns()) {
                 for (PageLayout.Item it : col.items()) {
-                    switch (it) {
-                        case PageLayout.ParaItem p -> out.addAll(p.para().lines);
-                        case PageLayout.TextBoxItem t -> t.paras().forEach(d -> out.addAll(d.lines));
-                        default -> {}
-                    }
+                    lines(it, out);
                 }
             }
         }
         for (PageLayout.TextBoxItem t : layout.furniture()) {
-            t.paras().forEach(d -> out.addAll(d.lines));
+            lines(t, out);
         }
+        for (PageLayout.Note n : layout.notes()) {
+            paras(n.paras(), out);
+        }
+        paras(layout.noteContinuation(), out);
         return out;
+    }
+
+    private static void lines(PageLayout.Item it, List<Line> out) {
+        switch (it) {
+            case PageLayout.ParaItem p -> out.addAll(p.para().lines);
+            case PageLayout.TextBoxItem t -> paras(t.paras(), out);
+            case PageLayout.TableItem t -> {
+                if (t.cellParas() != null) {
+                    t.cellParas().forEach(cell -> paras(cell, out));
+                }
+            }
+            case PageLayout.FigureItem f -> {
+                if (f.labels() != null) {
+                    f.labels().forEach(label -> lines(label, out));
+                }
+            }
+            case PageLayout.FloatItem f -> lines(f.picture(), out);
+            case PageLayout.PictureRow r -> r.pictures().forEach(p -> lines(p, out));
+            case PageLayout.ImageItem i -> {}
+        }
+    }
+
+    private static void paras(List<ParaDraft> paras, List<Line> out) {
+        if (paras != null) {
+            for (ParaDraft d : paras) {
+                if (d != null) {
+                    out.addAll(d.lines);
+                }
+            }
+        }
     }
 
     private static String clip(String s) {
