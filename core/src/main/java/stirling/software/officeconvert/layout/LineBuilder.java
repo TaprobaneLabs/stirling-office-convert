@@ -15,6 +15,13 @@ public final class LineBuilder {
 
     private static final float WIDE_TRACKING_EM = 0.8f;
 
+    /**
+     * How far a combining mark may stand from the letter before it and still end that letter's word: a glyph PDFBox
+     * can't name in between (no ToUnicode entry, as the first part of Vrinda's two-part vowel signs in a Word-made
+     * Bengali PDF) is dropped and leaves its advance as a gap, about 0.7 em.
+     */
+    private static final float MARK_JOIN_EM = 1f;
+
     private static final Comparator<Line> BY_BASELINE_THEN_X = (a, b) -> {
         int c = Double.compare(a.baseline, b.baseline);
         return c != 0 ? c : Double.compare(a.x, b.x);
@@ -112,6 +119,9 @@ public final class LineBuilder {
                     threshold = Math.max(threshold, 0.3f * size);
                 }
                 boolean split = spaceBetween && gap > -0.05f * size || gap > threshold;
+                if (split && !spaceBetween && gap < MARK_JOIN_EM * size && endsLetter(prev, g)) {
+                    split = false;
+                }
                 if (split) {
                     words.add(new Word(current));
                     current = new ArrayList<>();
@@ -124,6 +134,26 @@ public final class LineBuilder {
             words.add(new Word(current));
         }
         return words;
+    }
+
+    /**
+     * Whether {@code g} starts with a combining mark of {@code prev}'s script: no word starts with a mark ("প ো" for
+     * "পো"), so it ends the letter before it.
+     */
+    private static boolean endsLetter(Glyph prev, Glyph g) {
+        if (g.text.isEmpty() || prev.text.isEmpty()) {
+            return false;
+        }
+        int mark = g.text.codePointAt(0);
+        int type = Character.getType(mark);
+        if (type != Character.NON_SPACING_MARK && type != Character.COMBINING_SPACING_MARK
+                && type != Character.ENCLOSING_MARK) {
+            return false;
+        }
+        int letter = prev.text.codePointBefore(prev.text.length());
+        Character.UnicodeScript script = Character.UnicodeScript.of(mark);
+        return script != Character.UnicodeScript.INHERITED && script != Character.UnicodeScript.COMMON
+                && Character.UnicodeScript.of(letter) == script;
     }
 
     private static boolean ideographic(Glyph g) {
