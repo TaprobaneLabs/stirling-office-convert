@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -57,6 +58,12 @@ public final class PdfToXlsx {
         TABLE,
         SINGLE
     }
+
+    /**
+     * A table's sheet in {@link Sheets#TABLE} mode, with the first and last page (1-based) its table covers. A table
+     * carried over a page break stays on one sheet named by its first page, so the name doesn't say where it ends.
+     */
+    public record TableSheet(String sheet, int firstPage, int lastPage) {}
 
     public record Options(
             int firstPage,
@@ -126,7 +133,12 @@ public final class PdfToXlsx {
 
     private PdfToXlsx() {}
 
-    public static void convert(Path pdf, Path out, Options options) throws IOException {
+    /**
+     * Converts the PDF to a workbook. In {@link Sheets#TABLE} mode it returns each table's sheet and pages, in the
+     * workbook's order (empty when no table was found and the workbook holds one empty sheet); in the other modes an
+     * empty list.
+     */
+    public static List<TableSheet> convert(Path pdf, Path out, Options options) throws IOException {
         Objects.requireNonNull(pdf, "pdf");
         Objects.requireNonNull(out, "out");
         Objects.requireNonNull(options, "options");
@@ -135,12 +147,14 @@ public final class PdfToXlsx {
         PdfFiles.stopIfInterrupted();
         Path part = Files.createTempFile(PdfFiles.outputFolder(out), ".office-convert-", ".part");
         try {
+            List<TableSheet> tables;
             try (PDDocument doc = PageStream.load(pdf, opts.password());
                     OutputStream stream = Files.newOutputStream(part)) {
-                convert(doc, stream, opts);
+                tables = convert(doc, stream, opts);
             }
             PdfFiles.stopIfInterrupted();
             PageStream.moveIntoPlace(part, out);
+            return tables;
         } catch (IOException e) {
             throw PdfFiles.interrupted(e);
         } finally {
@@ -148,7 +162,8 @@ public final class PdfToXlsx {
         }
     }
 
-    public static void convert(PDDocument doc, OutputStream out, Options options) throws IOException {
+    /** As {@link #convert(Path, Path, Options)}, from an open document to a stream. */
+    public static List<TableSheet> convert(PDDocument doc, OutputStream out, Options options) throws IOException {
         Objects.requireNonNull(doc, "doc");
         Objects.requireNonNull(out, "out");
         Objects.requireNonNull(options, "options");
@@ -158,7 +173,7 @@ public final class PdfToXlsx {
         Admission.Ticket ticket = Admission.jvm().enter(
                 PdfFootprint.estimate(doc, options.firstPage(), options.lastPage(), 72f));
         try {
-            write(doc, out, options);
+            return write(doc, out, options);
         } catch (RuntimeException e) {
             throw new IOException("Conversion failed: " + e.getMessage(), e);
         } finally {
@@ -166,7 +181,7 @@ public final class PdfToXlsx {
         }
     }
 
-    private static void write(PDDocument doc, OutputStream out, Options options) throws IOException {
+    private static List<TableSheet> write(PDDocument doc, OutputStream out, Options options) throws IOException {
         StreamGuard.check(doc);
         int total = doc.getNumberOfPages();
         int[] range = PdfFiles.pageRange(total, options.firstPage(), options.lastPage());
@@ -241,6 +256,11 @@ public final class PdfToXlsx {
             PDDocumentInformation info = doc.getDocumentInformation();
             builder.finish(info == null ? null : PdfFiles.property(info.getTitle()),
                     info == null ? null : PdfFiles.property(info.getAuthor()));
+            List<TableSheet> tables = new ArrayList<>();
+            for (SheetBuilder.TablePages t : builder.tablePages()) {
+                tables.add(new TableSheet(t.sheet(), t.firstPage() + 1, t.lastPage() + 1));
+            }
+            return List.copyOf(tables);
         }
     }
 

@@ -8,6 +8,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.zip.ZipFile;
 
 import org.apache.pdfbox.cos.COSName;
@@ -46,6 +47,19 @@ class MultiPageTableTest {
         assertTrue(text.contains("\\trhdr"), "RTF header row");
         assertEquals(1, count(text, "Name}"), "the RTF header text appears once");
         assertEquals(0, count(text, "\\pagebb"));
+    }
+
+    @Test
+    void tableModeNamesBothPagesOfATableCarriedOverAPageBreak() throws Exception {
+        Path pdf = twoPageTable();
+        List<PdfToXlsx.TableSheet> tables = PdfToXlsx.convert(pdf, dir.resolve("t.xlsx"),
+                PdfToXlsx.Options.defaults().withSheets(PdfToXlsx.Sheets.TABLE));
+        assertEquals(List.of(new PdfToXlsx.TableSheet("Page 1", 1, 2)), tables, "one sheet, named by its first page");
+        assertEquals(List.of(), PdfToXlsx.convert(pdf, dir.resolve("p.xlsx"), PdfToXlsx.Options.defaults()),
+                "a sheet per page lists no tables");
+        List<PdfToXlsx.TableSheet> second = PdfToXlsx.convert(pdf, dir.resolve("s.xlsx"),
+                PdfToXlsx.Options.defaults().withSheets(PdfToXlsx.Sheets.TABLE).withPages(2, 2));
+        assertEquals(List.of(new PdfToXlsx.TableSheet("Page 2", 2, 2)), second, "pages count from the document's first");
     }
 
     private Path twoPageTable() throws IOException {

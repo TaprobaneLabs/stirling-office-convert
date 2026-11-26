@@ -13,6 +13,8 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -22,6 +24,8 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import stirling.software.officeconvert.PdfToXlsx;
 
 class MainTest {
 
@@ -370,6 +374,120 @@ class MainTest {
             entry(zip, "xl/worksheets/sheet1.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet"
                     + " xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\"><c"
                     + " r=\"A1\" t=\"inlineStr\"><is><t>SHEETTEXT</t></is></c></row></sheetData></worksheet>");
+        }
+        return file;
+    }
+
+    @Test
+    void tablePagesListsEachTablesSheetAndPages() throws Exception {
+        Path pdf = ruledTable(dir.resolve("table.pdf"));
+        Path xlsx = dir.resolve("table.xlsx");
+        Path json = dir.resolve("table.json");
+        Result r = run(pdf.toString(), "-o", xlsx.toString(), "--sheets", "table", "--table-pages", json.toString(), "-q");
+        assertEquals(0, r.code(), r.err());
+        assertEquals("{\"tables\":[{\"sheet\":\"Page 1\",\"pages\":[1,2]}]}\n", Files.readString(json));
+
+        Path hello = helloPdf(dir.resolve("hello.pdf"));
+        Path none = dir.resolve("hello.json");
+        r = run(hello.toString(), "-o", dir.resolve("hello.xlsx").toString(), "--sheets", "table", "--table-pages",
+                none.toString(), "-q");
+        assertEquals(0, r.code(), r.err());
+        assertEquals("{\"tables\":[]}\n", Files.readString(none), "no table found");
+    }
+
+    @Test
+    void tablePagesNeedsTableSheetsAndOneWorkbook() throws Exception {
+        Path pdf = helloPdf(dir.resolve("in.pdf"));
+        String json = dir.resolve("t.json").toString();
+        assertUsage(run(pdf.toString(), "-o", dir.resolve("a.xlsx").toString(), "--table-pages", json), "--table-pages");
+        assertUsage(run(pdf.toString(), "-o", dir.resolve("a.docx").toString(), "--sheets", "table", "--table-pages", json),
+                "--table-pages");
+        assertUsage(run(pdf.toString(), "--sheets", "table", "--table-pages", json), "--table-pages");
+        assertUsage(run(pdf.toString(), pdf.toString(), "-o", dir.toString(), "--format", "xlsx", "--sheets", "table",
+                "--table-pages", json), "--table-pages");
+        assertFalse(Files.exists(dir.resolve("t.json")));
+    }
+
+    @Test
+    void tablePagesNeverReplacesTheInputOrTheWorkbook() throws Exception {
+        Path pdf = ruledTable(dir.resolve("table.pdf"));
+        byte[] original = Files.readAllBytes(pdf);
+        Path xlsx = dir.resolve("table.xlsx");
+        Result r = run(pdf.toString(), "-o", xlsx.toString(), "--sheets", "table", "--table-pages", pdf.toString(),
+                "--overwrite", "-q");
+        assertEquals(1, r.code(), r.err());
+        assertTrue(r.err().contains("is an input of this run"), r.err());
+        assertArrayEquals(original, Files.readAllBytes(pdf), "the input is untouched");
+        assertFalse(Files.exists(xlsx), "nothing converted");
+
+        r = run(pdf.toString(), "-o", xlsx.toString(), "--sheets", "table", "--table-pages", xlsx.toString(),
+                "--overwrite", "-q");
+        assertEquals(1, r.code(), r.err());
+        assertTrue(r.err().contains("--table-pages names the workbook"), r.err());
+        assertFalse(Files.exists(xlsx));
+    }
+
+    @Test
+    void tablePagesReplacesAnExistingFileOnlyWithOverwrite() throws Exception {
+        Path pdf = ruledTable(dir.resolve("table.pdf"));
+        Path json = Files.writeString(dir.resolve("pages.json"), "keep");
+        Result r = run(pdf.toString(), "-o", dir.resolve("a.xlsx").toString(), "--sheets", "table", "--table-pages",
+                json.toString(), "-q");
+        assertEquals(1, r.code(), r.err());
+        assertTrue(r.err().contains("already exists"), r.err());
+        assertEquals("keep", Files.readString(json));
+
+        r = run(pdf.toString(), "-o", dir.resolve("b.xlsx").toString(), "--sheets", "table", "--table-pages",
+                json.toString(), "--overwrite", "-q");
+        assertEquals(0, r.code(), r.err());
+        assertTrue(Files.readString(json).startsWith("{\"tables\":["), Files.readString(json));
+    }
+
+    @Test
+    void tablePagesJsonEscapesNames() {
+        assertEquals("{\"tables\":[{\"sheet\":\"A \\\"b\\\" \\\\ c\\u0001\",\"pages\":[2,3]},"
+                + "{\"sheet\":\"Page 4\",\"pages\":[4,4]}]}\n",
+                Main.tablePagesJson(List.of(new PdfToXlsx.TableSheet("A \"b\" \\ c" + (char) 1, 2, 3),
+                        new PdfToXlsx.TableSheet("Page 4", 4, 4))));
+    }
+
+    /** A ruled two-column table of 30 rows on page 1 that carries on with 8 more rows on page 2. */
+    private static Path ruledTable(Path file) throws IOException {
+        try (PDDocument doc = new PDDocument();
+                InputStream font = PDDocument.class.getResourceAsStream(
+                        "/org/apache/pdfbox/resources/ttf/LiberationSans-Regular.ttf")) {
+            PDType0Font f = PDType0Font.load(doc, font);
+            int item = 0;
+            for (int pg = 0; pg < 2; pg++) {
+                PDPage page = new PDPage();
+                doc.addPage(page);
+                int rows = pg == 0 ? 30 : 8;
+                float top = 720;
+                try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                    cs.setLineWidth(0.5f);
+                    for (int r = 0; r <= rows; r++) {
+                        cs.moveTo(72, top - r * 18);
+                        cs.lineTo(540, top - r * 18);
+                    }
+                    for (int x : new int[] {72, 220, 540}) {
+                        cs.moveTo(x, top);
+                        cs.lineTo(x, top - rows * 18);
+                    }
+                    cs.stroke();
+                    cs.beginText();
+                    cs.setFont(f, 10);
+                    for (int r = 0; r < rows; r++) {
+                        String label = r == 0 ? "Item" : "Item " + (++item);
+                        String value = r == 0 ? "Amount" : String.format(Locale.ROOT, "%,d.%02d", 1000 + item * 37, item % 100);
+                        cs.setTextMatrix(new org.apache.pdfbox.util.Matrix(1, 0, 0, 1, 76, top - r * 18 - 13));
+                        cs.showText(label);
+                        cs.setTextMatrix(new org.apache.pdfbox.util.Matrix(1, 0, 0, 1, 224, top - r * 18 - 13));
+                        cs.showText(value);
+                    }
+                    cs.endText();
+                }
+            }
+            doc.save(file.toFile());
         }
         return file;
     }

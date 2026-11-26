@@ -8,12 +8,15 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -87,6 +90,37 @@ class PdfToXlsxTest {
             }
         }
         throw new AssertionError(text + " not shared");
+    }
+
+    @Test
+    void tableModeListsEachTablesSheetAndPages() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        List<PdfToXlsx.TableSheet> tables;
+        try (PDDocument doc = Loader.loadPDF(pdf.toFile())) {
+            tables = PdfToXlsx.convert(doc, out, PdfToXlsx.Options.defaults().withSheets(PdfToXlsx.Sheets.TABLE));
+        }
+        String book = SpreadsheetPdfs.part(SpreadsheetPdfs.parts(out.toByteArray()), "xl/workbook.xml");
+        assertEquals(1, tables.size(), tables.toString());
+        assertTrue(book.contains("<sheet name=\"" + tables.getFirst().sheet() + "\""), book);
+        assertEquals(1, tables.getFirst().firstPage());
+        assertEquals(1, tables.getFirst().lastPage());
+
+        // A document without a table: one empty placeholder sheet, which isn't a table
+        ByteArrayOutputStream none = new ByteArrayOutputStream();
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage();
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.beginText();
+                cs.setFont(SpreadsheetPdfs.REGULAR, 11);
+                cs.newLineAtOffset(72, 700);
+                cs.showText("A letter with no table in it.");
+                cs.endText();
+            }
+            assertEquals(List.of(), PdfToXlsx.convert(doc, none, PdfToXlsx.Options.defaults().withSheets(PdfToXlsx.Sheets.TABLE)));
+        }
+        assertTrue(SpreadsheetPdfs.part(SpreadsheetPdfs.parts(none.toByteArray()), "xl/workbook.xml")
+                .contains("<sheet name=\"Sheet1\""));
     }
 
     @Test
