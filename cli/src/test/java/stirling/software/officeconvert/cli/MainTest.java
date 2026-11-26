@@ -409,6 +409,41 @@ class MainTest {
     }
 
     @Test
+    void tablePagesNeverReplacesTheInputOrTheWorkbook() throws Exception {
+        Path pdf = ruledTable(dir.resolve("table.pdf"));
+        byte[] original = Files.readAllBytes(pdf);
+        Path xlsx = dir.resolve("table.xlsx");
+        Result r = run(pdf.toString(), "-o", xlsx.toString(), "--sheets", "table", "--table-pages", pdf.toString(),
+                "--overwrite", "-q");
+        assertEquals(1, r.code(), r.err());
+        assertTrue(r.err().contains("is an input of this run"), r.err());
+        assertArrayEquals(original, Files.readAllBytes(pdf), "the input is untouched");
+        assertFalse(Files.exists(xlsx), "nothing converted");
+
+        r = run(pdf.toString(), "-o", xlsx.toString(), "--sheets", "table", "--table-pages", xlsx.toString(),
+                "--overwrite", "-q");
+        assertEquals(1, r.code(), r.err());
+        assertTrue(r.err().contains("--table-pages names the workbook"), r.err());
+        assertFalse(Files.exists(xlsx));
+    }
+
+    @Test
+    void tablePagesReplacesAnExistingFileOnlyWithOverwrite() throws Exception {
+        Path pdf = ruledTable(dir.resolve("table.pdf"));
+        Path json = Files.writeString(dir.resolve("pages.json"), "keep");
+        Result r = run(pdf.toString(), "-o", dir.resolve("a.xlsx").toString(), "--sheets", "table", "--table-pages",
+                json.toString(), "-q");
+        assertEquals(1, r.code(), r.err());
+        assertTrue(r.err().contains("already exists"), r.err());
+        assertEquals("keep", Files.readString(json));
+
+        r = run(pdf.toString(), "-o", dir.resolve("b.xlsx").toString(), "--sheets", "table", "--table-pages",
+                json.toString(), "--overwrite", "-q");
+        assertEquals(0, r.code(), r.err());
+        assertTrue(Files.readString(json).startsWith("{\"tables\":["), Files.readString(json));
+    }
+
+    @Test
     void tablePagesJsonEscapesNames() {
         assertEquals("{\"tables\":[{\"sheet\":\"A \\\"b\\\" \\\\ c\\u0001\",\"pages\":[2,3]},"
                 + "{\"sheet\":\"Page 4\",\"pages\":[4,4]}]}\n",

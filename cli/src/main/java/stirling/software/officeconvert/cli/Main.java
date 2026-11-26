@@ -231,6 +231,9 @@ public final class Main {
             boolean officeInput = isOffice(pdf);
             Path target = targets.get(k);
             String refusal = guard.refusal(pdf, target);
+            if (refusal == null && tablePages != null) {
+                refusal = tablePagesRefusal(guard, pdf, target, tablePages);
+            }
             if (refusal != null) {
                 failures++;
                 System.err.println("SKIP " + pdf + ": " + oneLine(refusal));
@@ -252,6 +255,7 @@ public final class Main {
                     List<PdfToXlsx.TableSheet> found = convert(pdf, target, options, slides, books);
                     if (tablePages != null) {
                         Files.writeString(tablePages, tablePagesJson(found), StandardCharsets.UTF_8);
+                        guard.wrote(tablePages);
                     }
                 }
                 guard.wrote(target);
@@ -351,6 +355,23 @@ public final class Main {
             default -> throw new IOException("unknown output format ." + extension(target));
         }
         return List.of();
+    }
+
+    /**
+     * {@code --table-pages} is guarded as the workbook is, before anything is converted: never an input of the run or
+     * the workbook itself (by name or as the same file), and a file that exists only with {@code --overwrite}.
+     */
+    static String tablePagesRefusal(Guard guard, Path pdf, Path target, Path tablePages) {
+        boolean workbook = Targets.key(tablePages).equals(Targets.key(target));
+        try {
+            workbook |= Files.exists(tablePages) && Files.exists(target) && Files.isSameFile(tablePages, target);
+        } catch (IOException e) {
+            workbook = true;
+        }
+        if (workbook) {
+            return "--table-pages names the workbook " + target + "; give it a file of its own";
+        }
+        return guard.refusal(pdf, tablePages);
     }
 
     /**
