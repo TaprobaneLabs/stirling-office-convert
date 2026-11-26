@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryType;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.NoSuchFileException;
@@ -70,6 +71,7 @@ public final class Main {
         List<Path> fontDirs = new ArrayList<>();
         FontSet.Builder fontSet = FontSet.builder();
         PdfToXlsx.Sheets sheets = PdfToXlsx.Sheets.PAGE;
+        Path tablePages = null;
         Pictures pictures = Pictures.COMPACT;
         PdfToDocx.Options options;
         PdfToPptx.Options slides;
@@ -109,6 +111,7 @@ public final class Main {
                     }
                     case "--no-system-fonts" -> fontSet.systemFonts(false);
                     case "--sheets" -> sheets = sheets(value(args, ++i, a));
+                    case "--table-pages" -> tablePages = path(value(args, ++i, a));
                     case "--pdfa" -> pdfa = level(value(args, ++i, a));
                     case "--pictures" -> pictures = pictures(value(args, ++i, a));
                     case "-q", "--quiet" -> quiet = true;
@@ -157,6 +160,11 @@ public final class Main {
             }
             if (anyPdf && "pdf".equals(format) && pdfa == null) {
                 throw new Usage("PDF input converts to an Office format, not pdf");
+            }
+            if (tablePages != null && (sheets != PdfToXlsx.Sheets.TABLE || pdfa != null || inputs.size() != 1
+                    || Files.isDirectory(inputs.get(0)) || anyOffice || output == null || Files.isDirectory(output)
+                    || !Set.of("xlsx", "ods").contains(extension(output)))) {
+                throw new Usage("--table-pages lists the tables of one PDF converted with --sheets table to one .xlsx or .ods");
             }
             options = new PdfToDocx.Options(first, last, tables, dpi, password, pictureFallback, pictures);
             slides = new PdfToPptx.Options(first, last, tables, dpi, password, pictureFallback, pictures);
@@ -241,7 +249,10 @@ public final class Main {
                 } else if (officeInput) {
                     result = officeToPdf(pdf, target, office);
                 } else {
-                    convert(pdf, target, options, slides, books);
+                    List<PdfToXlsx.TableSheet> found = convert(pdf, target, options, slides, books);
+                    if (tablePages != null) {
+                        Files.writeString(tablePages, tablePagesJson(found), StandardCharsets.UTF_8);
+                    }
                 }
                 guard.wrote(target);
                 long ms = (System.nanoTime() - start) / 1_000_000;
@@ -322,8 +333,12 @@ public final class Main {
         return e.getMessage() == null ? e.toString() : e.getMessage();
     }
 
-    private static void convert(Path pdf, Path target, PdfToDocx.Options options, PdfToPptx.Options slides,
-            PdfToXlsx.Options books) throws IOException {
+    /** Converts a PDF; a workbook in table mode also gives each table's sheet and pages, other outputs none. */
+    private static List<PdfToXlsx.TableSheet> convert(Path pdf, Path target, PdfToDocx.Options options,
+            PdfToPptx.Options slides, PdfToXlsx.Options books) throws IOException {
+        if (Set.of("xlsx", "ods").contains(extension(target))) {
+            return PdfToXlsx.convert(pdf, target, books);
+        }
         switch (extension(target)) {
             case "odt" -> PdfToOdt.convert(pdf, target, options);
             case "fodt", "xml" -> PdfToOdt.convertFlat(pdf, target, options);
@@ -332,10 +347,42 @@ public final class Main {
             case "pptx" -> PdfToPptx.convert(pdf, target, slides);
             case "odp" -> PdfToOdp.convert(pdf, target, slides);
             case "ppt" -> PdfToPpt.convert(pdf, target, slides);
-            case "xlsx", "ods" -> PdfToXlsx.convert(pdf, target, books);
             case "docx" -> PdfToDocx.convert(pdf, target, options);
             default -> throw new IOException("unknown output format ." + extension(target));
         }
+        return List.of();
+    }
+
+    /**
+     * The tables {@code --table-pages} lists, in the workbook's sheet order: {"tables":[{"sheet":"Page 3","pages":[3,4]}]}.
+     * Sheet names are the converter's own ("Page 3", "Page 3 Table 2"), escaped as JSON strings all the same.
+     */
+    static String tablePagesJson(List<PdfToXlsx.TableSheet> tables) {
+        StringBuilder b = new StringBuilder("{\"tables\":[");
+        for (int i = 0; i < tables.size(); i++) {
+            PdfToXlsx.TableSheet t = tables.get(i);
+            b.append(i == 0 ? "" : ",").append("{\"sheet\":").append(jsonString(t.sheet())).append(",\"pages\":[")
+                    .append(t.firstPage()).append(',').append(t.lastPage()).append("]}");
+        }
+        return b.append("]}\n").toString();
+    }
+
+    private static String jsonString(String s) {
+        StringBuilder b = new StringBuilder("\"");
+        s.codePoints().forEach(cp -> {
+            switch (cp) {
+                case '"' -> b.append("\\\"");
+                case '\\' -> b.append("\\\\");
+                default -> {
+                    if (cp < 0x20) {
+                        b.append(String.format(Locale.ROOT, "\\u%04x", cp));
+                    } else {
+                        b.appendCodePoint(cp);
+                    }
+                }
+            }
+        });
+        return b.append('"').toString();
     }
 
     private static OfficeToPdf.Result officeToPdf(Path in, Path target, OfficeToPdf.Options office) throws IOException {
@@ -485,7 +532,7 @@ public final class Main {
     private static void usage() {
         System.out.println(
                 "Usage: office-convert <in.pdf|dir>... [-o out.docx|dir] [--format ext] [--sheets page|table|single]"
-                        + " [--pages a-b] [--no-tables] [--dpi n] [--password p] [--picture-fallback]"
+                        + " [--table-pages file.json] [--pages a-b] [--no-tables] [--dpi n] [--password p] [--picture-fallback]"
                         + " [--pictures compact|lossless] [--overwrite] [-q]"
                         + System.lineSeparator()
                         + "       office-convert <in.docx|in.pptx|in.xlsx|in.doc|in.rtf|in.xls|in.ppt|in.odt|in.ods|in.odp|in.txt|in.csv|dir>..."
@@ -522,6 +569,11 @@ public final class Main {
                         + " bundled Liberation Sans. Fonts whose licence forbids embedding are not used."
                         + System.lineSeparator()
                         + "--pictures lossless keeps every pixel without JPEG compression; compact, the default, is smaller."
+                        + System.lineSeparator()
+                        + "--sheets table puts each table on a sheet of its own and leaves out text outside tables; a table"
+                        + " carried over a page break stays on the sheet named by its first page. --table-pages writes"
+                        + " each table's sheet and its first and last page as JSON ({\"tables\":[{\"sheet\":\"Page 3\","
+                        + "\"pages\":[3,4]}]}), empty when no table was found."
                         + System.lineSeparator()
                         + "An output that exists already is left alone and its input skipped unless --overwrite is given."
                         + " An input is never overwritten: an output that would take an input's name keeps that input's"

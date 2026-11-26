@@ -48,11 +48,17 @@ public final class SheetBuilder {
     private int tables;
     private List<RunningLine> omitted = List.of();
     private int pageTables;
+    private final List<TablePages> tablePages = new ArrayList<>();
 
     private record Placed(TableGrid grid, String name, int firstRow, float pageHeight, int page) {}
 
+    /** A table's sheet in {@link Split#TABLE} mode and the pages its table covers, 0-based. */
+    public record TablePages(String sheet, int firstPage, int lastPage) {}
+
     private static final class Sheet {
         final List<Float> widths = new ArrayList<>();
+        final String name;
+        final int firstPage;
         final List<NamedRange> ranges = new ArrayList<>();
         final float textWidth;
         int next;
@@ -64,7 +70,9 @@ public final class SheetBuilder {
         boolean lastWasTable;
         boolean lastFigure;
 
-        Sheet(float textWidth) {
+        Sheet(String name, int firstPage, float textWidth) {
+            this.name = name;
+            this.firstPage = firstPage;
             this.textWidth = textWidth;
         }
 
@@ -87,6 +95,15 @@ public final class SheetBuilder {
 
     public int tables() {
         return tables;
+    }
+
+    /**
+     * In {@link Split#TABLE} mode, each table's sheet in the workbook's order with the first and last page its table
+     * covers: a table carried over a page break stays on the sheet named by its first page, so the name alone doesn't
+     * say where it ends. Empty in the other modes, and for a document without tables (its one sheet is a placeholder).
+     */
+    public List<TablePages> tablePages() {
+        return List.copyOf(tablePages);
     }
 
     public void page(PageLayout layout) throws IOException {
@@ -309,14 +326,18 @@ public final class SheetBuilder {
         String header = PrintHeader.of(stats.headerFooterInfo().headers(), index, pageCount, omitted);
         String footer = PrintHeader.of(stats.headerFooterInfo().footers(), index, pageCount, omitted);
         float shortSide = Math.min(page.width(), page.height());
-        sink.startSheet(new SheetSetup(names.unique(name), page.width() > page.height(),
+        String unique = names.unique(name);
+        sink.startSheet(new SheetSetup(unique, page.width() > page.height(),
                 Math.abs(shortSide - 595f) < 12f, header, footer));
         sheets++;
-        return new Sheet(textWidth);
+        return new Sheet(unique, index, textWidth);
     }
 
     private void end(Sheet s) throws IOException {
         sink.endSheet(new SheetEnd(s.widths, s.frozen, s.ranges));
+        if (settings.split() == Split.TABLE) {
+            tablePages.add(new TablePages(s.name, s.firstPage, s.last == null ? s.firstPage : s.last.page()));
+        }
     }
 
     private void closeOpen() throws IOException {
